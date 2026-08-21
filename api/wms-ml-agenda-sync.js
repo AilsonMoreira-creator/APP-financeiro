@@ -35,14 +35,27 @@ export default async function handler(req, res) {
       try { token = await getValidToken(BRAND[conta]); } catch { r.erro = 'token'; continue; }
       const h = { Authorization: `Bearer ${token}` };
 
-      // pedidos ML recentes que ainda podem estar em jogo
-      const { data: peds } = await supabase.from('wms_pedidos')
+      // 20/08 (5 liberadas fantasma): pedidos com substatus ready_to_print
+      // pendentes SAÍAM da janela dos N mais recentes conforme pedidos novos
+      // chegavam — a Sthefany imprimia no painel e o espelho nunca mais era
+      // re-checado, então o contador não zerava. Agora eles são PRIORIDADE
+      // fixa da varredura, independente da idade.
+      const base = () => supabase.from('wms_pedidos')
         .select('pedido_id, numero, numero_loja, status_wms, ml_ship_checado_em')
         .eq('conta', conta).ilike('canal_geral', '%mercado%')
         .not('numero_loja', 'is', null)
         .neq('status_wms', 'cancelado')
-        .gte('data_pedido', new Date(Date.now() - 20 * 86400000).toISOString())
+        .gte('data_pedido', new Date(Date.now() - 30 * 86400000).toISOString());
+      const { data: pendentes } = await base()
+        .eq('ml_ship_substatus', 'ready_to_print').is('etiqueta_impressa_em', null)
+        .order('data_pedido', { ascending: true }).limit(80);
+      const { data: recentes } = await base()
         .order('data_pedido', { ascending: false }).limit(limite);
+      const vistos = new Set();
+      const peds = [...(pendentes || []), ...(recentes || [])].filter(p => {
+        if (vistos.has(p.pedido_id)) return false;
+        vistos.add(p.pedido_id); return true;
+      });
 
       for (const p of (peds || [])) {
         if (Date.now() - inicio > 260000) { r.aviso = 'tempo esgotado'; break; }
