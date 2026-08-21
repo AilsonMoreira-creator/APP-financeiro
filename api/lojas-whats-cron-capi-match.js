@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     if (req.query.executar === '1' || req.headers['user-agent']?.includes('vercel-cron')) {
       try {
-        const r = await executar();
+        const r = await executar(req.query.conversa_id || null);
         return res.status(200).json({ ok: true, ...r });
       } catch (e) {
         logErro('cron-capi-match', e);
@@ -64,19 +64,25 @@ async function preview(req, res) {
   return res.status(200).json({ preview: true, conversas_candidatas: candidatas || 0, janela_dias: JANELA_ATTRIBUTION_DIAS });
 }
 
-async function executar() {
+async function executar(conversaId = null) {
   const inicio = Date.now();
   const cutoff = new Date(Date.now() - JANELA_ATTRIBUTION_DIAS * 86400000).toISOString();
 
   // 1. Conversas elegiveis pra match
-  const { data: conversas, error } = await supabase
+  let qConv = supabase
     .from('lojas_whats_conversas')
     .select('id, telefone, documento, tipo_documento, iniciada_em, origem_lead, ctwa_clid, etapa, nome_cliente')
+    .eq('capi_purchase_enviado', false);
+  if (conversaId) qConv = qConv.eq('id', conversaId);
+  else qConv = qConv
     .in('origem_lead', ['anuncio_instagram', 'carrinho_site_amicialoja'])
-    .eq('capi_purchase_enviado', false)
     .gte('iniciada_em', cutoff)
-    .order('iniciada_em', { ascending: false })
-    .limit(MAX_POR_RODADA);
+    // 21/08 (caso Lizi): DESC + teto fixo deixava as antigas PRA SEMPRE fora
+    // da rodada conforme leads novos chegavam. ASC processa da mais velha pra
+    // mais nova e o corte é por TEMPO, não por contagem.
+    .order('iniciada_em', { ascending: true })
+    .limit(600);
+  const { data: conversas, error } = await qConv;
   if (error) throw error;
 
   log('cron-capi-match', `${conversas?.length || 0} conversas candidatas pra match`);
@@ -92,6 +98,7 @@ async function executar() {
   };
 
   for (const conv of (conversas || [])) {
+    if (Date.now() - inicio > 230000) { stats.corte_tempo = true; break; }
     stats.avaliadas++;
     try {
       const match = await buscarVendaParaConversa(conv);
