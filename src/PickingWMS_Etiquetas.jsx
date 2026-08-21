@@ -295,7 +295,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
           return;
         }
-        if (!jL.total && !totalGeral) throw new Error('Nenhuma etiqueta pronta nesses filtros.');
+        if (!jL.total && !totalGeral) {
+          const se = jL.sem_etiqueta || []; const sd = jL.sem_danfe || [];
+          if (se.length || sd.length) throw new Error(`Nada saiu: ${se.length ? `${se.length} pedido(s) sem etiqueta disponível ainda (${se.slice(0, 5).join(', ')}${se.length > 5 ? '…' : ''})` : ''}${se.length && sd.length ? ' · ' : ''}${sd.length ? `${sd.length} sem DANFE (${sd.slice(0, 5).join(', ')}${sd.length > 5 ? '…' : ''})` : ''}. Shopee: o Bling libera o link depois de arranjar a coleta. Roda Preparar agora e tenta de novo.`);
+          throw new Error('Nenhuma etiqueta pronta nesses filtros.');
+        }
         if (!jL.total) break;
 
         // pares na ordem do servidor: ZPL raw, PDF pixel 203dpi; trechos

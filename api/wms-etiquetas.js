@@ -904,9 +904,17 @@ export default async function handler(req, res) {
         } catch { return null; }
         finally { await new Promise(r2 => setTimeout(r2, 340)); }
       };
-      const alvo = candidatosLote.filter(p => guardados[String(p.pedido_id)] || links[String(p.pedido_id)]);
+      // 21/08 (teste dele: "5 prontas" e clique dizia nenhuma): o alvo
+      // ignorava a fonte ML (ZPL2) e descartava em SILENCIO quem nao tinha
+      // cache nem link do Bling — 6 prontos viravam zero sem explicacao.
+      const alvo = [];
+      const foraDoAlvo = [];
+      for (const p of candidatosLote) {
+        if (doMlZpl[String(p.pedido_id)] || guardados[String(p.pedido_id)] || links[String(p.pedido_id)]) alvo.push(p);
+        else foraDoAlvo.push(p.numero);
+      }
 
-      const blocos = []; const idsOk = []; const emPdf = []; const semDanfe = []; let grupoAtual = '';
+      const blocos = []; const idsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo]; let grupoAtual = '';
       for (const p of alvo.slice(0, 120)) {
         // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
         let zplDoPedido = null, ehPdf = false, pdf64 = null, zipDanfe64 = null;
@@ -1033,7 +1041,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
           detalhe: { pares: idsOk.length, restantes, sem_danfe: semDanfe.length ? semDanfe : undefined, pedidos: idsOk },
         }).then?.(() => {}, () => {});
       }
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf, sem_danfe: semDanfe, restantes });
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, restantes });
     }
 
     // ── marcar como impressas depois que a térmica confirmou
