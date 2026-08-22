@@ -6124,7 +6124,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       )}
       {/* ── Modal: acrescentar corte ao estoque (Ailson 27/06/2026) ── */}
       {acrescModal&&(()=>{
-        const lista=[...(cortesTodosPorRef[acrescModal]||[])].sort((a,b)=>new Date(b.data||0)-new Date(a.data||0)).slice(0,3);
+        // 22/08 (caso Cris/corte 9884): teto de 3 escondia o 4o corte ativo
+        // da ref em producao pesada — sobe pra 10, com rolagem no modal
+        const lista=[...(cortesTodosPorRef[acrescModal]||[])].sort((a,b)=>new Date(b.data||0)-new Date(a.data||0)).slice(0,10);
         const insRef=inseridosPorRef[acrescModal]||{};
         const ordT={P:1,M:2,G:3,GG:4,G1:5,G2:6,G3:7};
         const fechar=()=>{setAcrescModal(null);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);};
@@ -6133,7 +6135,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             <div style={{padding:"14px 18px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontSize:11,color:"#4a7fa5",fontWeight:700}}>Acrescentar corte · REF {acrescModal}</div>
-                <div style={{fontSize:11.5,color:"#8a9aa4"}}>últimos 3 cortes · soma no estoque Bling</div>
+                <div style={{fontSize:11.5,color:"#8a9aa4"}}>últimos 10 cortes · soma no estoque Bling</div>
               </div>
               <button onClick={fechar} style={{background:"none",border:"none",fontSize:22,color:"#8a9aa4",cursor:"pointer"}}>×</button>
             </div>
