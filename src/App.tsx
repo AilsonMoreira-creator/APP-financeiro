@@ -10777,16 +10777,19 @@ export default function App(){
 
   // ── REALTIME OFICINAS — sync cortes entre 3 usuários simultâneos ────────────
   const lastCorteSaveTs=useRef(0);
+  const revCortesRef=useRef(null);   // 22/08: ultimo rev conhecido do payload de cortes (polling)
   const espelhoUltimoMod=useRef(0);   // 21/08: controle incremental do espelho anti-perda
   useEffect(()=>{
     if(!supabase||!dbCarregado)return;
-    const ch=supabase.channel('sync-oficinas')
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'amicia_data',filter:'user_id=eq.ailson_cortes'},(payload)=>{
-        const d=payload.new?.payload;
-        if(!d?.cortes)return;
-        // Ignora eco do próprio save (3s margem)
-        if(Date.now()-lastCorteSaveTs.current<3000){console.log("REALTIME OFICINAS: ignorando eco");return;}
-        console.log("REALTIME OFICINAS: recebido update de outro usuário,",d.cortes.length,"cortes");
+    // ── SYNC OFICINAS POR POLLING DO CARIMBO (22/08) ───────────────────────
+    // amicia_data saiu do realtime (461 KB por evento x cada sessao aberta =
+    // 47 GB num dia). Agora a sessao VISIVEL le so a coluna `rev` (~100 bytes)
+    // a cada 15s e SO baixa o payload quando o rev muda de verdade. Mesma
+    // funcao de merge de antes — nada muda no comportamento dos dados.
+    let paradoOf=false;
+    const aplicarRemotoOficinas=(d)=>{
+      if(!d?.cortes)return;
+
         // Merge inteligente por _mod timestamp
         setCortes(prev=>{
           const localMap=new Map(prev.map(c=>[c.id,c]));
@@ -10828,8 +10831,30 @@ export default function App(){
             return mudou?merged:prev;
           });
         }
-      }).subscribe();
-    return()=>{supabase.removeChannel(ch);};
+    };
+
+    const checarOficinas=async()=>{
+      if(paradoOf||document.visibilityState!=='visible')return;
+      try{
+        const {data:sinal}=await supabase.from('amicia_data').select('rev').eq('user_id','ailson_cortes').maybeSingle();
+        const rev=sinal?.rev??null;
+        if(rev==null)return;
+        if(revCortesRef.current===null){revCortesRef.current=rev;return;}   // 1a leitura: so memoriza
+        if(rev===revCortesRef.current)return;                               // nada mudou: custo ~100 bytes
+        revCortesRef.current=rev;
+        // eco do proprio save: rev subiu por MINHA gravacao — nao rebaixa payload
+        if(Date.now()-lastCorteSaveTs.current<4000)return;
+        const {data:full}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').maybeSingle();
+        if(full?.payload){console.log('SYNC OFICINAS: rev mudou, aplicando merge');aplicarRemotoOficinas(full.payload);}
+      }catch(e){console.error('sync oficinas polling:',e);}
+    };
+
+    const ivOf=setInterval(checarOficinas,15000);
+    const aoVoltarOf=()=>{if(document.visibilityState==='visible')checarOficinas();};
+    document.addEventListener('visibilitychange',aoVoltarOf);
+    window.addEventListener('focus',aoVoltarOf);
+    checarOficinas();
+    return()=>{paradoOf=true;clearInterval(ivOf);document.removeEventListener('visibilitychange',aoVoltarOf);window.removeEventListener('focus',aoVoltarOf);};
   },[dbCarregado]);
 
   // ── REALTIME USUARIOS — sync entre devices ────────────────────────────────
