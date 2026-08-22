@@ -855,6 +855,15 @@ export default async function handler(req, res) {
               + '^FO30,' + (y + 28) + '^A0N,20,20^FD' + l2.replace(/[\^~]/g, ' ') + '^FS';
           }).join('')
           + ((info.itens || []).length > 6 ? '^FO30,' + (736 + 6 * 58) + '^A0N,20,20^FD... e mais ' + (info.itens.length - 6) + ' item(ns)^FS' : '')
+          // 22/08 (pedido dele): envio PROGRAMADO — a data de despacho na
+          // ULTIMA linha, centralizada, um pouco maior que a descricao e em
+          // negrito (ZPL nao tem bold: duas passadas com 1 dot de offset)
+          + (info.agendadoEm ? (() => {
+            const dAg = String(info.agendadoEm).slice(0, 10).split('-').reverse().join('/');
+            const tAg = 'ENVIAR ' + dAg;
+            return '^FO30,1150^FB752,1,0,C^A0N,28,28^FD' + tAg + '^FS'
+                 + '^FO31,1151^FB752,1,0,C^A0N,28,28^FD' + tAg + '^FS';
+          })() : '')
           + '^XZ';
       };
       const buscarDanfe = async (p) => {
@@ -890,6 +899,7 @@ export default async function handler(req, res) {
                     valor: nf?.data?.valorNota ?? xmlCampo(xml, 'vNF'),
                     protocolo: xmlCampo(prot, 'nProt'),
                     itens: xmlItens(xml),
+                    agendadoEm: p.ml_agendado_em || null,
                   });
                   await supabase.from('wms_documentos').upsert({
                     pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'ZPL',
