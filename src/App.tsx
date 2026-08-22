@@ -10777,7 +10777,7 @@ export default function App(){
 
   // ── REALTIME OFICINAS — sync cortes entre 3 usuários simultâneos ────────────
   const lastCorteSaveTs=useRef(0);
-  const revCortesRef=useRef(null);   // 22/08: ultimo rev conhecido do payload de cortes (polling)
+  const revCortesRef=useRef(null);   // 22/08: ultimo carimbo (updated_at) conhecido do payload de cortes
   const espelhoUltimoMod=useRef(0);   // 21/08: controle incremental do espelho anti-perda
   useEffect(()=>{
     if(!supabase||!dbCarregado)return;
@@ -10836,16 +10836,18 @@ export default function App(){
     const checarOficinas=async()=>{
       if(paradoOf||document.visibilityState!=='visible')return;
       try{
-        const {data:sinal}=await supabase.from('amicia_data').select('rev').eq('user_id','ailson_cortes').maybeSingle();
-        const rev=sinal?.rev??null;
-        if(rev==null)return;
-        if(revCortesRef.current===null){revCortesRef.current=rev;return;}   // 1a leitura: so memoriza
-        if(rev===revCortesRef.current)return;                               // nada mudou: custo ~100 bytes
-        revCortesRef.current=rev;
+        // carimbo: `rev` nao sobe nessa linha (so o financeiro usa), entao o
+        // sinal é o updated_at que os dois saves do modulo agora gravam.
+        const {data:sinal}=await supabase.from('amicia_data').select('updated_at').eq('user_id','ailson_cortes').maybeSingle();
+        const carimbo=sinal?.updated_at??null;
+        if(!carimbo)return;
+        if(revCortesRef.current===null){revCortesRef.current=carimbo;return;}   // 1a leitura: so memoriza
+        if(carimbo===revCortesRef.current)return;                              // nada mudou: custo ~100 bytes
+        revCortesRef.current=carimbo;
         // eco do proprio save: rev subiu por MINHA gravacao — nao rebaixa payload
         if(Date.now()-lastCorteSaveTs.current<4000)return;
         const {data:full}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').maybeSingle();
-        if(full?.payload){console.log('SYNC OFICINAS: rev mudou, aplicando merge');aplicarRemotoOficinas(full.payload);}
+        if(full?.payload){console.log('SYNC OFICINAS: carimbo mudou, aplicando merge');aplicarRemotoOficinas(full.payload);}
       }catch(e){console.error('sync oficinas polling:',e);}
     };
 
@@ -11498,7 +11500,7 @@ export default function App(){
           oficinasCAD:usuarioLogado?.admin?oficinasCAD||[]:remoto.oficinasCAD||oficinasCAD||[],
           logTroca:usuarioLogado?.admin?logTroca||[]:remoto.logTroca||logTroca||[]};
         lastCorteSaveTs.current=Date.now();
-        await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
+        await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload,updated_at:new Date().toISOString()},{onConflict:'user_id'});
         // 21/08 ESPELHO ANTI-PERDA: cada corte vira linha propria em
         // oficinas_cortes_espelho (tabela relacional — save de payload nao
         // apaga linha). Incremental: so os cortes com _mod novo desde o
@@ -11606,7 +11608,7 @@ export default function App(){
           oficinasCAD:snap.usuarioLogado?.admin?(snap.oficinasCAD||[]):(remoto.oficinasCAD||snap.oficinasCAD||[]),
           logTroca:snap.usuarioLogado?.admin?(snap.logTroca||[]):(remoto.logTroca||snap.logTroca||[]),
         };
-        await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
+        await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload,updated_at:new Date().toISOString()},{onConflict:'user_id'});
         console.log('🚪 PAGEHIDE flush cortes:',merged.length,'cortes salvos');
       }catch(e){console.error('flush oficinas/cortes:',e);}
     };
