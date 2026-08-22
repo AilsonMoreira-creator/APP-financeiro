@@ -7463,6 +7463,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   const lastLoadTsSC=useRef(0);              // quando esse device carregou remoto
   const lastUserEditTsSC=useRef(0);          // ultimo edit DO USUÁRIO neste device
   const realtimeProcessingSC=useRef(false);  // flag durante recebimento Realtime
+  const espelhoUltimoModSC=useRef(0);        // 22/08: controle incremental do espelho anti-perda
 
   // ── Supabase: load com merge ──
   useEffect(()=>{
@@ -7474,6 +7475,25 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
         if(remote.salas)setSalas(remote.salas);
         if(remote.logs)setLogSC(remote.logs);
         lastLoadTsSC.current=Date.now();
+        // 22/08 RESTAURACAO AUTOMATICA (mesmo padrao do modulo Oficinas):
+        // corte que existe no ESPELHO sem carimbo de delecao mas sumiu do
+        // payload = perda por conflito de save -> volta sozinho com _mod novo.
+        setTimeout(async()=>{try{
+          const {data:esp}=await supabase.from('salas_corte_espelho').select('corte_id,dados').is('deletado_em',null);
+          if(!esp?.length)return;
+          const idsAtuais=new Set((remote.cortes||[]).map(c=>String(c.id)));
+          const perdidos=esp.filter(r=>!idsAtuais.has(String(r.corte_id))&&!deletedIdsRef.current.has(r.dados?.id)&&r.dados&&r.dados.id);
+          if(!perdidos.length)return;
+          const agora=Date.now();
+          const restaurados=perdidos.map(r=>({...r.dados,_mod:agora}));
+          console.warn('🛟 ESPELHO SALA: restaurando',restaurados.length,'corte(s):',restaurados.map(c=>`${c.id} REF ${c.ref||'?'}`).join(' · '));
+          setCortesSala(prev=>{
+            const ids=new Set((prev||[]).map(c=>String(c.id)));
+            const faltam=restaurados.filter(c=>!ids.has(String(c.id)));
+            return faltam.length?[...prev,...faltam]:prev;
+          });
+          supabase.from('salas_corte_espelho').update({restaurado_em:new Date().toISOString()}).in('corte_id',perdidos.map(r=>String(r.corte_id))).then(()=>{},()=>{});
+        }catch(e){console.error('espelho sala restauracao:',e);}},2600);
         setTimeout(()=>{realtimeProcessingSC.current=false;},2000); // libera após React processar
       }
       setDbLoaded(true);
@@ -7584,6 +7604,18 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
         const mergedLogs=[...logSC,...remoteLogsOnly].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,200);
         setScSync('saving');
         await scDb.save({cortes:merged,salas:mergedSalas,logs:mergedLogs});
+        // ESPELHO ANTI-PERDA (22/08): cada corte vira LINHA propria em
+        // salas_corte_espelho — save de payload nao apaga linha de tabela.
+        // Incremental: so os cortes com _mod novo desde o ultimo espelhamento.
+        try{
+          const novosEsp=merged.filter(c=>c&&c.id&&(c._mod||0)>(espelhoUltimoModSC.current||0));
+          if(novosEsp.length){
+            const rowsEsp=novosEsp.map(c=>({corte_id:String(c.id),dados:c,atualizado_em:new Date().toISOString()}));
+            const {error:eEsp}=await supabase.from('salas_corte_espelho').upsert(rowsEsp,{onConflict:'corte_id'});
+            if(!eEsp)espelhoUltimoModSC.current=Math.max(...novosEsp.map(c=>c._mod||0));
+            else console.error('espelho sala:',eEsp.message);
+          }
+        }catch(e){console.error('espelho sala:',e);}
         setScSync('saved');setTimeout(()=>setScSync(null),2000);
       }catch(e){console.error(e);setScSync('error');setTimeout(()=>setScSync(null),4000);}
     },2000);
@@ -7684,6 +7716,10 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     const c=cortesSala.find(x=>x.id===id);
     setConfirm({msg:`Excluir corte REF ${c?.ref} (${c?.sala})?`,onYes:()=>{
       deletedIdsRef.current.add(id);
+      // carimba no ESPELHO: delecao de propósito nunca é restaurada
+      try{const s=JSON.parse(localStorage.getItem('amica_session')||'{}');
+        supabase.from('salas_corte_espelho').update({deletado_em:new Date().toISOString(),deletado_por:s.usuario||s.nome||'?'}).eq('corte_id',String(id)).then(()=>{},()=>{});
+      }catch(e){console.error('espelho sala delecao:',e);}
       const novosCortes=cortesSala.filter(x=>x.id!==id);
       setCortesSala(novosCortes);
       addLog("excluir",`REF ${c?.ref} · ${c?.sala} · ${c?.qtdRolos}r`);
@@ -7704,12 +7740,20 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     const rend=pecas&&rolos?Math.round((pecas/rolos)*100)/100:null;
     const prod=buscarProd(editForm.ref);
     const corteAntes=cortesSala.find(c=>c.id===editCorte);
-    setCortesSala(prev=>prev.map(c=>{
+    // FIX 22/08 (reclamacao recorrente do Pedro: "coloco a qtd e some"): esta
+    // era a UNICA edicao sem _mod. O corte ficava com o carimbo antigo da
+    // CRIACAO, entao no merge do save e no realtime qualquer versao remota
+    // vencia e a qtd digitada era descartada em silencio. Agora carimba a
+    // hora da edicao e atualiza o ref sincronamente (flush do pagehide).
+    const novoArrayEd=cortesSala.map(c=>{
       if(c.id!==editCorte)return c;
       const ref=mediaRef[editForm.ref];
       const temAlerta=ref&&ref.media>0&&rend&&rend<ref.media*0.95;
-      return{...c,sala:editForm.sala,ref:editForm.ref,descricao:prod?.descricao||c.descricao||"",marca:prod?.marca||c.marca||"",qtdRolos:rolos,qtdPecas:pecas,rendimento:rend,status:pecas?"concluido":"pendente",alerta:!!temAlerta,visto:!temAlerta};
-    }));
+      return{...c,sala:editForm.sala,ref:editForm.ref,descricao:prod?.descricao||c.descricao||"",marca:prod?.marca||c.marca||"",qtdRolos:rolos,qtdPecas:pecas,rendimento:rend,status:pecas?"concluido":"pendente",alerta:!!temAlerta,visto:!temAlerta,_mod:Date.now()};
+    });
+    setCortesSala(novoArrayEd);
+    ultimoEstadoRef.current={cortesSala:novoArrayEd,salas,logSC};
+    lastUserEditTsSC.current=Date.now();
     addLog("editar",`REF ${editForm.ref} · ${editForm.sala} · ${editForm.qtdRolos}r${editForm.qtdPecas?` → ${editForm.qtdPecas}pç`:""}`);
     setEditCorte(null);
     // Auto-fecha ordem vinculada se transição pendente → concluído
