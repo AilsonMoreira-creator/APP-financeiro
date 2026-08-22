@@ -3,7 +3,7 @@
 // eventos_hoje x tamanho = egress por sessao aberta que assina a tabela.
 import { supabase } from './_ml-helpers.js';
 
-const TABS = ['lojas_sugestoes_diarias','lojas_pedidos_sacola','lojas_whats_mensagens',
+const TABS = ['salas_corte_espelho','oficinas_cortes_espelho','lojas_sugestoes_diarias','lojas_pedidos_sacola','lojas_whats_mensagens',
   'lojas_whats_conversas','lojas_whats_sugestoes','lojas_importacoes',
   'clientes_sofia_bloqueios','ordens_corte','oficinas_caseado','oficinas_passadoria',
   'wms_pedidos','lojas_clientes_kpis','ml_conversations','ml_messages'];
