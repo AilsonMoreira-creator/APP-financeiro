@@ -4160,7 +4160,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
 
   // Sub-tabs com SVG
   const TabBtn=({id,label,Icon})=>(
-    <button onClick={()=>setAba(id)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 18px",border:"none",background:"transparent",borderBottom:aba===id?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:13,fontFamily:"Georgia,serif",color:aba===id?"#2c3e50":"#8a9aa4",fontWeight:aba===id?600:400}}>
+    <button onClick={()=>setAba(id)} style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,whiteSpace:"nowrap",padding:"7px 18px",border:"none",background:"transparent",borderBottom:aba===id?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:13,fontFamily:"Georgia,serif",color:aba===id?"#2c3e50":"#8a9aa4",fontWeight:aba===id?600:400}}>
       <Icon size={18}/>{label}
     </button>
   );
@@ -4233,7 +4233,10 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
         </div>
         );
       })()}
-      <div style={{display:"flex",borderBottom:"1px solid #e8e2da",marginBottom:16}}>
+      {/* 22/08 (iPhone): 6 abas em flex nao cabem em ~380px e empurravam a
+          LARGURA DA PAGINA — a tela inteira andava de lado. Agora a barra
+          rola dentro dela mesma. No desktop tudo cabe, entao nada muda. */}
+      <div className="tabbar-scroll" style={{display:"flex",borderBottom:"1px solid #e8e2da",marginBottom:16,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
         <TabBtn id="cortes" label="Cortes" Icon={SvgCortes}/>
         <TabBtn id="dashboard" label="Dashboard" Icon={SvgDashOficinas}/>
         <TabBtn id="produtos" label="Produtos" Icon={SvgProdutosOf}/>

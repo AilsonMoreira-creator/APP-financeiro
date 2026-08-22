@@ -109,3 +109,13 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* 22/08 — MOBILE: nada pode empurrar a largura da pagina (a tela "andava de
+   lado" no iPhone). Escopo <=640px: desktop segue exatamente como estava. */
+@media (max-width: 640px) {
+  html, body { overflow-x: hidden; max-width: 100%; }
+  #root { overflow-x: hidden; max-width: 100%; }
+}
+/* barra de abas rola dentro dela mesma, sem barra visivel */
+.tabbar-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+.tabbar-scroll::-webkit-scrollbar { display: none; }
