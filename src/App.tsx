@@ -4034,6 +4034,14 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
     if(filtroRef.trim()&&!c.ref.toLowerCase().includes(filtroRef.toLowerCase().trim()))return false;
     return true;
   });
+  // 22/08 (pedido dele): LOG DE CORTES — toda acao sobre corte vira linha em
+  // oficinas_cortes_log (quem criou, editou, entregou, pagou, arquivou,
+  // definiu caseado/passadoria). Best-effort: falha de log nunca trava acao.
+  const [logCortesOpen,setLogCortesOpen]=useState(false);
+  const logCorteAcao=(acao,c,detalhe)=>{try{
+    const s=JSON.parse(localStorage.getItem('amica_session')||'{}');
+    supabase.from('oficinas_cortes_log').insert({corte_id:String(c?.id??''),n_corte:String(c?.nCorte||''),ref:String(c?.ref||''),oficina:String(c?.oficina||''),acao,detalhe:detalhe||null,usuario:s.usuario||s.nome||'?'}).then(()=>{},()=>{});
+  }catch(e){/* log nunca trava a acao */}};
   const buscarProd=(ref)=>produtos.find(p=>p.ref===String(ref).trim());
   const handleRefChange=(v)=>{setRefBusca(v);const p=buscarProd(v);if(p)setForm(prev=>({...prev,ref:v,descricao:p.descricao,marca:p.marca,valorUnit:Number(p.valorUnit)}));else setForm(prev=>({...prev,ref:v}));};
   const salvarCorte=()=>{
@@ -4042,11 +4050,12 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
     const item={id:editId||Date.now(),nCorte:form.nCorte,ref:form.ref,descricao:form.descricao,marca:form.marca,qtd,valorUnit:vu,valorTotal:Math.round(qtd*vu*100)/100,oficina:form.oficina,data:form.data,qtdEntregue:qtd,entregue:false,dataEntrega:null,pago:false,dataPagamento:null,obs:"",_mod:Date.now()};
     if(editId)setCortes(prev=>prev.map(c=>c.id===editId?{...c,...item}:c));
     else setCortes(prev=>[...prev,item]);
+    logCorteAcao(editId?'editou':'criou',item,`${qtd} pç × R$ ${vu} · retirada ${String(item.data).split('-').reverse().join('/')}`);
     setForm({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});
     setRefBusca("");setMostraForm(false);setEditId(null);
   };
   const iniciarEdicao=(c)=>{setEditId(c.id);setForm({nCorte:c.nCorte,ref:c.ref,descricao:c.descricao,marca:c.marca,qtd:String(c.qtd),valorUnit:String(c.valorUnit),oficina:c.oficina,data:c.data});setRefBusca(c.ref);setMostraForm(true);};
-  const deletarCorte=(id)=>setConfirm({msg:"Apagar este corte?",onYes:()=>{setCortes(prev=>prev.filter(c=>c.id!==id));setConfirm(null);
+  const deletarCorte=(id)=>setConfirm({msg:"Apagar este corte?",onYes:()=>{const cDel=cortes.find(c=>c.id===id);if(cDel)logCorteAcao('excluiu',cDel,`${cDel.qtd} pç`);setCortes(prev=>prev.filter(c=>c.id!==id));setConfirm(null);
     // 21/08: carimba a delecao no ESPELHO — assim a restauracao automatica
     // sabe que este sumico foi de proposito e nao ressuscita o corte
     try{const s=JSON.parse(localStorage.getItem('amica_session')||'{}');
@@ -4057,14 +4066,16 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
   // via filter por causa do merge multi-user). Arquivar é apenas SET de flag
   // no item, o merge por _mod respeita normalmente.
   const arquivarCorte=(id)=>setConfirm({msg:"Arquivar este corte? Ele sai de todas as contagens (Dashboard, Ranking, métricas) mas pode ser desarquivado depois.",onYes:()=>{
+    const cArq=cortes.find(c=>c.id===id);if(cArq)logCorteAcao('arquivou',cArq,null);
     setCortes(prev=>prev.map(c=>c.id===id?{...c,arquivado:true,_mod:Date.now()}:c));
     setConfirm(null);setMostraForm(false);setEditId(null);
   }});
   const desarquivarCorte=(id)=>setConfirm({msg:"Desarquivar este corte? Volta pra todas as contagens.",onYes:()=>{
+    const cDes=cortes.find(c=>c.id===id);if(cDes)logCorteAcao('desarquivou',cDes,null);
     setCortes(prev=>prev.map(c=>c.id===id?{...c,arquivado:false,_mod:Date.now()}:c));
     setConfirm(null);setMostraForm(false);setEditId(null);
   }});
-  const toggleEntregue=(id)=>{setCortes(prev=>prev.map(c=>{if(c.id!==id||c.arquivado)return c;const ne=!c.entregue;if(ne&&pendingSnapshotIds?.current)pendingSnapshotIds.current.add(id);return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,_mod:Date.now()};}));};
+  const toggleEntregue=(id)=>{const c0=cortes.find(c=>c.id===id);if(c0&&!c0.arquivado)logCorteAcao(c0.entregue?'entregue_removido':'entregue',c0,null);setCortes(prev=>prev.map(c=>{if(c.id!==id||c.arquivado)return c;const ne=!c.entregue;if(ne&&pendingSnapshotIds?.current)pendingSnapshotIds.current.add(id);return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,_mod:Date.now()};}));};
   // Marcar/Desmarcar corte como pago.
   // Ailson 21/05/2026 — refatorado pra resolver 2 bugs:
   // 1) Erro silencioso: nao-admin podia marcar pago mas o lancamento nao era
@@ -4088,6 +4099,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
     const mes=hoje.getMonth()+1;
     const dd=`${String(hoje.getDate()).padStart(2,"0")}/${String(mes).padStart(2,"0")}`;
     const vl=String(Math.round((corte.qtdEntregue||corte.qtd)*(corte.valorUnit||0)*100)/100);
+    logCorteAcao(novoPago?'pago':'pago_removido',corte,'R$ '+vl);
     // Atualiza cortes (updater puro - sem side effect dentro)
     setCortes(prev=>prev.map(c=>{
       if(c.id!==id||!c.entregue)return c;
@@ -4245,6 +4257,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
         <TabBtn id="passadoria" label="Passadoria" Icon={PassadoriaTabIcon}/>
       </div>
 
+      {logCortesOpen&&<LogCortesOficinas onClose={()=>setLogCortesOpen(false)} oficinas={[...new Set(cortes.map(c=>c.oficina).filter(Boolean))].sort()}/>}
       {aba==="caseado"&&<TelaCaseado api={caseadoApi}/>}
       {aba==="passadoria"&&<TelaPassadoria api={passadoriaApi} isAdmin={isAdmin}
         onLancarDespesa={({passadoria,total,pagamentoId,qtdCortes})=>{
@@ -4266,6 +4279,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
         <div>
           <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
             <input value={filtroRef} onChange={e=>setFiltroRef(e.target.value)} placeholder="Buscar ref..." style={{...iStyle,width:90}} />
+            <button onClick={()=>setLogCortesOpen(true)} title="Log de acoes sobre os cortes" style={{padding:"7px 12px",fontSize:12,fontWeight:600,borderRadius:8,border:"1px solid #d8e2ea",background:"#fff",color:"#5a6470",cursor:"pointer",whiteSpace:"nowrap"}}>🕘 Log</button>
             <select value={filtroOf} onChange={e=>setFiltroOf(e.target.value)} style={{...iStyle,flex:2,minWidth:120}}>
               <option value="todas">Todas as oficinas</option>
               {oficinasCAD.map(o=><option key={o.codigo} value={o.descricao}>{o.descricao}</option>)}
@@ -10121,6 +10135,55 @@ function mergeAuxDeep(localAux,remoteAux,snapTs){
     merged[m]=mergedMes;
   }
   return merged;
+}
+
+// ── 22/08: LOG DE CORTES do modulo Oficinas — modal com filtro por ref e
+// oficina, mesmo espirito do log de estoque do Bling (linha por acao).
+function LogCortesOficinas({onClose,oficinas}){
+  const [linhas,setLinhas]=useState(null);
+  const [fRef,setFRef]=useState('');
+  const [fOfi,setFOfi]=useState('todas');
+  useEffect(()=>{let vivo=true;(async()=>{try{
+    let q=supabase.from('oficinas_cortes_log').select('*').order('criado_em',{ascending:false}).limit(300);
+    const rn=fRef.trim();
+    if(rn)q=q.ilike('ref',`%${rn}%`);
+    if(fOfi!=='todas')q=q.eq('oficina',fOfi);
+    const {data}=await q;
+    if(vivo)setLinhas(data||[]);
+  }catch{if(vivo)setLinhas([]);}})();return()=>{vivo=false;};},[fRef,fOfi]);
+  const ROT={criou:['criou o corte','#1e7a45','#eafbf0'],editou:['editou','#2f6690','#eef5fb'],entregue:['marcou ENTREGUE','#1e7a45','#eafbf0'],entregue_removido:['desmarcou entregue','#b7791f','#fff8ea'],pago:['marcou PAGO','#1e7a45','#eafbf0'],pago_removido:['desmarcou pago','#b7791f','#fff8ea'],arquivou:['arquivou','#5a6470','#f1f3f5'],desarquivou:['desarquivou','#5a6470','#f1f3f5'],excluiu:['EXCLUIU','#c0392b','#fdeeec'],caseado_definido:['definiu caseado','#7d3c98','#f6effa'],passadoria_definida:['definiu passadoria','#1f6f6b','#e8f6f5']};
+  const fmtDH=(s)=>{const d=new Date(s);return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});};
+  const FN="Calibri,'Segoe UI',Arial,sans-serif";
+  return <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(44,62,80,0.55)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 16px',zIndex:130,overflowY:'auto',backdropFilter:'blur(3px)'}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:12,maxWidth:640,width:'100%',boxShadow:'0 12px 40px rgba(0,0,0,0.25)',overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'86vh'}}>
+      <div style={{padding:'14px 18px',background:'#f7f4f0',borderBottom:'1px solid #e8e2da',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{fontSize:15,fontWeight:700,color:'#2c3e50',fontFamily:'Georgia,serif'}}>🕘 Log de cortes · Oficinas</div>
+        <button onClick={onClose} style={{background:'none',border:'none',fontSize:22,color:'#8a9aa4',cursor:'pointer'}}>×</button>
+      </div>
+      <div style={{display:'flex',gap:8,padding:'10px 16px',borderBottom:'1px solid #eee7de',flexWrap:'wrap'}}>
+        <input value={fRef} onChange={e=>setFRef(e.target.value)} placeholder='Filtrar REF...' style={{padding:'7px 10px',fontSize:13,border:'1px solid #c8d8e4',borderRadius:8,outline:'none',width:110,fontFamily:FN}}/>
+        <select value={fOfi} onChange={e=>setFOfi(e.target.value)} style={{padding:'7px 10px',fontSize:13,border:'1px solid #c8d8e4',borderRadius:8,outline:'none',fontFamily:FN,background:'#fff'}}>
+          <option value='todas'>Todas as oficinas</option>
+          {oficinas.map(o=><option key={o} value={o}>{o}</option>)}
+        </select>
+      </div>
+      <div style={{overflowY:'auto',padding:'6px 0'}}>
+        {linhas===null&&<div style={{padding:16,fontSize:12,color:'#8a9aa4'}}>Carregando…</div>}
+        {linhas&&linhas.length===0&&<div style={{padding:16,fontSize:12,color:'#8a9aa4',fontStyle:'italic'}}>Nenhuma ação registrada ainda (o log começou hoje, 22/08).</div>}
+        {(linhas||[]).map(l=>{
+          const [rot,cor,bg]=ROT[l.acao]||[l.acao,'#5a6470','#f1f3f5'];
+          return <div key={l.id} style={{display:'flex',alignItems:'baseline',gap:8,padding:'7px 16px',borderBottom:'1px solid #f4efe8',flexWrap:'wrap'}}>
+            <span style={{fontSize:11,color:'#8a9aa4',fontFamily:FN,whiteSpace:'nowrap'}}>{fmtDH(l.criado_em)}</span>
+            <span style={{fontSize:11,fontWeight:700,color:cor,background:bg,border:'1px solid '+cor+'22',borderRadius:9,padding:'2px 8px',whiteSpace:'nowrap'}}>{rot}</span>
+            <span style={{fontSize:12.5,color:'#2c3e50',fontWeight:600}}>{l.n_corte?`Corte ${l.n_corte} · `:''}REF {l.ref||'?'}</span>
+            <span style={{fontSize:12,color:'#6b7c8a'}}>{l.oficina||''}</span>
+            {l.detalhe&&<span style={{fontSize:12,color:'#5a6470'}}>· {l.detalhe}</span>}
+            <span style={{fontSize:11,color:'#8a9aa4',marginLeft:'auto',fontFamily:FN}}>por {l.usuario||'?'}</span>
+          </div>;
+        })}
+      </div>
+    </div>
+  </div>;
 }
 
 export default function App(){

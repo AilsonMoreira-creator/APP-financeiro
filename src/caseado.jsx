@@ -129,6 +129,8 @@ export function useCaseado() {
     };
     const { error } = await supabase.from('oficinas_caseado').upsert(row, { onConflict: 'corte_id' });
     if (error) { console.error('[caseado] definir:', error.message); return { ok: false, erro: error.message }; }
+    // 22/08: espelha no LOG UNIFICADO de cortes do modulo Oficinas
+    try { supabase.from('oficinas_cortes_log').insert({ corte_id: String(corte.id), n_corte: String(corte.nCorte || ''), ref: String(corte.ref || ''), oficina: String(corte.oficina || ''), acao: 'caseado_definido', detalhe: nome, usuario: getUsuario() }).then(() => {}, () => {}); } catch { /* nunca trava */ }
     await carregarRegistros();
     return { ok: true };
   }, [carregarRegistros]);

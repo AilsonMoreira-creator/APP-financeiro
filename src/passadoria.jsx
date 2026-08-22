@@ -120,6 +120,8 @@ export function usePassadoria() {
     if (error) { console.error('[passadoria] definir:', error.message); return { ok: false, erro: error.message }; }
     if (anterior && anterior.nome !== nome) logAcao(corte.id, corte.ref, 'trocou passadoria', `${anterior.nome} → ${nome}`);
     else if (!anterior) logAcao(corte.id, corte.ref, 'definiu passadoria', nome);
+    // 22/08: espelha no LOG UNIFICADO de cortes do modulo Oficinas
+    try { supabase.from('oficinas_cortes_log').insert({ corte_id: String(corte.id), n_corte: String(corte.nCorte || ''), ref: String(corte.ref || ''), oficina: String(corte.oficina || ''), acao: 'passadoria_definida', detalhe: anterior && anterior.nome !== nome ? `${anterior.nome} → ${nome}` : nome, usuario: getUsuario() }).then(() => {}, () => {}); } catch { /* nunca trava */ }
     await carregarRegistros();
     return { ok: true };
   }, [carregarRegistros]);
