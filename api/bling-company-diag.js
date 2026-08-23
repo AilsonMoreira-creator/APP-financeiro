@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   for (const conta of ['exitus', 'lumia', 'muniam']) {
     try {
       const tk = await refreshBlingToken(conta);
-      const r = await blingFetch(`${API}/empresas/me/dados-basicos`, tk);
+      const r = await blingFetch(`${API}/empresas/me/dados-basicos`, { Authorization: `Bearer ${tk}` });
       const j = await r.json().catch(() => ({}));
       saida[conta] = r.ok ? { id: j?.data?.id ?? j?.id ?? null, nome: j?.data?.nome ?? j?.data?.razaoSocial ?? null } : { erro: r.status, corpo: JSON.stringify(j).slice(0, 120) };
     } catch (e) { saida[conta] = { erro: String(e?.message || e).slice(0, 80) }; }
