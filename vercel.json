@@ -188,7 +188,7 @@
     },
     {
       "path": "/api/bling-cron",
-      "schedule": "*/15 8-23 * * *"
+      "schedule": "*/15 0-2,8-23 * * *"
     },
     {
       "path": "/api/ml-messages-sync",
@@ -464,7 +464,7 @@
     },
     {
       "path": "/api/bling-fotos-sync",
-      "schedule": "0 7,11,15,19 * * *"
+      "schedule": "0 7 * * *"
     },
     {
       "path": "/api/lojas-whats-cron-nudge-abertura",
