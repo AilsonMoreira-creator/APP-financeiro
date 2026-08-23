@@ -388,7 +388,11 @@ export default async function handler(req, res) {
           // QUALQUER dia entrava na conta de hoje. Agora "já impressas" =
           // carimbo NOSSO de hoje OU impressa PELO BLING (sit 6/atendido, sem
           // carimbo nosso) de pedido de hoje — 22/08: o card conta App+Bling.
-          const impressaBlingHoje = !p.etiqueta_impressa_em && String(p.data_pedido || '').slice(0, 10) === hojeBRT;
+          // 22/08 (ele apontou contagem baixa): pedido de ONTEM impresso HOJE
+          // pelo painel nao tem carimbo nosso — a regua de "so pedido de hoje"
+          // derrubava ele da conta. Janela: hoje + ontem.
+          const ontemBRT = new Date(Date.now() - 3 * 3600000 - 86400000).toISOString().slice(0, 10);
+          const impressaBlingHoje = !p.etiqueta_impressa_em && String(p.data_pedido || '').slice(0, 10) >= ontemBRT;
           if (impressaHoje || impressaBlingHoje) { grupos[k].impressas++; jaImpressas++; }
           else grupos[k].pedidos--;          // impressa em outro dia: fora da conta
         } else if (q.tipo === 'meluni'
@@ -411,7 +415,10 @@ export default async function handler(req, res) {
         prontas,
         ja_impressas: jaImpressas,
         aguardando: semEtiqueta,
-        grupos: Object.values(grupos).map(g => ({ ...g, contas: [...g.contas], canais: [...g.canais] })),
+        // 22/08 (ele apontou 0/2 e 0/0 na lista): grupo SEM pronta e SEM
+        // impressa nao tem acao possivel — aguardando NF ja tem o chip
+        // proprio; card vazio so polui a auditoria visual.
+        grupos: Object.values(grupos).filter(g => (g.prontas || 0) > 0 || (g.impressas || 0) > 0).map(g => ({ ...g, contas: [...g.contas], canais: [...g.canais] })),
         nota: peds.length > 60 ? 'Acima de 60 pedidos a geração demora alguns minutos — considere gerar por REF.' : null,
       });
     }
