@@ -34,6 +34,9 @@ async function pedidosFiltrados(q) {
   const loja = String(q.loja || 'todas');
   const tipo = String(q.tipo || 'nf_transporte');
   const ref = String(q.ref || '').replace(/^0+/, '');
+  // 22/08: reimpressao POR BLOCO — a tela manda refs=2601,2708 (grupos
+  // selecionados na Ordem de impressao) e so eles entram no lote
+  const refsSel = q.refs ? new Set(String(q.refs).split(',').map(s => s.trim().replace(/^0+/, '')).filter(Boolean)) : null;
   // corte=HH:MM (Ailson 12/08): só pedidos que entraram até o horário de corte
   // de HOJE — mesma lógica da lista de separação
   const corte = String(q.corte || '');
@@ -137,6 +140,7 @@ async function pedidosFiltrados(q) {
     const it0 = (p.itens || [])[0] || {};
     const r = String(it0.ref || '?').replace(/^0+/, '');
     if (ref && r !== ref) continue;
+    if (refsSel && !refsSel.has(r)) continue;
     out.push({ ...p, ref: r, loc: String(it0.estoque || '—').toUpperCase() });
   }
   // ORDEM DE IMPRESSÃO (regra dele 13/08): localização A → todas as refs
@@ -332,9 +336,11 @@ export default async function handler(req, res) {
           && p.ml_ship_status === 'ready_to_ship'
           && p.ml_ship_substatus === 'ready_to_print'
           && !p.etiqueta_impressa_em) c.etiqueta_liberada++;
+        // 22/08: MELUNI segue o Bling e nada mais — em aberto conta, atendido
+        // zera (as meninas nao geram NF; logistica sai pela Frenet)
+        if (p.print_regra === 'MELUNI') { if (p.situacao_bling !== 9) c.meluni++; continue; }
         if (p.print_estado !== 'PRONTO') continue;
         if (p.print_regra === 'MELI_FLEX') c.flex++;
-        else if (p.print_regra === 'MELUNI') c.meluni++;
         else if (p.print_regra === 'NORMAL') c.nf_transporte++;
       }
       return res.status(200).json({ ok: true, contadores: c });
@@ -383,7 +389,11 @@ export default async function handler(req, res) {
           // só quem tem o NOSSO carimbo de impressão DE HOJE.
           if (impressaHoje) { grupos[k].impressas++; jaImpressas++; }
           else grupos[k].pedidos--;          // impressa em outro dia: fora da conta
-        } else if ((sit === 5 || p.print_estado === 'PRONTO') && p.ml_ship_status !== 'cancelled' && p.situacao_bling !== 9) { grupos[k].prontas++; prontas++; }
+        } else if (q.tipo === 'meluni'
+          // 22/08 (regra dele): Meluni e VISUAL — NF e logistica saem pela
+          // Frenet, fora do Bling. Conta o pedido EM ABERTO; atendido some.
+          ? (p.situacao_bling !== 9 && (grupos[k].prontas++, prontas++, true))
+          : ((sit === 5 || p.print_estado === 'PRONTO') && p.ml_ship_status !== 'cancelled' && p.situacao_bling !== 9 && (grupos[k].prontas++, prontas++, true))) { /* contado acima */ }
         else if (ehFlexLinha) { grupos[k].pedidos--; }   // Flex não tem nota
         else if (p.print_etiqueta === false || p.status_wms === 'finalizado') {
           // 17/08 (ordem dele): Flex/Meluni sem NF e pedido já finalizado NÃO
@@ -590,6 +600,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ total: 0, blocos: [], ids: [], em_pdf: ['nota'], so_pdf: true });
     }
     if (q.zpl === '1') {
+      // 22/08: MELUNI nunca imprime por aqui — etiqueta de logistica e da
+      // Frenet. O botao e visual; o guard vale pra qualquer chamada direta.
+      if (q.tipo === 'meluni') return res.status(200).json({ total: 0, blocos: [], ids: [], so_aviso: 'frenet' });
       const { unzipSync } = await import('fflate');
       // 17/08 — REDESENHO: os documentos já preparados vêm do banco. Só o que
       // não estiver guardado é buscado agora no Bling (é o caso da Shein, que
@@ -952,7 +965,7 @@ export default async function handler(req, res) {
         else { foraDoAlvo.push(p.numero); foraIds.push(p.pedido_id); }
       }
 
-      const blocos = []; const idsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo]; let grupoAtual = '';
+      const blocos = []; const idsOk = []; const refsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo]; let grupoAtual = '';
       for (const p of alvo.slice(0, 120)) {
         // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
         let zplDoPedido = null, ehPdf = false, pdf64 = null, zipDanfe64 = null;
@@ -1062,6 +1075,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
           }
         }
         idsOk.push(p.pedido_id);
+        refsOk.push(String(p.ref || ''));
         // 18/08: a pausa só faz sentido quando BAIXOU da rede — com o
         // documento já preparado eram 14s parados num lote de 120
         if (!jaTem) await new Promise(r2 => setTimeout(r2, 120));
@@ -1079,7 +1093,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
           detalhe: { pares: idsOk.length, restantes, sem_danfe: semDanfe.length ? semDanfe : undefined, pedidos: idsOk },
         }).then?.(() => {}, () => {});
       }
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, restantes });
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, restantes });
     }
 
     // ── marcar como impressas depois que a térmica confirmou

@@ -64,6 +64,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   }, [fConta, fLoja, fTipo, fJanela, fRef, corteHora, reimprimir, verFinalizados, porEmpresa]);
 
   const [imprimindo, setImprimindo] = useState('');
+  // 22/08: reimpressao POR BLOCO (checkbox na Ordem de impressao) e o modal
+  // de auditoria do lote (cada REF ganha o check quando termina)
+  const [selRefs, setSelRefs] = useState([]);
+  const [lote, setLote] = useState(null);   // {grupos:[{key,loc,ref,qtd,feitas}], enviadas, rodando}
   const [modalCert, setModalCert] = useState(false);
   // PREPARO AUTOMÁTICO (17/08 — redesenho): ao abrir a tela o app já busca e
   // guarda as etiquetas em segundo plano, em fatias. O clique de imprimir só
@@ -233,8 +237,17 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   };
 
   const imprimirTermica = async () => {
+    const extraSel = selRefs.length ? { refs: selRefs.join(','), reimprimir: '1' } : {};
+    const msgConfirma = selRefs.length
+      ? `REIMPRIMIR ${selRefs.length} grupo(s) selecionado(s) (REF ${selRefs.join(', ')})?\n\nSai tudo do grupo de novo: DANFE + etiqueta.`
+      : `Imprimir ${vaiSair} etiqueta(s)?\n\nAo confirmar, elas são puxadas do Bling e os pedidos passam a constar como "aguardando coleta" nos marketplaces.`;
     // a etiqueta muda o status no marketplace — confirma antes (13/08)
-    if (!window.confirm(`Imprimir ${vaiSair} etiqueta(s)?\n\nAo confirmar, elas são puxadas do Bling e os pedidos passam a constar como "aguardando coleta" nos marketplaces.`)) return;
+    if (!window.confirm(msgConfirma)) return;
+    // 22/08 (auditoria dele): MODAL DO LOTE — mostra cada REF e a quantidade
+    // que vai sair; conforme as rodadas voltam, a REF concluida ganha o check
+    const gruposLote = (selRefs.length ? grupos.filter(g => selRefs.includes(String(g.ref))) : grupos.filter(g => (g.prontas || 0) > 0))
+      .map(g => ({ key: `${g.loc}·${g.ref}`, loc: g.loc, ref: String(g.ref), qtd: selRefs.length ? (g.prontas || 0) + (g.impressas || 0) : (g.prontas || 0), feitas: 0 }));
+    if (gruposLote.length) setLote({ grupos: gruposLote, enviadas: 0, rodando: true });
     let jobId = null;
     try {
       setImprimindo('Preparando as etiquetas…');
@@ -254,7 +267,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         );
         if (querPdf) {
           setImprimindo('Gerando o PDF (modo degradado)… Imprima em escala 100%; código de barras com defeito → abra no Firefox.');
-          abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
+          abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1', ...extraSel })}`);
           setTimeout(() => { setImprimindo(''); carregar(); }, 9000);
         } else {
           setImprimindo(`⛔ Impressão cancelada — QZ Tray não conectou (${motivo}). Clique em Testar QZ pra diagnosticar.`);
@@ -277,13 +290,13 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       // 20/08: cada clique vira um PRINT JOB — pacote com número e histórico
       // (rodadas, falhas, fechamento) pra auditar o que saiu e o que travou.
       try {
-        const rJ = await fetch(`${API}/wms-etiquetas?${qs({ job_criar: '1' })}`);
+        const rJ = await fetch(`${API}/wms-etiquetas?${qs({ job_criar: '1', ...extraSel })}`);
         jobId = (await rJ.json())?.job_id || null;
       } catch { /* job é auditoria, não trava a impressão */ }
       let totalGeral = 0; let semDanfeTotal = []; let rodadas = 0;
       while (rodadas < 40) {
         rodadas++;
-        const rL = await fetch(`${API}/wms-etiquetas?${qs(jobId ? { zpl: '1', job: String(jobId) } : { zpl: '1' })}`);
+        const rL = await fetch(`${API}/wms-etiquetas?${qs(jobId ? { zpl: '1', job: String(jobId), ...extraSel } : { zpl: '1', ...extraSel })}`);
         const bruto = await rL.text();
         let jL;
         try { jL = JSON.parse(bruto); }
@@ -324,6 +337,19 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           await fetch(`${API}/wms-etiquetas?marcar=1&ids=${jL.ids.slice(i, i + 30).join(',')}`);
         }
         totalGeral += jL.total;
+        if (jL.refs?.length) setLote(lt => {
+          if (!lt) return lt;
+          const cont = {};
+          jL.refs.forEach(r => { cont[String(r)] = (cont[String(r)] || 0) + 1; });
+          const gs = lt.grupos.map(g => {
+            let add = cont[g.ref] || 0;
+            if (!add) return g;
+            const cabe = Math.min(add, g.qtd - g.feitas);
+            cont[g.ref] -= cabe;
+            return { ...g, feitas: g.feitas + cabe };
+          });
+          return { ...lt, grupos: gs, enviadas: lt.enviadas + jL.refs.length };
+        });
         semDanfeTotal = semDanfeTotal.concat(jL.sem_danfe || []);
         if (!jL.restantes) break;
         setImprimindo(`Imprimindo em ${impressora}… ${totalGeral} enviadas, faltam ${jL.restantes}`);
@@ -336,6 +362,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       } else {
         setImprimindo(`✅ ${totalGeral} etiqueta(s) enviadas para ${impressora}${rotJob}`);
       }
+      setLote(lt => lt ? { ...lt, rodando: false } : lt);
+      setSelRefs([]);
       carregar();
       setTimeout(() => setImprimindo(''), 10000);
     } catch (e) {
@@ -347,6 +375,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         setTimeout(() => { setImprimindo(''); carregar(); }, 9000);
         return;
       }
+      setLote(lt => lt ? { ...lt, rodando: false, erro: e.message } : lt);
       setImprimindo(`⚠ ${e.message}`);
       onErro?.(e.message);
       setTimeout(() => setImprimindo(''), 12000);
@@ -364,7 +393,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     finally { setCarregando(false); }
   }, [API, qs, onErro]);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { carregar(); setSelRefs([]); }, [carregar]);
   // contadores de cada botão de IMPRIMIR (leitura leve, só do banco)
   useEffect(() => {
     const buscar = () => fetch(`${API}/wms-etiquetas?contadores=1&contas=${fConta}`)
@@ -408,6 +437,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const aguardando = dados?.aguardando || 0;
   const jaImpressas = dados?.ja_impressas || 0;
   const vaiSair = reimprimir ? prontas + jaImpressas : prontas;
+  const ehMeluni = fTipo === 'meluni';
+  const podeImprimir = !ehMeluni && (vaiSair > 0 || selRefs.length > 0);
 
   return (
     <div style={{ padding: 16, maxWidth: 860, margin: '0 auto' }}>
@@ -477,11 +508,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       {/* ação — UM botão só (15/08 → 17/08, ordem dele): tenta a térmica e,
           se o QZ Tray não estiver disponível, cai sozinho pro PDF */}
       <div style={{ display: 'flex', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button onClick={imprimirTermica} disabled={!vaiSair || !!imprimindo}
+        <button onClick={imprimirTermica} disabled={!podeImprimir || !!imprimindo}
           style={{ flex: 1, minWidth: 240, padding: '14px', borderRadius: 12, border: 'none',
-            background: (vaiSair && !imprimindo) ? palette.ink : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
-            cursor: (vaiSair && !imprimindo) ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <Printer size={18} /> {imprimindo || `Imprimir etiquetas (${vaiSair})`}
+            background: (podeImprimir && !imprimindo) ? (selRefs.length ? '#b7791f' : palette.ink) : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
+            cursor: (podeImprimir && !imprimindo) ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <Printer size={18} /> {imprimindo || (ehMeluni ? 'Meluni: logística pela Frenet' : selRefs.length ? `Reimprimir ${selRefs.length} grupo(s) selecionado(s)` : `Imprimir etiquetas (${vaiSair})`)}
         </button>
         <button onClick={() => prepararLote(false)} disabled={preparo?.rodando}
           title="Busca agora as etiquetas que ainda não foram preparadas (a Shein só é buscada no clique de imprimir)"
@@ -533,6 +564,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>
           Por localização e, dentro dela, as referências de maior quantidade primeiro — cada grupo sai com uma folha separadora antes das etiquetas (NF + transporte).
         </div>
+        {ehMeluni && (
+          <div style={{ fontSize: 12, color: palette.inkSoft, background: '#e8f6f5', border: '1px solid #bfe0dd', borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
+            <b>Meluni (site B2C):</b> aqui <b>não sai NF nem etiqueta</b> — a logística é gerada pela <b>Frenet</b>. Este painel é só visual e segue o Bling: pedido <b>em aberto</b> conta; marcado <b>atendido</b>, some sozinho.
+          </div>
+        )}
         {fTipo === 'nf_agendada' && (
           <div style={{ fontSize: 12, color: palette.inkSoft, background: '#fdf6e3', border: '1px solid #e8d9a8', borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
             Envio programado do Mercado Livre: sai <b>só a nota</b>, com a data de envio no cabeçalho dela (mesma quantidade de folhas de sempre). Separe a mercadoria e guarde — no dia, use “Etiquetas liberadas”. A NF continua valendo.
@@ -580,9 +616,16 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           <div style={{ color: palette.inkMuted, fontSize: 13, padding: 10 }}>Nenhum pedido nesses filtros.</div>
         )}
 
-        {grupos.map((g, i) => (
-          <div key={`${g.ref}-${g.loc}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: i < grupos.length - 1 ? `1px solid ${palette.beigeSoft}` : 'none' }}>
-            <div style={{ width: 26, height: 26, borderRadius: 8, background: palette.accentSoft, color: palette.accent, fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>{i + 1}</div>
+        {grupos.map((g, i) => {
+          const refStr = String(g.ref);
+          const tudoImpresso = !(g.prontas || 0) && (g.impressas || 0) > 0;
+          const sel = selRefs.includes(refStr);
+          return (
+          <div key={`${g.ref}-${g.loc}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: i < grupos.length - 1 ? `1px solid ${palette.beigeSoft}` : 'none', background: sel ? '#fdf6e3' : 'transparent', borderRadius: sel ? 8 : 0 }}>
+            {!ehMeluni && <input type="checkbox" checked={sel} title="Selecionar este grupo pra reimprimir"
+              onChange={() => setSelRefs(p => p.includes(refStr) ? p.filter(x => x !== refStr) : [...p, refStr])}
+              style={{ width: 17, height: 17, cursor: 'pointer', accentColor: '#b7791f', flexShrink: 0 }} />}
+            <div style={{ width: 26, height: 26, borderRadius: 8, background: tudoImpresso ? palette.okSoft : palette.accentSoft, color: tudoImpresso ? palette.ok : palette.accent, fontSize: tudoImpresso ? 15 : 12, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT, flexShrink: 0 }}>{tudoImpresso ? '✓' : i + 1}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14.5, fontWeight: 800, color: palette.ink }}>
                 📍 {g.loc} <span style={{ fontWeight: 600, color: palette.inkSoft, fontSize: 13 }}>· REF {g.ref}</span>
@@ -591,15 +634,48 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
               <div style={{ fontSize: 11.5, color: palette.inkMuted }}>{(g.canais || []).join(', ')}{g.contas?.length ? ` · ${g.contas.map(c => NOME_CONTA[c] || c).join(', ')}` : ''}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: g.prontas ? palette.ok : palette.inkMuted }}>{g.prontas || 0}/{g.pedidos}</div>
-              <div style={{ fontSize: 10.5, color: palette.inkMuted }}>
-                {g.impressas ? `${g.impressas} impressa${g.impressas === 1 ? '' : 's'} no App` : 'prontas'}
-              </div>
+              {tudoImpresso
+                ? <div style={{ fontSize: 12, fontWeight: 800, color: palette.ok, background: palette.okSoft, borderRadius: 999, padding: '4px 10px', whiteSpace: 'nowrap' }}>✓ {g.impressas} impressa{g.impressas === 1 ? '' : 's'}</div>
+                : <>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: g.prontas ? palette.ok : palette.inkMuted }}>{ehMeluni ? (g.prontas || 0) : `${g.prontas || 0}/${g.pedidos}`}</div>
+                  <div style={{ fontSize: 10.5, color: palette.inkMuted }}>
+                    {ehMeluni ? 'em aberto no Bling' : (g.impressas ? `${g.impressas} impressa${g.impressas === 1 ? '' : 's'} no App` : 'prontas')}
+                  </div>
+                </>}
             </div>
           </div>
-        ))}
+        );})}
 
         {dados?.nota && <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 12 }}>{dados.nota}</div>}
+      {lote && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.55)', zIndex: 100001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(2px)' }}>
+          <div style={{ background: '#fff', borderRadius: 14, width: 460, maxWidth: '94vw', maxHeight: '84vh', display: 'flex', flexDirection: 'column', boxShadow: '0 14px 48px rgba(0,0,0,0.3)', fontFamily: FONT, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 18px', borderBottom: `1px solid ${palette.beigeSoft}`, background: '#f7f4f0' }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: palette.ink }}>{lote.rodando ? '🖨 Imprimindo o lote…' : lote.erro ? '⚠ Lote interrompido' : '✅ Lote concluído'}</div>
+              <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 2 }}>{lote.enviadas} etiqueta(s) enviadas · cada referência ganha o ✓ quando termina</div>
+            </div>
+            <div style={{ overflowY: 'auto', padding: '8px 14px', flex: 1 }}>
+              {lote.grupos.map(g => {
+                const feito = g.feitas >= g.qtd && g.qtd > 0;
+                return (
+                  <div key={g.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: `1px solid ${palette.beigeSoft}` }}>
+                    <div style={{ width: 24, height: 24, borderRadius: 999, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, background: feito ? palette.okSoft : '#f1f3f5', color: feito ? palette.ok : '#b0b8c0' }}>{feito ? '✓' : ''}</div>
+                    <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: palette.ink }}>📍 {g.loc} · REF {g.ref}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, fontFamily: FONT, color: feito ? palette.ok : palette.inkSoft }}>{g.feitas}/{g.qtd}</div>
+                  </div>
+                );
+              })}
+              {lote.erro && <div style={{ fontSize: 12, color: '#c0392b', padding: '10px 4px' }}>⚠ {lote.erro}</div>}
+            </div>
+            <div style={{ padding: '12px 16px', borderTop: `1px solid ${palette.beigeSoft}` }}>
+              <button onClick={() => setLote(null)} disabled={lote.rodando}
+                style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', fontWeight: 800, fontSize: 14, fontFamily: FONT, cursor: lote.rodando ? 'default' : 'pointer', background: lote.rodando ? '#e8e2da' : palette.ink, color: lote.rodando ? '#a89f94' : '#fff' }}>
+                {lote.rodando ? 'imprimindo…' : 'Fechar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
 
       <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 12, lineHeight: 1.6 }}>
