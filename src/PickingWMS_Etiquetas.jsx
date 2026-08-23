@@ -236,17 +236,26 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       : `⚠ QZ ${versao} conectado (${id}), mas nenhuma impressora apareceu. Confira em Dispositivos e Impressoras do Windows.`);
   };
 
-  const imprimirTermica = async () => {
-    const extraSel = selRefs.length ? { refs: selRefs.join(','), reimprimir: '1' } : {};
-    const msgConfirma = selRefs.length
-      ? `REIMPRIMIR ${selRefs.length} grupo(s) selecionado(s) (REF ${selRefs.join(', ')})?\n\nSai tudo do grupo de novo: DANFE + etiqueta.`
-      : `Imprimir ${vaiSair} etiqueta(s)?\n\nAo confirmar, elas são puxadas do Bling e os pedidos passam a constar como "aguardando coleta" nos marketplaces.`;
+  const imprimirTermica = async (reimp = false) => {
+    // 22/08 (desenho dele): o card tem DUPLA funcao —
+    //   Imprimir   = so as PENDENTES (nao impressas nem no App nem no Bling)
+    //   Reimprimir = TUDO dos grupos marcados (inclui App + Bling)
+    const extraSel = reimp
+      ? { refs: selRefs.join(','), reimprimir: '1' }
+      : (selRefs.length ? { refs: selRefs.join(',') } : {});
+    const qtdPrevista = reimp ? selProntas + selImpressas : (selRefs.length ? selProntas : vaiSair);
+    const msgConfirma = reimp
+      ? `REIMPRIMIR ${selRefs.length} grupo(s) (REF ${selRefs.join(', ')}) — ${qtdPrevista} etiqueta(s)?\n\nSai TUDO dos grupos de novo (inclusive as já impressas no App e no Bling): DANFE + etiqueta.`
+      : selRefs.length
+        ? `Imprimir as ${qtdPrevista} pendente(s) dos ${selRefs.length} grupo(s) selecionado(s)?\n\nSó saem as que ainda NÃO foram impressas (nem no App, nem no Bling).`
+        : `Imprimir ${vaiSair} etiqueta(s)?\n\nAo confirmar, elas são puxadas do Bling e os pedidos passam a constar como "aguardando coleta" nos marketplaces.`;
     // a etiqueta muda o status no marketplace — confirma antes (13/08)
     if (!window.confirm(msgConfirma)) return;
     // 22/08 (auditoria dele): MODAL DO LOTE — mostra cada REF e a quantidade
     // que vai sair; conforme as rodadas voltam, a REF concluida ganha o check
-    const gruposLote = (selRefs.length ? grupos.filter(g => selRefs.includes(String(g.ref))) : grupos.filter(g => (g.prontas || 0) > 0))
-      .map(g => ({ key: `${g.loc}·${g.ref}`, loc: g.loc, ref: String(g.ref), qtd: selRefs.length ? (g.prontas || 0) + (g.impressas || 0) : (g.prontas || 0), feitas: 0 }));
+    const gruposLote = (selRefs.length ? gruposSel : grupos.filter(g => (g.prontas || 0) > 0))
+      .map(g => ({ key: `${g.loc}·${g.ref}`, loc: g.loc, ref: String(g.ref), qtd: reimp ? (g.prontas || 0) + (g.impressas || 0) : (g.prontas || 0), feitas: 0 }))
+      .filter(g => g.qtd > 0);
     if (gruposLote.length) setLote({ grupos: gruposLote, enviadas: 0, rodando: true });
     let jobId = null;
     try {
@@ -438,7 +447,13 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const jaImpressas = dados?.ja_impressas || 0;
   const vaiSair = reimprimir ? prontas + jaImpressas : prontas;
   const ehMeluni = fTipo === 'meluni';
-  const podeImprimir = !ehMeluni && (vaiSair > 0 || selRefs.length > 0);
+  const gruposSel = grupos.filter(g => selRefs.includes(String(g.ref)));
+  const selProntas = gruposSel.reduce((s, g) => s + (g.prontas || 0), 0);
+  const selImpressas = gruposSel.reduce((s, g) => s + (g.impressas || 0), 0);
+  // Imprimir = so as pendentes (nem App nem Bling); com selecao, so dos grupos marcados
+  const podeImprimir = !ehMeluni && (selRefs.length ? selProntas > 0 : vaiSair > 0);
+  // Reimprimir = tudo dos grupos marcados (inclui App + Bling) — so quando houve impressao
+  const podeReimprimir = !ehMeluni && selRefs.length > 0 && selImpressas > 0;
 
   return (
     <div style={{ padding: 16, maxWidth: 860, margin: '0 auto' }}>
@@ -508,12 +523,19 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       {/* ação — UM botão só (15/08 → 17/08, ordem dele): tenta a térmica e,
           se o QZ Tray não estiver disponível, cai sozinho pro PDF */}
       <div style={{ display: 'flex', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button onClick={imprimirTermica} disabled={!podeImprimir || !!imprimindo}
+        <button onClick={() => imprimirTermica(false)} disabled={!podeImprimir || !!imprimindo}
           style={{ flex: 1, minWidth: 240, padding: '14px', borderRadius: 12, border: 'none',
-            background: (podeImprimir && !imprimindo) ? (selRefs.length ? '#b7791f' : palette.ink) : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
+            background: (podeImprimir && !imprimindo) ? palette.ink : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
             cursor: (podeImprimir && !imprimindo) ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <Printer size={18} /> {imprimindo || (ehMeluni ? 'Meluni: logística pela Frenet' : selRefs.length ? `Reimprimir ${selRefs.length} grupo(s) selecionado(s)` : `Imprimir etiquetas (${vaiSair})`)}
+          <Printer size={18} /> {imprimindo || (ehMeluni ? 'Meluni: logística pela Frenet' : selRefs.length ? `Imprimir selecionadas — ${selProntas} pendente(s)` : `Imprimir etiquetas (${vaiSair})`)}
         </button>
+        {selRefs.length > 0 && !ehMeluni && (
+          <button onClick={() => imprimirTermica(true)} disabled={!podeReimprimir || !!imprimindo}
+            title="Sai TUDO dos grupos marcados de novo — inclusive as etiquetas já impressas no App e no Bling"
+            style={{ padding: '14px 16px', borderRadius: 12, border: '1.5px solid #b7791f', background: podeReimprimir && !imprimindo ? '#fdf6e3' : '#f4efe6', color: podeReimprimir && !imprimindo ? '#8a5a12' : '#c0ab88', fontSize: 13.5, fontWeight: 700, cursor: podeReimprimir && !imprimindo ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7 }}>
+            🔁 Reimprimir ({selProntas + selImpressas})
+          </button>
+        )}
         <button onClick={() => prepararLote(false)} disabled={preparo?.rodando}
           title="Busca agora as etiquetas que ainda não foram preparadas (a Shein só é buscada no clique de imprimir)"
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: preparo?.rodando ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700, opacity: preparo?.rodando ? .6 : 1 }}>
@@ -586,7 +608,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             </span>
             {jaImpressas > 0 && (
               <span style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, background: palette.beigeSoft, padding: '6px 11px', borderRadius: 999 }}>
-                {jaImpressas} impressa{jaImpressas === 1 ? '' : 's'} no App hoje
+                {jaImpressas} impressa{jaImpressas === 1 ? '' : 's'} hoje (App + Bling)
               </span>
             )}
             {aguardando > 0 && (
@@ -639,7 +661,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
                 : <>
                   <div style={{ fontSize: 13, fontWeight: 800, color: g.prontas ? palette.ok : palette.inkMuted }}>{ehMeluni ? (g.prontas || 0) : `${g.prontas || 0}/${g.pedidos}`}</div>
                   <div style={{ fontSize: 10.5, color: palette.inkMuted }}>
-                    {ehMeluni ? 'em aberto no Bling' : (g.impressas ? `${g.impressas} impressa${g.impressas === 1 ? '' : 's'} no App` : 'prontas')}
+                    {ehMeluni ? 'em aberto no Bling' : (g.impressas ? `${g.impressas} impressa${g.impressas === 1 ? '' : 's'} (App+Bling)` : 'prontas')}
                   </div>
                 </>}
             </div>

@@ -383,11 +383,13 @@ export default async function handler(req, res) {
           else semEtiqueta++;
         } else if (q.tipo === 'etiqueta_liberada') {
           grupos[k].prontas++; prontas++;   // liberada pelo ML = pode imprimir
-        } else if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
+        } else if (sit === 6 || p.situacao_bling === 9 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
           // 20/08 (ele apontou: "540 impressas" impossível): situação 6 de
           // QUALQUER dia entrava na conta de hoje. Agora "já impressas" =
-          // só quem tem o NOSSO carimbo de impressão DE HOJE.
-          if (impressaHoje) { grupos[k].impressas++; jaImpressas++; }
+          // carimbo NOSSO de hoje OU impressa PELO BLING (sit 6/atendido, sem
+          // carimbo nosso) de pedido de hoje — 22/08: o card conta App+Bling.
+          const impressaBlingHoje = !p.etiqueta_impressa_em && String(p.data_pedido || '').slice(0, 10) === hojeBRT;
+          if (impressaHoje || impressaBlingHoje) { grupos[k].impressas++; jaImpressas++; }
           else grupos[k].pedidos--;          // impressa em outro dia: fora da conta
         } else if (q.tipo === 'meluni'
           // 22/08 (regra dele): Meluni e VISUAL — NF e logistica saem pela
@@ -467,12 +469,12 @@ export default async function handler(req, res) {
       const sitDe = {};
       for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
       const candidatos = peds.filter(p => {
-        if (q.reimprimir === '1') return true;
+        if (p.ml_ship_status === 'cancelled') return false;   // cancelado NUNCA sai — nem em reimpressao
+        if (q.reimprimir === '1') return true;                // reimpressao: inclui impressas no App E no Bling
         if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em;
         if (q.tipo === 'etiqueta_liberada') return true;
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
         if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return false;
-        if (p.ml_ship_status === 'cancelled') return false;   // envio cancelado no ML
         if (p.situacao_bling === 9) return false;             // atendido no Bling = impresso por la
         return sit === 5 || p.print_estado === 'PRONTO';
       }).slice(0, 80);
