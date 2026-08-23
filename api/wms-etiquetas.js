@@ -406,7 +406,7 @@ export default async function handler(req, res) {
           // são "aguardando" — não têm nada pra imprimir aqui. Ficam fora da
           // conta pra não assustar a equipe com um número que não é problema.
           grupos[k].pedidos--;
-        } else semEtiqueta++;
+        } else { semEtiqueta++; grupos[k].pedidos--; }   // 22/08: aguardando NF fica so no chip — nao infla o card
       }
       const ultimaChecagem = peds.map(p => p.nf_checado_em).filter(Boolean).sort().pop() || null;
       return res.status(200).json({

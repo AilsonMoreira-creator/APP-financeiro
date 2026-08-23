@@ -47,9 +47,6 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const [fJanela, setFJanela] = useState('todos');   // todos | ate_corte
   const [fTipo, setFTipo] = useState('nf_transporte'); // nf_transporte | flex | meluni
   const [fRef, setFRef] = useState('');
-  const [porEmpresa, setPorEmpresa] = useState(false);    // Exitus inteira → Lumia → Muniam
-  const [reimprimir, setReimprimir] = useState(false);   // trava: só com escolha consciente
-  const [verFinalizados, setVerFinalizados] = useState(false);
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(false);
 
@@ -57,11 +54,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     const q = new URLSearchParams({ contas: fConta, loja: fLoja, tipo: fTipo, ...extra });
     if (fJanela === 'ate_corte') q.set('corte', corteHora);
     if (fRef.trim()) q.set('ref', fRef.trim());
-    if (porEmpresa) q.set('por_empresa', '1');
-    if (reimprimir) q.set('reimprimir', '1');
-    if (verFinalizados) q.set('incluir_finalizados', '1');
     return q.toString();
-  }, [fConta, fLoja, fTipo, fJanela, fRef, corteHora, reimprimir, verFinalizados, porEmpresa]);
+  }, [fConta, fLoja, fTipo, fJanela, fRef, corteHora]);
 
   const [imprimindo, setImprimindo] = useState('');
   // 22/08: reimpressao POR BLOCO (checkbox na Ordem de impressao) e o modal
@@ -445,7 +439,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const prontas = dados?.prontas || 0;
   const aguardando = dados?.aguardando || 0;
   const jaImpressas = dados?.ja_impressas || 0;
-  const vaiSair = reimprimir ? prontas + jaImpressas : prontas;
+  const vaiSair = prontas;
   const ehMeluni = fTipo === 'meluni';
   const gruposSel = grupos.filter(g => selRefs.includes(String(g.ref)));
   const selProntas = gruposSel.reduce((s, g) => s + (g.prontas || 0), 0);
@@ -618,20 +612,6 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             )}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12 }}>
-          <label style={{ fontSize: 12, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: FONT }}>
-            <input type="checkbox" checked={porEmpresa} onChange={e => setPorEmpresa(e.target.checked)} />
-            Separar por empresa (Exitus → Lumia → Muniam)
-          </label>
-          <label style={{ fontSize: 12, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: FONT }}>
-            <input type="checkbox" checked={reimprimir} onChange={e => setReimprimir(e.target.checked)} />
-            Incluir as impressas hoje (reimprimir)
-          </label>
-          <label style={{ fontSize: 12, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: FONT }}>
-            <input type="checkbox" checked={verFinalizados} onChange={e => setVerFinalizados(e.target.checked)} />
-            Mostrar pedidos já finalizados
-          </label>
-        </div>
 
         {carregando && <div style={{ color: palette.inkMuted, fontSize: 13, padding: 10 }}>Carregando…</div>}
         {!carregando && !grupos.length && (
