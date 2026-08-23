@@ -4075,7 +4075,16 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
     setCortes(prev=>prev.map(c=>c.id===id?{...c,arquivado:false,_mod:Date.now()}:c));
     setConfirm(null);setMostraForm(false);setEditId(null);
   }});
-  const toggleEntregue=(id)=>{const c0=cortes.find(c=>c.id===id);if(c0&&!c0.arquivado)logCorteAcao(c0.entregue?'entregue_removido':'entregue',c0,null);setCortes(prev=>prev.map(c=>{if(c.id!==id||c.arquivado)return c;const ne=!c.entregue;if(ne&&pendingSnapshotIds?.current)pendingSnapshotIds.current.add(id);return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,_mod:Date.now()};}));};
+  const toggleEntregue=(id)=>{const c0=cortes.find(c=>c.id===id);if(c0&&!c0.arquivado)logCorteAcao(c0.entregue?'entregue_removido':'entregue',c0,null);
+    // 23/08 (pedido dele): a marcacao de ENTREGUE vai pro ESPELHO em colunas
+    // proprias na hora do clique — tela velha de outro usuario salvando por
+    // cima do payload NAO alcanca essas colunas; o load reconcilia (abaixo).
+    if(c0&&!c0.arquivado){try{
+      const s=JSON.parse(localStorage.getItem('amica_session')||'{}');
+      const ne0=!c0.entregue;
+      supabase.from('oficinas_cortes_espelho').upsert({corte_id:String(id),dados:{...c0,entregue:ne0,dataEntrega:ne0?new Date().toLocaleDateString("pt-BR"):null,_mod:Date.now()},atualizado_em:new Date().toISOString(),entregue:ne0,entregue_alterado_em:new Date().toISOString(),entregue_alterado_por:s.usuario||s.nome||'?'},{onConflict:'corte_id'}).then(()=>{},()=>{});
+    }catch(e){console.error('espelho entregue:',e);}}
+    setCortes(prev=>prev.map(c=>{if(c.id!==id||c.arquivado)return c;const ne=!c.entregue;if(ne&&pendingSnapshotIds?.current)pendingSnapshotIds.current.add(id);return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,_mod:Date.now()};}));};
   // Marcar/Desmarcar corte como pago.
   // Ailson 21/05/2026 — refatorado pra resolver 2 bugs:
   // 1) Erro silencioso: nao-admin podia marcar pago mas o lancamento nao era
@@ -10672,12 +10681,29 @@ export default function App(){
           // ESPELHO sem carimbo de delecao mas sumiu do payload = perda por
           // conflito de save → volta sozinho, com _mod novo pra vencer merges.
           setTimeout(async()=>{try{
-            const {data:esp}=await supabase.from('oficinas_cortes_espelho').select('corte_id,dados').is('deletado_em',null);
+            const {data:esp}=await supabase.from('oficinas_cortes_espelho').select('corte_id,dados,entregue,entregue_alterado_em').is('deletado_em',null);
             if(!esp?.length)return;
             const idsAtuais=new Set((d.cortes||[]).map(c=>String(c.id)));
             const perdidos=esp.filter(r=>!idsAtuais.has(String(r.corte_id))&&r.dados&&r.dados.id);
-            if(!perdidos.length)return;
             const agora=Date.now();
+            // 23/08: RECONCILIACAO DO ENTREGUE — se o espelho tem a marcacao
+            // com carimbo MAIS NOVO que o _mod do corte no payload, a marcacao
+            // do espelho vence (protege do save de tela velha que reverte).
+            const marcaDe={};
+            esp.forEach(r=>{if(r.entregue_alterado_em&&r.entregue!=null)marcaDe[String(r.corte_id)]={entregue:!!r.entregue,ts:new Date(r.entregue_alterado_em).getTime()};});
+            let corrigidos=0;
+            setCortes(prev=>{
+              let mudou=false;
+              const att=(prev||[]).map(c=>{
+                const m=marcaDe[String(c.id)];
+                if(!m||m.ts<=(c._mod||0)||!!c.entregue===m.entregue)return c;
+                mudou=true;corrigidos++;
+                return{...c,entregue:m.entregue,dataEntrega:m.entregue?(c.dataEntrega||new Date(m.ts).toLocaleDateString("pt-BR")):null,pago:m.entregue?c.pago:false,_mod:agora};
+              });
+              return mudou?att:prev;
+            });
+            if(corrigidos)console.warn('🛟 ESPELHO: entregue reconciliado em',corrigidos,'corte(s)');
+            if(!perdidos.length)return;
             const restaurados=perdidos.map(r=>({...r.dados,_mod:agora}));
             console.warn('🛟 ESPELHO: restaurando',restaurados.length,'corte(s) perdido(s):',restaurados.map(c=>`${c.id} REF ${c.ref||'?'}`).join(' · '));
             setCortes(prev=>{
