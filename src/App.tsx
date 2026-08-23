@@ -10941,7 +10941,32 @@ export default function App(){
         // eco do proprio save: rev subiu por MINHA gravacao — nao rebaixa payload
         if(Date.now()-lastCorteSaveTs.current<4000)return;
         const {data:full}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').maybeSingle();
-        if(full?.payload){console.log('SYNC OFICINAS: carimbo mudou, aplicando merge');aplicarRemotoOficinas(full.payload);}
+        if(full?.payload){console.log('SYNC OFICINAS: carimbo mudou, aplicando merge');aplicarRemotoOficinas(full.payload);
+          // 23/08 (pergunta dele): trocar de modulo NAO recarrega o app — a
+          // reconciliacao do ENTREGUE so rodava no F5. Agora ela roda AQUI
+          // tambem: toda vez que um payload remoto chega (ate 15s depois de
+          // qualquer save de qualquer tela), as colunas do espelho mandam.
+          try{
+            const {data:espE}=await supabase.from('oficinas_cortes_espelho').select('corte_id,entregue,entregue_alterado_em').not('entregue_alterado_em','is',null);
+            if(espE?.length){
+              const marcaDe={};
+              espE.forEach(r=>{if(r.entregue!=null)marcaDe[String(r.corte_id)]={entregue:!!r.entregue,ts:new Date(r.entregue_alterado_em).getTime()};});
+              const agoraE=Date.now();
+              let corrigidos=0;
+              setCortes(prev=>{
+                let mudou=false;
+                const att=(prev||[]).map(c=>{
+                  const m=marcaDe[String(c.id)];
+                  if(!m||m.ts<=(c._mod||0)||!!c.entregue===m.entregue)return c;
+                  mudou=true;corrigidos++;
+                  return{...c,entregue:m.entregue,dataEntrega:m.entregue?(c.dataEntrega||new Date(m.ts).toLocaleDateString("pt-BR")):null,pago:m.entregue?c.pago:false,_mod:agoraE};
+                });
+                return mudou?att:prev;
+              });
+              if(corrigidos)console.warn('🛟 ESPELHO: entregue reconciliado em',corrigidos,'corte(s) [polling]');
+            }
+          }catch(eE){console.error('reconciliacao entregue polling:',eE);}
+        }
       }catch(e){console.error('sync oficinas polling:',e);}
     };
 
