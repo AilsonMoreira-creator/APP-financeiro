@@ -188,7 +188,7 @@
     },
     {
       "path": "/api/bling-cron",
-      "schedule": "*/10 * * * *"
+      "schedule": "*/15 8-23 * * *"
     },
     {
       "path": "/api/ml-messages-sync",
@@ -464,7 +464,7 @@
     },
     {
       "path": "/api/bling-fotos-sync",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 7,11,15,19 * * *"
     },
     {
       "path": "/api/lojas-whats-cron-nudge-abertura",
@@ -512,7 +512,7 @@
     },
     {
       "path": "/api/wms-nf-sync?dias=2",
-      "schedule": "*/10 9-23 * * *"
+      "schedule": "*/20 9-23 * * *"
     },
     {
       "path": "/api/wms-classificar",
