@@ -360,10 +360,10 @@ export default async function handler(req, res) {
         if (p.print_regra === 'MELUNI') { if (p.situacao_bling !== 9) c.meluni++; continue; }
         if (p.print_estado !== 'PRONTO') continue;
         if (impressoPainelMl(p, dlNossoCont)) continue; // impresso no painel do ML (sem download nosso)
-        // 24/08 (teste dele: chip 23 vs previa 2): atendido no Bling (9) e
-        // DANFE emitida (6) = ja saiu pelo painel — o print_estado fica
-        // parado em PRONTO ate o classificar rodar, e o chip inflava
-        if (p.situacao_bling === 9 || p.nf_situacao === 6) continue;
+        // 24/08 (correcao dele): atendido(9) e so "NF gerada" (o Bling atende
+        // sozinho ao emitir) — pendencia REAL. O que tira da fila e a DANFE
+        // emitida (6), que so acontece quando a nota sai pelo painel.
+        if (p.nf_situacao === 6) continue;
         if (p.print_regra === 'MELI_FLEX') c.flex++;
         else if (p.print_regra === 'NORMAL') c.nf_transporte++;
       }
@@ -410,7 +410,7 @@ export default async function handler(req, res) {
           else semEtiqueta++;
         } else if (q.tipo === 'etiqueta_liberada') {
           grupos[k].prontas++; prontas++;   // liberada pelo ML = pode imprimir
-        } else if (sit === 6 || p.situacao_bling === 9 || impressoPainelMl(p, dlNossoPrev) || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
+        } else if (sit === 6 || impressoPainelMl(p, dlNossoPrev) || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
           // 20/08 (ele apontou: "540 impressas" impossível): situação 6 de
           // QUALQUER dia entrava na conta de hoje. Agora "já impressas" =
           // carimbo NOSSO de hoje OU impressa PELO BLING (sit 6/atendido, sem
@@ -426,7 +426,7 @@ export default async function handler(req, res) {
           // 22/08 (regra dele): Meluni e VISUAL — NF e logistica saem pela
           // Frenet, fora do Bling. Conta o pedido EM ABERTO; atendido some.
           ? (p.situacao_bling !== 9 && (grupos[k].prontas++, prontas++, true))
-          : ((sit === 5 || p.print_estado === 'PRONTO') && p.ml_ship_status !== 'cancelled' && p.situacao_bling !== 9 && (grupos[k].prontas++, prontas++, true))) { /* contado acima */ }
+          : ((sit === 5 || p.print_estado === 'PRONTO') && p.ml_ship_status !== 'cancelled' && (grupos[k].prontas++, prontas++, true))) { /* contado acima */ }
         else if (ehFlexLinha) { grupos[k].pedidos--; }   // Flex não tem nota
         else if (p.print_etiqueta === false || p.status_wms === 'finalizado') {
           // 17/08 (ordem dele): Flex/Meluni sem NF e pedido já finalizado NÃO
@@ -509,7 +509,8 @@ export default async function handler(req, res) {
         if (q.tipo === 'etiqueta_liberada') return true;
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
         if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return false;
-        if (p.situacao_bling === 9) return false;             // atendido no Bling = impresso por la
+        // 24/08 (correcao dele): atendido(9) NAO significa impresso — o Bling
+        // atende o pedido sozinho ao GERAR a NF. O sinal de painel e sit 6.
         if (impressoPainelMl(p, dlNossoSaida)) return false; // impresso no painel do ML (sem download nosso)
         return sit === 5 || p.print_estado === 'PRONTO';
       }).slice(0, 80);
