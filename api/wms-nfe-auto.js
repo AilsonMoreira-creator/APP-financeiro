@@ -86,6 +86,10 @@ export default async function handler(req, res) {
         .eq('conta', conta)
         .in('status_wms', ['aberto', 'em_separacao'])
         .is('nf_id', null)
+        // 24/08 (mesma regra do dashboard, dele): pedido aberto ha mais de 3
+        // dias e caso pra humano (cancelado na plataforma, orfao) — o robo
+        // parava nele 2x por rodada, 20x por dia, poluindo o log
+        .gte('data_pedido', new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10))
         .order('data_pedido', { ascending: true })
         .limit(limite * 2);
 
