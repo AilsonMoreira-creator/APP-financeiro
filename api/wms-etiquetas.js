@@ -56,12 +56,26 @@ async function pedidosFiltrados(q) {
   const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
   const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
 
-  let q1 = supabase.from('wms_pedidos').select(COLS)
+  // 24/08 (caso dele: chip 3 × previa 2 persistente): o limit(500) numa janela
+  // de 7 dias com ~2.500 pedidos-com-NF CORTAVA a fila em silencio — pendencia
+  // de anteontem sumia da previa. Duas pernas magras no lugar:
+  //   q1a = PENDENCIAS (com NF, sem carimbo nosso, nao finalizado) de 7 dias
+  //   q1b = retrato de HOJE+ONTEM (qualquer status, pros "impressas hoje")
+  const ontemISO = new Date(Date.now() - 3 * 3600000 - 86400000).toISOString().slice(0, 10);
+  let q1a = supabase.from('wms_pedidos').select(COLS)
     .not('nf_id', 'is', null)
     .neq('status_wms', 'cancelado')
+    .neq('status_wms', 'finalizado')
+    .is('etiqueta_impressa_em', null)
     .gte('data_pedido', desde7)
-    .order('data_pedido', { ascending: false }).limit(500);
-  if (contas !== 'todas') q1 = q1.in('conta', contas.split(','));
+    .order('data_pedido', { ascending: false }).limit(1500);
+  if (contas !== 'todas') q1a = q1a.in('conta', contas.split(','));
+  let q1b = supabase.from('wms_pedidos').select(COLS)
+    .not('nf_id', 'is', null)
+    .neq('status_wms', 'cancelado')
+    .gte('data_pedido', ontemISO)
+    .order('data_pedido', { ascending: false }).limit(2000);
+  if (contas !== 'todas') q1b = q1b.in('conta', contas.split(','));
 
   let q2 = supabase.from('wms_pedidos').select(COLS)
     .is('nf_id', null)
@@ -91,9 +105,9 @@ async function pedidosFiltrados(q) {
     .order('data_pedido', { ascending: false }).limit(300);
   if (contas !== 'todas') q4 = q4.in('conta', contas.split(','));
 
-  const [{ data: comNf }, { data: semNf }, { data: finSemNf }, { data: agend }] = await Promise.all([q1, q2, q3, q4]);
+  const [{ data: comNfPend }, { data: comNfHoje }, { data: semNf }, { data: finSemNf }, { data: agend }] = await Promise.all([q1a, q1b, q2, q3, q4]);
   const vistosP = new Set();
-  const peds = [...(comNf || []), ...(semNf || []), ...(finSemNf || []), ...(agend || [])].filter(p => {
+  const peds = [...(comNfPend || []), ...(comNfHoje || []), ...(semNf || []), ...(finSemNf || []), ...(agend || [])].filter(p => {
     const k = String(p.pedido_id);
     if (vistosP.has(k)) return false;
     vistosP.add(k); return true;
@@ -307,7 +321,9 @@ export default async function handler(req, res) {
       let sel = supabase.from('wms_pedidos')
         .select(COLS_CONT)
         .neq('status_wms', 'cancelado')
-        .gte('criado_em', new Date(Date.now() - 5 * 86400000).toISOString())
+        // 24/08: MESMA janela da previa (data_pedido 7d) — criado_em 5d fazia
+        // o chip enxergar um universo diferente e os numeros nunca batiam
+        .gte('data_pedido', new Date(Date.now() - 7 * 86400000).toISOString())
         .limit(3000);
       if (contasFiltro !== 'todas') sel = sel.in('conta', contasFiltro.split(','));
       // 19/08: AGENDADOS têm consulta própria — compra de até 20 dias atrás
