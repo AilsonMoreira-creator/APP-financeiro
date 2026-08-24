@@ -303,7 +303,7 @@ export default async function handler(req, res) {
     if (q.contadores === '1') {
       const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
       const contasFiltro = String(q.contas || 'todas');
-      const COLS_CONT = 'pedido_id, conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_situacao, etiqueta_impressa_em, status_wms, situacao_bling';
+      const COLS_CONT = 'pedido_id, conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_id, nf_situacao, etiqueta_impressa_em, status_wms, situacao_bling';
       let sel = supabase.from('wms_pedidos')
         .select(COLS_CONT)
         .neq('status_wms', 'cancelado')
@@ -336,8 +336,11 @@ export default async function handler(req, res) {
         const agendado = p.ml_agendado_em && String(p.ml_agendado_em) > hoje;
         // AGENDADAS: sai do contador assim que a nota é impressa (carimbo nosso
         // ou DANFE emitida no Bling) — ordem dele 17/08
-        if (p.print_regra === 'MELI_AGENDADO' || agendado) {
-          if (!p.nf_agendada_impressa_em && p.nf_situacao !== 6 && p.print_estado === 'PRONTO') c.nf_agendada++;
+        // 24/08 (teste dele: chip 3 vs botao 109): buffered TAMBEM e agendado,
+        // e o criterio vira o da NOTA (nf existe, nao impressa, DANFE nao
+        // emitida) — identico ao da previa/botao, sem depender do classificar
+        if (p.print_regra === 'MELI_AGENDADO' || agendado || p.ml_ship_substatus === 'buffered') {
+          if (p.nf_id && !p.nf_agendada_impressa_em && p.nf_situacao !== 6) c.nf_agendada++;
           continue;
         }
         // LIBERADAS: só as que ainda não saíram. Etiqueta impressa (nossa ou
@@ -357,6 +360,10 @@ export default async function handler(req, res) {
         if (p.print_regra === 'MELUNI') { if (p.situacao_bling !== 9) c.meluni++; continue; }
         if (p.print_estado !== 'PRONTO') continue;
         if (impressoPainelMl(p, dlNossoCont)) continue; // impresso no painel do ML (sem download nosso)
+        // 24/08 (teste dele: chip 23 vs previa 2): atendido no Bling (9) e
+        // DANFE emitida (6) = ja saiu pelo painel — o print_estado fica
+        // parado em PRONTO ate o classificar rodar, e o chip inflava
+        if (p.situacao_bling === 9 || p.nf_situacao === 6) continue;
         if (p.print_regra === 'MELI_FLEX') c.flex++;
         else if (p.print_regra === 'NORMAL') c.nf_transporte++;
       }
@@ -396,7 +403,9 @@ export default async function handler(req, res) {
 
         if (q.tipo === 'nf_agendada') {
           // aqui o que conta é a NOTA: pronta = tem NF e ainda não foi impressa
-          if (p.nf_agendada_impressa_em) { grupos[k].impressas++; jaImpressas++; }
+          // 24/08 (teste dele: 109 no botao): DANFE emitida no painel (sit 6)
+          // e nota IMPRESSA — 106 buffered antigos inflavam as prontas
+          if (p.nf_agendada_impressa_em || sit === 6) { grupos[k].impressas++; jaImpressas++; }
           else if (p.nf_id) { grupos[k].prontas++; prontas++; }
           else semEtiqueta++;
         } else if (q.tipo === 'etiqueta_liberada') {
@@ -496,7 +505,7 @@ export default async function handler(req, res) {
       const candidatos = peds.filter(p => {
         if (p.ml_ship_status === 'cancelled') return false;   // cancelado NUNCA sai — nem em reimpressao
         if (q.reimprimir === '1') return true;                // reimpressao: inclui impressas no App E no Bling
-        if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em;
+        if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em && p.nf_situacao !== 6;
         if (q.tipo === 'etiqueta_liberada') return true;
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
         if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return false;
