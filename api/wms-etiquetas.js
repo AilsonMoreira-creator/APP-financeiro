@@ -778,8 +778,13 @@ export default async function handler(req, res) {
       }
 
       const dlNossoSaida = await setDownloadNosso(supabase, peds);
-      const podeSair = (p) => p.ml_ship_status !== 'cancelled' && p.situacao_bling !== 9 && (q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
-        || (!p.etiqueta_impressa_em && (p.print_estado === 'PRONTO' || sitDe[String(p.nf_id)] === 5)));
+      // 24/08 (lote interrompido no teste dele): esta COPIA da regra ainda
+      // bloqueava atendido(9) — e atendido e so "NF gerada". Regua unica:
+      // cancelado nunca sai; ja-saiu = DANFE emitida (6), carimbo nosso ou
+      // painel do ML sem download nosso; pronto = PRONTO ou NF autorizada (5).
+      const podeSair = (p) => p.ml_ship_status !== 'cancelled' && (q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
+        || (!p.etiqueta_impressa_em && sitDe[String(p.nf_id)] !== 6 && !impressoPainelMl(p, dlNossoSaida)
+          && (p.print_estado === 'PRONTO' || sitDe[String(p.nf_id)] === 5)));
       const candidatos = peds.filter(podeSair);
       // 19/08: LOTES. Com os pares (DANFE+etiqueta) 130 pedidos numa resposta
       // estouravam o tempo e o teto de 4,5MB do Vercel ("An error occurred").
