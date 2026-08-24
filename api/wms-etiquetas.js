@@ -1090,7 +1090,10 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
           const temEtiqueta = ehPdf ? !!pdf64 : !!zplDoPedido;
           if (!temEtiqueta) { semEtiqueta.push(p.numero); continue; }
           if (comDanfe) {
-            const dRes = zipDanfe64 ? { formato: 'PDF', conteudo: zipDanfe64 } : await buscarDanfe(p);
+            // 24/08 (pedido dele): a DANFE RICA (REF · cor · tamanho, gerada do
+            // XML) vale pra TODOS os canais — Shein incluida. O PDF bagunçado
+            // que vem dentro do zip do Bling vira só RESERVA (se o XML falhar).
+            const dRes = (await buscarDanfe(p)) || (zipDanfe64 ? { formato: 'PDF', conteudo: zipDanfe64 } : null);
             if (dRes?.formato === 'ZPL') blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: dRes.conteudo });
             else if (dRes?.conteudo) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: dRes.conteudo });
             else { semDanfe.push(p.numero); continue; }   // sem nota, etiqueta não sai sozinha
