@@ -276,6 +276,21 @@ async function linksEtiqueta(peds, tokenPorConta, motivo = 'impressao') {
   return mapa;
 }
 
+
+// 24/08 (caso dos 6 flex "fantasma"): o ML marca substatus=printed quando a
+// etiqueta e BAIXADA — e o NOSSO preparo antecipado baixa pro cache. Printed
+// so significa "impresso por fora" (painel do ML) quando NAO existe download
+// nosso; com cache nosso e pre-busca e o pedido SEGUE PENDENTE.
+async function setDownloadNosso(supabase, peds) {
+  const ids = (peds || []).filter(p => p.ml_ship_substatus === 'printed' && !p.etiqueta_impressa_em).map(p => p.pedido_id);
+  if (!ids.length) return new Set();
+  const { data } = await supabase.from('wms_documentos').select('pedido_id').in('pedido_id', ids).in('tipo', ['ETIQUETA', 'PREVIA_PNG']);
+  return new Set((data || []).map(d => String(d.pedido_id)));
+}
+function impressoPainelMl(p, dlNosso) {
+  return p.ml_ship_substatus === 'printed' && !p.etiqueta_impressa_em && !dlNosso.has(String(p.pedido_id));
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const q = req.query || {};
@@ -313,6 +328,7 @@ export default async function handler(req, res) {
         vistos.add(k); return true;
       });
       const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0 };
+      const dlNossoCont = await setDownloadNosso(supabase, data);
       for (const p of (data || [])) {
         // 18/08: Full sai ANTES de tudo — reposição do Full tem ml_agendado_em
         // e vazava pro contador de NF agendada (sem nem ter nota)
@@ -340,7 +356,7 @@ export default async function handler(req, res) {
         // zera (as meninas nao geram NF; logistica sai pela Frenet)
         if (p.print_regra === 'MELUNI') { if (p.situacao_bling !== 9) c.meluni++; continue; }
         if (p.print_estado !== 'PRONTO') continue;
-        if (p.ml_ship_substatus === 'printed' && !p.etiqueta_impressa_em) continue; // 24/08: impresso pelo painel do ML
+        if (impressoPainelMl(p, dlNossoCont)) continue; // impresso no painel do ML (sem download nosso)
         if (p.print_regra === 'MELI_FLEX') c.flex++;
         else if (p.print_regra === 'NORMAL') c.nf_transporte++;
       }
@@ -358,6 +374,7 @@ export default async function handler(req, res) {
       for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
       const links = {};
       const grupos = {};
+      const dlNossoPrev = await setDownloadNosso(supabase, peds);
       let prontas = 0, jaImpressas = 0, semEtiqueta = 0;
       for (const p of peds) {
         const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
@@ -384,7 +401,7 @@ export default async function handler(req, res) {
           else semEtiqueta++;
         } else if (q.tipo === 'etiqueta_liberada') {
           grupos[k].prontas++; prontas++;   // liberada pelo ML = pode imprimir
-        } else if (sit === 6 || p.situacao_bling === 9 || (p.ml_ship_substatus === 'printed') || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
+        } else if (sit === 6 || p.situacao_bling === 9 || impressoPainelMl(p, dlNossoPrev) || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
           // 20/08 (ele apontou: "540 impressas" impossível): situação 6 de
           // QUALQUER dia entrava na conta de hoje. Agora "já impressas" =
           // carimbo NOSSO de hoje OU impressa PELO BLING (sit 6/atendido, sem
@@ -484,7 +501,7 @@ export default async function handler(req, res) {
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
         if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return false;
         if (p.situacao_bling === 9) return false;             // atendido no Bling = impresso por la
-        if (p.ml_ship_substatus === 'printed' && !p.etiqueta_impressa_em) return false; // 24/08: impresso pelo PAINEL DO ML
+        if (impressoPainelMl(p, dlNossoSaida)) return false; // impresso no painel do ML (sem download nosso)
         return sit === 5 || p.print_estado === 'PRONTO';
       }).slice(0, 80);
       if (!candidatos.length) return res.status(200).json({ ok: false, erro: 'nenhum pedido pronto nesses filtros' });
@@ -744,6 +761,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ debug: passos });
       }
 
+      const dlNossoSaida = await setDownloadNosso(supabase, peds);
       const podeSair = (p) => p.ml_ship_status !== 'cancelled' && p.situacao_bling !== 9 && (q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
         || (!p.etiqueta_impressa_em && (p.print_estado === 'PRONTO' || sitDe[String(p.nf_id)] === 5)));
       const candidatos = peds.filter(podeSair);
