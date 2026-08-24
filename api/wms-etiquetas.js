@@ -62,10 +62,13 @@ async function pedidosFiltrados(q) {
   //   q1a = PENDENCIAS (com NF, sem carimbo nosso, nao finalizado) de 7 dias
   //   q1b = retrato de HOJE+ONTEM (qualquer status, pros "impressas hoje")
   const ontemISO = new Date(Date.now() - 3 * 3600000 - 86400000).toISOString().slice(0, 10);
+  // pendencia real = NF AUTORIZADA (sit 5) sem carimbo nosso — qualquer
+  // status (finalizado com sit 5 e pendencia, lei de hoje); os impressos no
+  // painel ja viraram sit 6 e ficam de fora, o que mantem a perna magra
   let q1a = supabase.from('wms_pedidos').select(COLS)
     .not('nf_id', 'is', null)
     .neq('status_wms', 'cancelado')
-    .neq('status_wms', 'finalizado')
+    .eq('nf_situacao', 5)
     .is('etiqueta_impressa_em', null)
     .gte('data_pedido', desde7)
     .order('data_pedido', { ascending: false }).limit(1500);
