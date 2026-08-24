@@ -363,6 +363,7 @@ export default async function handler(req, res) {
         // (IMPRESSO/carimbo) nao volta pra fila. Mesma precedencia da previa:
         // pronto vence finalizado (o atendido do Bling vira finalizado no
         // sync, e ele e pendencia real quando a NF acabou de sair).
+        if (p.ml_ship_status === 'cancelled') continue; // 24/08 auditoria: a previa ja excluia envio cancelado; o chip nao
         const prontoCont = p.print_estado === 'PRONTO' || (p.nf_situacao === 5 && p.print_estado !== 'IMPRESSO' && !p.etiqueta_impressa_em);
         if (!prontoCont) continue;
         if (impressoPainelMl(p, dlNossoCont)) continue; // impresso no painel do ML (sem download nosso)
@@ -508,6 +509,9 @@ export default async function handler(req, res) {
       // NF. Agora usa exatamente o critério de "pronta" da tela/impressão.
       const sitDe = {};
       for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
+      // 24/08 (auditoria): este bloco usava a variavel do bloco ZPL (escopo
+      // errado) — a Previa quebrava com ReferenceError. Declarada aqui.
+      const dlNossoSaida = await setDownloadNosso(supabase, peds);
       const candidatos = peds.filter(p => {
         if (p.ml_ship_status === 'cancelled') return false;   // cancelado NUNCA sai — nem em reimpressao
         if (q.reimprimir === '1') return true;                // reimpressao: inclui impressas no App E no Bling
