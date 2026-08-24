@@ -128,11 +128,14 @@ export default async function handler(req, res) {
         }
         await espera(PAUSA);
         let nfId = ger?.data?.idNotaFiscal || ger?.data?.id || null;
-        if (!nfId && ehErroBairro(JSON.stringify(ger))) {
+        if (!nfId) {
+          // 24/08 (ele explicou): o motivo do erro NUNCA vem escrito — entao a
+          // deteccao e por INSPECAO: falhou? olha o cadastro; bairro vazio =
+          // completa com Centro e tenta de novo (nunca sobrescreve preenchido).
           const contatoId = det.data?.contato?.id;
           if (contatoId) {
             const fx = await corrigirBairroContato(contatoId, headers, headersPost);
-            await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'bairro_fix', resultado: fx.ok ? 'ok' : 'erro', mensagem: fx.motivo });
+            if (fx.ok || !/ja preenchido/.test(fx.motivo)) await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'bairro_fix', resultado: fx.ok ? 'ok' : 'erro', mensagem: fx.motivo });
             if (fx.ok) {
               await espera(PAUSA);
               gerR = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}/gerar-nfe`, { method: 'POST', headers: headersPost, body: '{}' });
@@ -170,30 +173,34 @@ export default async function handler(req, res) {
         const s2 = typeof s2R.json === 'function' ? await s2R.json().catch(() => ({})) : {};
         const sitF = s2?.data?.situacao;
         await supabase.from('wms_pedidos').update({ nf_situacao: sitF, nf_checado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id);
-        if (sitF === 4 && ehErroBairro(JSON.stringify(s2?.data || {}) + JSON.stringify(env || {}))) {
-          const contatoId = det.data?.contato?.id;
-          if (contatoId) {
-            const fx = await corrigirBairroContato(contatoId, headers, headersPost);
-            await log({ conta, pedido_id: p.pedido_id, numero: p.numero, nf_id: nfId, etapa: 'bairro_fix', resultado: fx.ok ? 'ok' : 'erro', mensagem: `rejeitada por bairro · ${fx.motivo}` });
-            if (fx.ok) {
+        if (sitF !== 5 && sitF !== 6 && sitF != null) {
+          // 24/08: rejeitou/errou SEM motivo escrito (nunca vem) — inspeciona a
+          // NOTA: bairro vazio no endereco dela? Completa Centro DENTRO da
+          // propria nota (nada de excluir — furaria a numeracao), retransmite,
+          // e corrige o cadastro junto pros proximos pedidos do cliente.
+          const notaContato = s2?.data?.contato || {};
+          const notaEnd = notaContato?.endereco || {};
+          const bairroVazioNota = !String(notaEnd?.bairro || '').trim();
+          if (bairroVazioNota && Object.keys(notaEnd).length) {
+            const contatoId = det.data?.contato?.id;
+            if (contatoId) {
+              const fxc = await corrigirBairroContato(contatoId, headers, headersPost);
+              await log({ conta, pedido_id: p.pedido_id, numero: p.numero, nf_id: nfId, etapa: 'bairro_fix', resultado: fxc.ok ? 'ok' : 'pulado', mensagem: `cadastro: ${fxc.motivo}` });
+            }
+            const notaEditada = { ...s2.data, contato: { ...notaContato, endereco: { ...notaEnd, bairro: 'Centro' } } };
+            const putR = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, { method: 'PUT', headers: headersPost, body: JSON.stringify(notaEditada) });
+            const putJ = await putR.json().catch(() => ({}));
+            await log({ conta, pedido_id: p.pedido_id, numero: p.numero, nf_id: nfId, etapa: 'bairro_fix', resultado: putR.status < 400 ? 'ok' : 'erro', mensagem: putR.status < 400 ? 'bairro Centro gravado NA NOTA' : `put nota http ${putR.status}: ${JSON.stringify(putJ).slice(0, 160)}` });
+            if (putR.status < 400) {
               await espera(PAUSA);
-              await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, { method: 'DELETE', headers }).catch(() => {});
-              await espera(PAUSA);
-              const g2R = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}/gerar-nfe`, { method: 'POST', headers: headersPost, body: '{}' });
-              const g2 = await g2R.json().catch(() => ({}));
-              const nf2 = g2?.data?.idNotaFiscal || g2?.data?.id || null;
-              if (nf2) {
-                await espera(PAUSA);
-                const e2R = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nf2}/enviar?enviarEmail=false`, { method: 'POST', headers: headersPost, body: '{}' });
-                await e2R.json().catch(() => ({}));
-                await espera(900);
-                const s3R = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nf2}`, headers);
-                const s3 = typeof s3R.json === 'function' ? await s3R.json().catch(() => ({})) : {};
-                const sit3 = s3?.data?.situacao;
-                await supabase.from('wms_pedidos').update({ nf_id: nf2, nf_situacao: sit3, nf_checado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id);
-                await log({ conta, pedido_id: p.pedido_id, numero: p.numero, nf_id: nf2, etapa: 'bairro_fix', situacao: sit3, resultado: (sit3 === 5 || sit3 === 6) ? 'ok' : 'erro', mensagem: `nova NF pos-fix: ${NOME_SIT[sit3] || sit3}` });
-                if (sit3 === 5 || sit3 === 6) { resumo.autorizados++; await espera(PAUSA); continue; }
-              }
+              await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}/enviar?enviarEmail=false`, { method: 'POST', headers: headersPost, body: '{}' }).then(r => r.json().catch(() => ({}))).catch(() => ({}));
+              await espera(900);
+              const s3R = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+              const s3 = typeof s3R.json === 'function' ? await s3R.json().catch(() => ({})) : {};
+              const sit3 = s3?.data?.situacao;
+              await supabase.from('wms_pedidos').update({ nf_situacao: sit3, nf_checado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id);
+              await log({ conta, pedido_id: p.pedido_id, numero: p.numero, nf_id: nfId, etapa: 'bairro_fix', situacao: sit3, resultado: (sit3 === 5 || sit3 === 6) ? 'ok' : 'erro', mensagem: `retransmitida pos-fix: ${NOME_SIT[sit3] || sit3}` });
+              if (sit3 === 5 || sit3 === 6) { resumo.autorizados++; await espera(PAUSA); continue; }
             }
           }
         }
