@@ -31,6 +31,32 @@ async function log(linha) {
   try { await supabase.from('wms_nfe_log').insert(linha); } catch { /* auditoria não pode derrubar o fluxo */ }
 }
 
+
+// 24/08 (pedido dele): NF que falha por FALTA DE BAIRRO — a equipe corrigia na
+// mao colocando "Centro" no cadastro e na nota. Automatizado: se o erro/rejeicao
+// menciona bairro, completa o bairro VAZIO do contato com "Centro" (nunca
+// sobrescreve bairro preenchido) e tenta gerar de novo. Tudo vai pro wms_nfe_log.
+async function corrigirBairroContato(contatoId, headers, headersPost) {
+  const r = await fetch(`https://api.bling.com.br/Api/v3/contatos/${contatoId}`, { headers });
+  const j = await r.json().catch(() => ({}));
+  const c = j?.data;
+  if (!c?.id) return { ok: false, motivo: `contato ilegivel http ${r.status}` };
+  const end = c.endereco || {};
+  const geralVazio = !String(end?.geral?.bairro || '').trim();
+  const cobrVazio = end?.cobranca && !String(end?.cobranca?.bairro || '').trim();
+  if (!geralVazio && !cobrVazio) return { ok: false, motivo: 'bairro ja preenchido no cadastro' };
+  const novo = { ...c, endereco: { ...end } };
+  if (geralVazio) novo.endereco.geral = { ...(end.geral || {}), bairro: 'Centro' };
+  if (cobrVazio) novo.endereco.cobranca = { ...(end.cobranca || {}), bairro: 'Centro' };
+  const putR = await fetch(`https://api.bling.com.br/Api/v3/contatos/${contatoId}`, { method: 'PUT', headers: headersPost, body: JSON.stringify(novo) });
+  if (putR.status >= 400) {
+    const pe = await putR.json().catch(() => ({}));
+    return { ok: false, motivo: `put contato http ${putR.status}: ${JSON.stringify(pe).slice(0, 160)}` };
+  }
+  return { ok: true, motivo: `bairro Centro no ${geralVazio ? 'geral' : ''}${geralVazio && cobrVazio ? '+' : ''}${cobrVazio ? 'cobranca' : ''}` };
+}
+const ehErroBairro = (txt) => /bairro/i.test(String(txt || ''));
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const contas = String(req.query?.contas || CONTAS_PADRAO.join(',')).split(',').map(c => c.trim()).filter(Boolean);
@@ -101,7 +127,21 @@ export default async function handler(req, res) {
           ger = await gerR.json().catch(() => ({}));
         }
         await espera(PAUSA);
-        const nfId = ger?.data?.idNotaFiscal || ger?.data?.id || null;
+        let nfId = ger?.data?.idNotaFiscal || ger?.data?.id || null;
+        if (!nfId && ehErroBairro(JSON.stringify(ger))) {
+          const contatoId = det.data?.contato?.id;
+          if (contatoId) {
+            const fx = await corrigirBairroContato(contatoId, headers, headersPost);
+            await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'bairro_fix', resultado: fx.ok ? 'ok' : 'erro', mensagem: fx.motivo });
+            if (fx.ok) {
+              await espera(PAUSA);
+              gerR = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}/gerar-nfe`, { method: 'POST', headers: headersPost, body: '{}' });
+              ger = await gerR.json().catch(() => ({}));
+              nfId = ger?.data?.idNotaFiscal || ger?.data?.id || null;
+              await espera(PAUSA);
+            }
+          }
+        }
         if (!nfId) {
           resumo.erros++;
           await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'gerar', http: gerR.status, resultado: 'erro', mensagem: JSON.stringify(ger).slice(0, 500) });
@@ -130,6 +170,33 @@ export default async function handler(req, res) {
         const s2 = typeof s2R.json === 'function' ? await s2R.json().catch(() => ({})) : {};
         const sitF = s2?.data?.situacao;
         await supabase.from('wms_pedidos').update({ nf_situacao: sitF, nf_checado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id);
+        if (sitF === 4 && ehErroBairro(JSON.stringify(s2?.data || {}) + JSON.stringify(env || {}))) {
+          const contatoId = det.data?.contato?.id;
+          if (contatoId) {
+            const fx = await corrigirBairroContato(contatoId, headers, headersPost);
+            await log({ conta, pedido_id: p.pedido_id, numero: p.numero, nf_id: nfId, etapa: 'bairro_fix', resultado: fx.ok ? 'ok' : 'erro', mensagem: `rejeitada por bairro · ${fx.motivo}` });
+            if (fx.ok) {
+              await espera(PAUSA);
+              await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, { method: 'DELETE', headers }).catch(() => {});
+              await espera(PAUSA);
+              const g2R = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}/gerar-nfe`, { method: 'POST', headers: headersPost, body: '{}' });
+              const g2 = await g2R.json().catch(() => ({}));
+              const nf2 = g2?.data?.idNotaFiscal || g2?.data?.id || null;
+              if (nf2) {
+                await espera(PAUSA);
+                const e2R = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nf2}/enviar?enviarEmail=false`, { method: 'POST', headers: headersPost, body: '{}' });
+                await e2R.json().catch(() => ({}));
+                await espera(900);
+                const s3R = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nf2}`, headers);
+                const s3 = typeof s3R.json === 'function' ? await s3R.json().catch(() => ({})) : {};
+                const sit3 = s3?.data?.situacao;
+                await supabase.from('wms_pedidos').update({ nf_id: nf2, nf_situacao: sit3, nf_checado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id);
+                await log({ conta, pedido_id: p.pedido_id, numero: p.numero, nf_id: nf2, etapa: 'bairro_fix', situacao: sit3, resultado: (sit3 === 5 || sit3 === 6) ? 'ok' : 'erro', mensagem: `nova NF pos-fix: ${NOME_SIT[sit3] || sit3}` });
+                if (sit3 === 5 || sit3 === 6) { resumo.autorizados++; await espera(PAUSA); continue; }
+              }
+            }
+          }
+        }
         if (sitF === 5 || sitF === 6) resumo.autorizados++;
         else if (sitF === 4 || sitF === 9) resumo.rejeitados++;
         await log({
