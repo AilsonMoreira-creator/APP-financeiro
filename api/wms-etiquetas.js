@@ -357,15 +357,19 @@ export default async function handler(req, res) {
           && !p.etiqueta_impressa_em) c.etiqueta_liberada++;
         // 22/08: MELUNI segue o Bling e nada mais — em aberto conta, atendido
         // zera (as meninas nao geram NF; logistica sai pela Frenet)
-        if (p.print_regra === 'MELUNI') { if (p.situacao_bling !== 9) c.meluni++; continue; }
-        if (p.print_estado !== 'PRONTO') continue;
+        if (p.print_regra === 'MELUNI' || p.canal_geral === 'Meluni') { if (p.situacao_bling !== 9) c.meluni++; continue; }
+        // 24/08 (teste dele: 23 vs 26): NF AUTORIZADA (sit 5) e pronta MESMO
+        // antes do classificar rodar (cron de 30 em 30 min) — mesma regua da
+        // previa e da impressao. E flex/normal decidido pela LOGISTICA, nao
+        // pela regra do classificar, pra pedido novo contar no lugar certo.
+        if (p.print_estado !== 'PRONTO' && p.nf_situacao !== 5) continue;
         if (impressoPainelMl(p, dlNossoCont)) continue; // impresso no painel do ML (sem download nosso)
         // 24/08 (correcao dele): atendido(9) e so "NF gerada" (o Bling atende
         // sozinho ao emitir) — pendencia REAL. O que tira da fila e a DANFE
         // emitida (6), que so acontece quando a nota sai pelo painel.
         if (p.nf_situacao === 6) continue;
-        if (p.print_regra === 'MELI_FLEX') c.flex++;
-        else if (p.print_regra === 'NORMAL') c.nf_transporte++;
+        if (p.print_regra === 'MELI_FLEX' || p.ml_logistic_type === 'self_service') c.flex++;
+        else c.nf_transporte++;
       }
       return res.status(200).json({ ok: true, contadores: c });
     }
