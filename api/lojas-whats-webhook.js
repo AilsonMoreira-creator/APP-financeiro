@@ -707,12 +707,12 @@ function respostaPesquisaVariante(motivo, primeiro) {
     // como gancho do preco; catalogo principal sai na sequencia)
     preco: [
       ['A', [
-        `Oi! Que bom que você respondeu 🤍\n\nSobre preço, queria aproveitar pra te mostrar algumas novidades que estão chegando por aqui 😊`,
-        `Tem bastante linho, alfaiataria e modelos que estão super em alta pro verão. Acho que tem peças que podem ficar lindas na sua loja e trazer novidade pras suas clientes.\n\nVou te mandar o catálogo pra você dar uma olhadinha com calma`,
+        `Oi! Que bom que vc respondeu 🤍\n\nSobre preço, queria aproveitar pra te mostrar algumas novidades que estão chegando por aqui 😊`,
+        `Tem bastante linho, alfaiataria e modelos que estão super em alta pro verão. Acho que tem peças que podem ficar lindas na sua loja e trazer novidade pras suas clientes.\n\nVou te mandar o catálogo pra vc dar uma olhadinha com calma`,
       ]],
       ['B', [
-        `Oi! Que bom que você me respondeu 😊\n\nSobre preço, queria aproveitar pra te mostrar algumas novidades que chegaram por aqui`,
-        `Estamos com modelos e cores lindas pro verão, daqueles que já dão uma cara nova pra loja.\n\nVou te mandar o catálogo pra você conhecer 🤍`,
+        `Oi! Que bom que vc me respondeu 😊\n\nSobre preço, queria aproveitar pra te mostrar algumas novidades que chegaram por aqui`,
+        `Estamos com modelos e cores lindas pro verão, daqueles que já dão uma cara nova pra loja.\n\nVou te mandar o catálogo pra vc conhecer 🤍`,
       ]],
     ],
     variedade: [
