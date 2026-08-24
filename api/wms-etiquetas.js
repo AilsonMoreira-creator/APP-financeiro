@@ -340,6 +340,7 @@ export default async function handler(req, res) {
         // zera (as meninas nao geram NF; logistica sai pela Frenet)
         if (p.print_regra === 'MELUNI') { if (p.situacao_bling !== 9) c.meluni++; continue; }
         if (p.print_estado !== 'PRONTO') continue;
+        if (p.ml_ship_substatus === 'printed' && !p.etiqueta_impressa_em) continue; // 24/08: impresso pelo painel do ML
         if (p.print_regra === 'MELI_FLEX') c.flex++;
         else if (p.print_regra === 'NORMAL') c.nf_transporte++;
       }
@@ -383,7 +384,7 @@ export default async function handler(req, res) {
           else semEtiqueta++;
         } else if (q.tipo === 'etiqueta_liberada') {
           grupos[k].prontas++; prontas++;   // liberada pelo ML = pode imprimir
-        } else if (sit === 6 || p.situacao_bling === 9 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
+        } else if (sit === 6 || p.situacao_bling === 9 || (p.ml_ship_substatus === 'printed') || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
           // 20/08 (ele apontou: "540 impressas" impossível): situação 6 de
           // QUALQUER dia entrava na conta de hoje. Agora "já impressas" =
           // carimbo NOSSO de hoje OU impressa PELO BLING (sit 6/atendido, sem
@@ -483,6 +484,7 @@ export default async function handler(req, res) {
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
         if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return false;
         if (p.situacao_bling === 9) return false;             // atendido no Bling = impresso por la
+        if (p.ml_ship_substatus === 'printed' && !p.etiqueta_impressa_em) return false; // 24/08: impresso pelo PAINEL DO ML
         return sit === 5 || p.print_estado === 'PRONTO';
       }).slice(0, 80);
       if (!candidatos.length) return res.status(200).json({ ok: false, erro: 'nenhum pedido pronto nesses filtros' });
