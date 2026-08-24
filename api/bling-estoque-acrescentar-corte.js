@@ -156,10 +156,18 @@ export default async function handler(req, res) {
         const anterior = Number(row.qtd) || 0;
         const nova = anterior + fLumia + fMuniam + add;
 
-        const r = await fetch(`${API}/estoques`, {
-          method: 'POST', headers,
-          body: JSON.stringify({ produto: { id: Number(produtoId) }, deposito: { id: Number(depositoId) }, operacao: 'B', quantidade: nova }),
-        });
+        // 24/08 (caso Cris/corte 9877): retry de 429 + respiro entre células —
+        // o rate limit do Bling derrubou o Bege G em silêncio
+        await new Promise(rr => setTimeout(rr, 400));
+        let r = null;
+        for (let tent = 0; tent < 4; tent++) {
+          r = await fetch(`${API}/estoques`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ produto: { id: Number(produtoId) }, deposito: { id: Number(depositoId) }, operacao: 'B', quantidade: nova }),
+          });
+          if (r.status !== 429) break;
+          await new Promise(rr => setTimeout(rr, 1000 * Math.pow(2, tent)));
+        }
         if (!r.ok) {
           const txt = await r.text().catch(() => '');
           resultado.push({ cor_nome, cor_norm, tam, add, anterior, ok: false, motivo: `Bling HTTP ${r.status}`, detalhe: txt.slice(0, 160) });
@@ -198,14 +206,24 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: false, gravado: false, okCount: 0, resultado, cores_ignoradas, msg: 'nenhuma variação acrescentada' });
     }
 
-    // matriz completa → selo vira 'ok' (some da projeção, vira "adicionado")
+    // 24/08 (caso Cris/corte 9877): sucesso PARCIAL não pode virar 'ok'
+    // silencioso — 2 de 3 entravam, a tela dizia "acrescentado" e a variação
+    // que falhou sumia. Agora: falhou alguma célula → selo 'parcial', o corte
+    // CONTINUA pendente no card e o botão vira "completar" (a retomada pula
+    // o que já entrou — jamais soma duas vezes).
+    const falhas = resultado.filter(r2 => !r2.ok);
+    const statusFinal = falhas.length ? 'parcial' : 'ok';
     const { error: eIns } = await supabase.from('bling_cortes_inseridos').update({
-      status: 'ok', matriz_editada: matriz, cores_ignoradas, resultado, atualizado_em: new Date().toISOString(),
+      status: statusFinal, matriz_editada: matriz, cores_ignoradas, resultado, atualizado_em: new Date().toISOString(),
     }).eq('ref_norm', ref).eq('corte_id', corte_id);
     if (eIns) return res.status(500).json({ error: 'gravou no Bling mas falhou o registro: ' + eIns.message, resultado, cores_ignoradas });
 
     const puladas = resultado.filter(r2 => r2.pulada).length;
-    return res.status(200).json({ ok: true, gravado: true, okCount, puladas, retomada: puladas > 0, resultado, cores_ignoradas });
+    return res.status(200).json({
+      ok: true, gravado: statusFinal === 'ok', parcial: statusFinal === 'parcial',
+      okCount, puladas, retomada: puladas > 0, falhas, resultado, cores_ignoradas,
+      ...(statusFinal === 'parcial' ? { msg: `${okCount} variação(ões) entraram; ${falhas.length} FALHARAM: ${falhas.map(f => `${f.cor_nome} ${f.tam}`).join(', ')}. Clique em "completar o que faltou" — só as que falharam serão somadas.` } : {}),
+    });
   } catch (e) {
     return res.status(500).json({ error: e.message || String(e) });
   }

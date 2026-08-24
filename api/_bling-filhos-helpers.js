@@ -66,10 +66,17 @@ export async function zerarFilhosSku(sku, cfg) {
       resultado.antes = antes;
       if (antes === 0 || antes == null) { resultado.ok = true; resultados.push(resultado); continue; }
 
-      const rz = await fetch(`${API}/estoques`, {
-        method: 'POST', headers,
-        body: JSON.stringify({ produto: { id: Number(produtoId) }, deposito: { id: Number(depId) }, operacao: 'B', quantidade: 0 }),
-      });
+      // 24/08 (caso Cris/corte 9877): 429 no meio do lote derrubava a variação
+      // em silêncio — agora o balanço re-tenta com espera (1s/2s/4s)
+      let rz = null;
+      for (let tent = 0; tent < 4; tent++) {
+        rz = await fetch(`${API}/estoques`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ produto: { id: Number(produtoId) }, deposito: { id: Number(depId) }, operacao: 'B', quantidade: 0 }),
+        });
+        if (rz.status !== 429) break;
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, tent)));
+      }
       if (!rz.ok) throw new Error(`balanço HTTP ${rz.status}`);
       resultado.ok = true;
     } catch (e) {

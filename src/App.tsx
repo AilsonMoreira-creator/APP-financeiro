@@ -5211,7 +5211,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     try{
       // cortes já somados ao estoque → somem da projeção + selo "adicionado"
       const {data:insRows}=await supabase.from('bling_cortes_inseridos')
-        .select('ref_norm,corte_id,corte_n,inserido_em,inserido_por,matriz_editada,cores_ignoradas,resultado');
+        .select('ref_norm,corte_id,corte_n,inserido_em,inserido_por,matriz_editada,cores_ignoradas,resultado')
+        .eq('status','ok'); // 24/08 (caso Cris): parcial/processando NAO e adicionado — corte segue pendente no card
       const insPorRef={};const insSet=new Set();
       (insRows||[]).forEach(r=>{
         const rk=String(r.ref_norm||'');const ci=String(r.corte_id);
@@ -6243,11 +6244,12 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                         <div style={{fontSize:10.5,color:"#8a9aa4",marginTop:6,fontStyle:"italic"}}>O nome da cor tem que bater com o cadastro do Bling. Cor sem cadastro entra no aviso e não é somada.</div>
                         {acrescResultado&&<div style={{marginTop:8,fontSize:12}}>
                           {acrescResultado.erro&&<div style={{color:"#c0392b",fontWeight:600}}>⚠ {acrescResultado.erro}</div>}
+                          {acrescResultado.parcial&&<div style={{color:"#c0392b",fontWeight:800,background:"#fdeeec",border:"1px solid #eabcb5",borderRadius:8,padding:"7px 10px",marginBottom:5}}>⚠ ATENÇÃO: {(acrescResultado.falhas||[]).length} variação(ões) NÃO entraram no estoque: {(acrescResultado.falhas||[]).map(f=>`${f.cor_nome} ${f.tam} (+${f.add})`).join(', ')}. Clique em "completar o que faltou" — só elas serão somadas, sem duplicar as que já entraram.</div>}
                           {acrescResultado.okCount>0&&<div style={{color:"#1f7a48",fontWeight:700}}>✓ {acrescResultado.okCount} variaç{acrescResultado.okCount===1?'ão somada':'ões somadas'} no estoque Bling.</div>}
                           {(acrescResultado.cores_ignoradas||[]).length>0&&<div style={{color:"#8a6a2a",marginTop:3}}>⚠ {(acrescResultado.cores_ignoradas||[]).map(c=>`a cor ${c} não foi acrescentada (sem cadastro no Bling)`).join(' · ')}</div>}
                           {(acrescResultado.resultado||[]).filter(r=>!r.ok).length>0&&<div style={{color:"#8a6a2a",marginTop:3,fontSize:11}}>{(acrescResultado.resultado||[]).filter(r=>!r.ok).map(r=>`${r.cor_nome} ${r.tam}: ${r.motivo}`).join(' · ')}</div>}
                         </div>}
-                        {!acrescResultado?.gravado&&<button onClick={()=>submitAcrescentar(ct)} disabled={acrescBusy} style={{marginTop:10,width:"100%",background:acrescBusy?"#9bb3c7":"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:acrescBusy?"default":"pointer"}}>{acrescBusy?"acrescentando…":"acrescentar no estoque"}</button>}
+                        {!acrescResultado?.gravado&&<button onClick={()=>submitAcrescentar(ct)} disabled={acrescBusy} style={{marginTop:10,width:"100%",background:acrescBusy?"#9bb3c7":(acrescResultado?.parcial?"#b7791f":"#2c3e50"),color:"#fff",border:"none",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:acrescBusy?"default":"pointer"}}>{acrescBusy?"acrescentando…":(acrescResultado?.parcial?"completar o que faltou":"acrescentar no estoque")}</button>}
                       </div>
                     )}
                   </div>}
