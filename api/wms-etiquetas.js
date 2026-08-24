@@ -358,14 +358,13 @@ export default async function handler(req, res) {
         // 22/08: MELUNI segue o Bling e nada mais — em aberto conta, atendido
         // zera (as meninas nao geram NF; logistica sai pela Frenet)
         if (p.print_regra === 'MELUNI' || p.canal_geral === 'Meluni') { if (p.situacao_bling !== 9) c.meluni++; continue; }
-        // 24/08 (teste dele: 30 vs 26): FINALIZADO e SEM-ETIQUETA-PREVISTA nao
-        // sao pendencia — a previa ja excluia, o chip nao (as 2 ultimas frestas)
-        if (p.status_wms === 'finalizado' || p.print_etiqueta === false) continue;
         // 24/08 (teste dele: 23 vs 26): NF AUTORIZADA (sit 5) e pronta MESMO
-        // antes do classificar rodar (cron de 30 em 30 min) — mesma regua da
-        // previa e da impressao. E flex/normal decidido pela LOGISTICA, nao
-        // pela regra do classificar, pra pedido novo contar no lugar certo.
-        if (p.print_estado !== 'PRONTO' && p.nf_situacao !== 5) continue;
+        // antes do classificar rodar — mas sit 5 de pedido JA IMPRESSO
+        // (IMPRESSO/carimbo) nao volta pra fila. Mesma precedencia da previa:
+        // pronto vence finalizado (o atendido do Bling vira finalizado no
+        // sync, e ele e pendencia real quando a NF acabou de sair).
+        const prontoCont = p.print_estado === 'PRONTO' || (p.nf_situacao === 5 && p.print_estado !== 'IMPRESSO' && !p.etiqueta_impressa_em);
+        if (!prontoCont) continue;
         if (impressoPainelMl(p, dlNossoCont)) continue; // impresso no painel do ML (sem download nosso)
         // 24/08 (correcao dele): atendido(9) e so "NF gerada" (o Bling atende
         // sozinho ao emitir) — pendencia REAL. O que tira da fila e a DANFE
