@@ -1145,6 +1145,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
     // 17/08: declarados no TOPO do bloco — antes ficavam no meio e o separador,
     // que roda no início de cada grupo, quebrava com "soDanfe before init"
     // (era esse o erro que abria a aba do PDF em branco).
+    const paresNoPdf = [];   // 24/08: registro de impressao SO pra par completo
     const soDanfe = q.tipo === 'nf_agendada';          // NF antes, etiqueta depois
     const soEtiqueta = q.tipo === 'etiqueta_liberada';  // no dia do envio
 
@@ -1282,6 +1283,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
 
 
       // DANFE do pedido (Bling, se a conta tem escopo)
+      const pgAntesDoPar = saida.getPageCount();   // 24/08 REGRA DURA: marcador pro desfazer
       let danfeOk = soEtiqueta;   // no modo etiqueta, DANFE não entra
       if (tokenBling[p.conta] && !soEtiqueta) {
         try {
@@ -1329,7 +1331,12 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
           }
         } catch { /* sem danfe */ }
       }
-      if (!danfeOk) semNf.push(p.numero);
+      if (!danfeOk) {
+        semNf.push(p.numero);
+        // 24/08 REGRA DURA (ordem dele): no par NF+logística, faltou a NOTA →
+        // NENHUM dos dois sai. Etiqueta órfã embaralha a esteira física.
+        if (!soEtiqueta) continue;
+      }
 
       // etiqueta: Bling primeiro (qualquer marketplace), ML como reserva
       let etqOk = soDanfe;   // no modo NF agendada, etiqueta não entra
@@ -1367,7 +1374,14 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
         saida.addPage(pg);
       } else {
         semEtiqueta.push(p.numero);
+        // 24/08 REGRA DURA: a DANFE deste pedido já tinha entrado no PDF —
+        // sem a etiqueta, sai TUDO: remove as páginas do par (nota órfã nunca).
+        if (!soDanfe) {
+          for (let pi = saida.getPageCount() - 1; pi >= pgAntesDoPar; pi--) saida.removePage(pi);
+          continue;
+        }
       }
+      paresNoPdf.push(p.pedido_id);   // só quem saiu COMPLETO conta como impresso
     }
 
     // REGISTRO: o que entrou neste PDF fica marcado como impresso (com lote),
@@ -1378,10 +1392,8 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
         .update({ nf_agendada_impressa_em: new Date().toISOString() })
         .in('pedido_id', prontos.map(p => p.pedido_id));
     }
-    const idsImpressos = [];
-    for (const p of prontos) {
-      if (linkBlingDe[String(p.pedido_id)] || shipDe[p.pedido_id]) idsImpressos.push(p.pedido_id);
-    }
+    // 24/08 REGRA DURA: só é "impresso" quem saiu com o PAR COMPLETO no PDF
+    const idsImpressos = soDanfe ? [] : [...paresNoPdf];
     if (idsImpressos.length) {
       await supabase.from('wms_pedidos')
         .update({ etiqueta_impressa_em: new Date().toISOString(), etiqueta_lote: lotePdf })
