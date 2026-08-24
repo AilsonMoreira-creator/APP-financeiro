@@ -703,14 +703,16 @@ function respostaPesquisaVariante(motivo, primeiro) {
     // 24/08 (pedido dele): promo dos 30% acabou — o gancho do PRECO agora e
     // VALOR: linho e alfaiataria de qualidade, peca que revende bem e nao
     // encalha. Curto, sem formalidade, sem superlativo, sem em-dash.
+    // 24/08: copy escrita POR ELE, usar exatamente assim (novidades do verao
+    // como gancho do preco; catalogo principal sai na sequencia)
     preco: [
       ['A', [
-        `${ola}que bom que vc respondeu! Sobre preço, te falo com sinceridade: nosso forte é linho e alfaiataria, peça de qualidade que a sua cliente percebe na hora.`,
-        `Por isso a revenda compensa: a peça valoriza a vitrine, sai com margem boa e não encalha. Te mando o catálogo pra vc ver os modelos e valores com calma.`,
+        `Oi! Que bom que você respondeu 🤍\n\nSobre preço, queria aproveitar pra te mostrar algumas novidades que estão chegando por aqui 😊`,
+        `Tem bastante linho, alfaiataria e modelos que estão super em alta pro verão. Acho que tem peças que podem ficar lindas na sua loja e trazer novidade pras suas clientes.\n\nVou te mandar o catálogo pra você dar uma olhadinha com calma`,
       ]],
       ['B', [
-        `${ola}obrigada por responder! Sobre o valor: trabalhamos com linho e alfaiataria de qualidade, peça que veste bem e faz a cliente voltar pra buscar outra.`,
-        `E o preço do atacado é direto de quem confecciona, então sobra margem pra revender bem. Vou te mandar o catálogo pra vc avaliar com calma se faz sentido pra sua loja.`,
+        `Oi! Que bom que você me respondeu 😊\n\nSobre preço, queria aproveitar pra te mostrar algumas novidades que chegaram por aqui`,
+        `Estamos com modelos e cores lindas pro verão, daqueles que já dão uma cara nova pra loja.\n\nVou te mandar o catálogo pra você conhecer 🤍`,
       ]],
     ],
     variedade: [
