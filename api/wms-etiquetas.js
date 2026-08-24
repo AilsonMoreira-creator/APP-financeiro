@@ -303,7 +303,7 @@ export default async function handler(req, res) {
     if (q.contadores === '1') {
       const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
       const contasFiltro = String(q.contas || 'todas');
-      const COLS_CONT = 'pedido_id, conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_id, nf_situacao, etiqueta_impressa_em, status_wms, situacao_bling';
+      const COLS_CONT = 'pedido_id, conta, canal_geral, ml_logistic_type, print_regra, print_estado, print_etiqueta, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_id, nf_situacao, etiqueta_impressa_em, status_wms, situacao_bling';
       let sel = supabase.from('wms_pedidos')
         .select(COLS_CONT)
         .neq('status_wms', 'cancelado')
@@ -358,6 +358,9 @@ export default async function handler(req, res) {
         // 22/08: MELUNI segue o Bling e nada mais — em aberto conta, atendido
         // zera (as meninas nao geram NF; logistica sai pela Frenet)
         if (p.print_regra === 'MELUNI' || p.canal_geral === 'Meluni') { if (p.situacao_bling !== 9) c.meluni++; continue; }
+        // 24/08 (teste dele: 30 vs 26): FINALIZADO e SEM-ETIQUETA-PREVISTA nao
+        // sao pendencia — a previa ja excluia, o chip nao (as 2 ultimas frestas)
+        if (p.status_wms === 'finalizado' || p.print_etiqueta === false) continue;
         // 24/08 (teste dele: 23 vs 26): NF AUTORIZADA (sit 5) e pronta MESMO
         // antes do classificar rodar (cron de 30 em 30 min) — mesma regua da
         // previa e da impressao. E flex/normal decidido pela LOGISTICA, nao
