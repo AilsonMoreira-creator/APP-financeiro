@@ -465,7 +465,7 @@ async function processarMensagemRecebida(msg, valueCtx) {
           await enviarDuasPartes(telefone, conversa.id, rp.partes);
           if (motivo === 'preco' || motivo === 'minimo_pecas') {
             await new Promise(r => setTimeout(r, 1800 + Math.floor(Math.random() * 1200)));
-            await enviarCatalogoPesquisa(telefone, conversa.id, motivo === 'preco');
+            await enviarCatalogoPesquisa(telefone, conversa.id, false); // 24/08: sem promo, sai o catalogo principal pra todo motivo
           }
         } catch (e) {
           logErro('pesquisa-resposta', e);
@@ -700,14 +700,17 @@ function respostaPesquisaVariante(motivo, primeiro) {
         `Desde a última vez que vc viu por aqui entrou bastante novidade. Te mando aqui o catálogo atualizado pra vc conferir.`,
       ]],
     ],
+    // 24/08 (pedido dele): promo dos 30% acabou — o gancho do PRECO agora e
+    // VALOR: linho e alfaiataria de qualidade, peca que revende bem e nao
+    // encalha. Curto, sem formalidade, sem superlativo, sem em-dash.
     preco: [
       ['A', [
-        `${ola}que bom que vc respondeu! Sobre o valor, tem uma parte dos modelos com 30% de desconto rodando agora.`,
-        `É uma boa pra vc conhecer os modelos da Amícia com um custo menor, ver a qualidade e como vende bem. Vou te mandar aqui o catálogo, os que estão na condição saem com os 30%.`,
+        `${ola}que bom que vc respondeu! Sobre preço, te falo com sinceridade: nosso forte é linho e alfaiataria, peça de qualidade que a sua cliente percebe na hora.`,
+        `Por isso a revenda compensa: a peça valoriza a vitrine, sai com margem boa e não encalha. Te mando o catálogo pra vc ver os modelos e valores com calma.`,
       ]],
       ['B', [
-        `${ola}obrigada por responder! Sobre preço, alguns modelos estão com 30% de desconto agora, então dá pra entrar com um valor bem melhor.`,
-        `Bom momento pra testar os modelos da Amícia, ver a qualidade de perto e como giram na sua loja. Te mando aqui o catálogo, tem modelos com os 30% dentro dele.`,
+        `${ola}obrigada por responder! Sobre o valor: trabalhamos com linho e alfaiataria de qualidade, peça que veste bem e faz a cliente voltar pra buscar outra.`,
+        `E o preço do atacado é direto de quem confecciona, então sobra margem pra revender bem. Vou te mandar o catálogo pra vc avaliar com calma se faz sentido pra sua loja.`,
       ]],
     ],
     variedade: [
