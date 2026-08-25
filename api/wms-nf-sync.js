@@ -81,6 +81,33 @@ export default async function handler(req, res) {
         await espera(300);
       }
 
+      // 25/08 (caso 155050: NF cancelada dias atras e o espelho preso em
+      // "autorizada"): PENDENCIAS DA FILA sao re-checadas SEMPRE, uma a uma,
+      // independente da janela da varredura — a lista e minuscula (sit 5 sem
+      // carimbo, ate 3 dias) e e exatamente o que o contador mostra.
+      try {
+        const desde3p = new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10);
+        const { data: pends } = await supabase.from('wms_pedidos')
+          .select('nf_id')
+          .eq('conta', conta)
+          .eq('nf_situacao', 5)
+          .is('etiqueta_impressa_em', null)
+          .neq('status_wms', 'cancelado')
+          .gte('data_pedido', desde3p)
+          .not('nf_id', 'is', null)
+          .limit(40);
+        for (const pd of (pends || [])) {
+          if (situacoes[String(pd.nf_id)] !== undefined) continue; // a varredura ja cobriu
+          try {
+            const rr2 = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${pd.nf_id}`, h);
+            const j2 = typeof rr2.json === 'function' ? await rr2.json().catch(() => ({})) : {};
+            const sit2 = j2?.data?.situacao;
+            if (sit2 != null) { situacoes[String(pd.nf_id)] = sit2; r.pendencias_checadas = (r.pendencias_checadas || 0) + 1; }
+          } catch { /* proxima */ }
+          await espera(350);
+        }
+      } catch { /* a varredura normal segue */ }
+
       // grava agrupando por situação (poucos updates em vez de um por nota)
       const porSituacao = {};
       for (const [id, sit] of Object.entries(situacoes)) {
