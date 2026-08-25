@@ -98,9 +98,15 @@ export async function etiquetasDoMl(lista, conta) {
         const txt = Buffer.from(bytes).toString('utf8');
         textos = txt.split(/(?=\^XA)/).filter(x => x.trim().startsWith('^XA')).map(conteudo => ({ sid: null, conteudo }));
       }
-      textos.forEach((t, idx) => {
-        const sid = (t.sid && shipDe[t.sid]) ? t.sid : fatia[idx];
-        const pedido = shipDe[sid];
+      // 25/08 (teste em escala): o casamento por POSICAO (fatia[idx]) podia
+      // colar a etiqueta de um pedido no par de OUTRO quando o zip vinha fora
+      // de ordem ou com item a menos. Agora o shipment id tem que aparecer no
+      // NOME ou DENTRO do proprio ZPL — sem prova, a etiqueta e descartada
+      // (o par nao sai e o pedido fica pendente, nunca sai trocado).
+      textos.forEach((t) => {
+        let sid = (t.sid && shipDe[t.sid]) ? t.sid : null;
+        if (!sid && t.conteudo) sid = fatia.find(s => t.conteudo.includes(String(s))) || null;
+        const pedido = sid ? shipDe[sid] : null;
         if (pedido && t.conteudo) out[String(pedido)] = { formato: 'ZPL', conteudo: t.conteudo, bytes: t.conteudo.length };
       });
     } catch { /* segue */ }

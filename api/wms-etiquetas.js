@@ -1053,6 +1053,22 @@ export default async function handler(req, res) {
         const doMl = doMlZpl[String(p.pedido_id)];
         const jaTem = doMl ? null : guardados[String(p.pedido_id)];
         if (doMl) {
+          // 25/08 (teste em escala: etiquetas QUA 26/08 e SEX 28/08 no lote de
+          // terca): envio PROGRAMADO que o espelho ainda nao conhecia — a data
+          // de despacho vem impressa no proprio ZPL. Futuro = segura o par,
+          // grava o agendamento no espelho e o fluxo de agendadas assume.
+          if (q.tipo !== 'etiqueta_liberada' && q.reimprimir !== '1' && doMl.formato === 'ZPL' && !p.ml_agendado_em) {
+            const mData = String(doMl.conteudo).match(/(?:SEG|TER|QUA|QUI|SEX|SAB|DOM)[^0-9]{0,4}(\d{2})\/(\d{2})\/(\d{4})/);
+            if (mData) {
+              const dataEtq = `${mData[3]}-${mData[2]}-${mData[1]}`;
+              const hojeEtq = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+              if (dataEtq > hojeEtq) {
+                supabase.from('wms_pedidos').update({ ml_agendado_em: dataEtq, atualizado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id).then(() => {}, () => {});
+                semEtiqueta.push(`${p.numero} (programado ${mData[1]}/${mData[2]})`);
+                continue;
+              }
+            }
+          }
           if (doMl.formato === 'ZPL') zplDoPedido = cortarMiniDanfe(doMl.conteudo);
           else { ehPdf = true; pdf64 = doMl.conteudo; }
         }
