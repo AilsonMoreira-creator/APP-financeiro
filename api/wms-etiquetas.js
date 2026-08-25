@@ -824,6 +824,7 @@ export default async function handler(req, res) {
       // estouravam o tempo e o teto de 4,5MB do Vercel ("An error occurred").
       // O front chama em rodadas até `restantes` zerar.
       const comDanfeLote = String(q.tipo || 'nf_transporte') === 'nf_transporte';
+      let posPar = 0; // numeracao do par dentro da rodada (regra n1)
       const tamLote = Math.max(1, Math.min(parseInt(q.lote, 10) || (comDanfeLote ? 15 : 60), 120));
       const restantes = Math.max(0, candidatos.length - tamLote);
       const candidatosLote = candidatos.slice(0, tamLote);
@@ -1158,7 +1159,16 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
             // XML) vale pra TODOS os canais — Shein incluida. O PDF bagunçado
             // que vem dentro do zip do Bling vira só RESERVA (se o XML falhar).
             const dRes = (await buscarDanfe(p)) || (zipDanfe64 ? { formato: 'PDF', conteudo: zipDanfe64 } : null);
-            if (dRes?.formato === 'ZPL') blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: dRes.conteudo });
+            // 25/08 (regra n1 dele — caso NF 135457): numeracao do PAR no
+            // rodape da nota. Se a termica pular uma folha, a conferencia ve
+            // o buraco na hora (PAR 3/7 sumiu). Injetada na montagem, nunca
+            // no cache — a reimpressao ganha numeracao nova do lote dela.
+            posPar++;
+            if (dRes?.formato === 'ZPL') {
+              const campoPar = `^FO18,1176^A0N,22,22^FDPAR ${posPar}/${candidatosLote.length}^FS`;
+              const zplNum = String(dRes.conteudo).replace('^XZ', campoPar + '^XZ');
+              blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplNum });
+            }
             else if (dRes?.conteudo) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: dRes.conteudo });
             else { semDanfe.push(p.numero); continue; }   // sem nota, etiqueta não sai sozinha
           }
