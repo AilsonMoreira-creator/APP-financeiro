@@ -398,7 +398,7 @@ export default async function handler(req, res) {
         // emitida (6), que so acontece quando a nota sai pelo painel.
         if (p.nf_situacao === 6) continue;
         if (p.print_regra === 'MELI_FLEX' || p.ml_logistic_type === 'self_service') c.flex++;
-        else c.nf_transporte++;
+        else { c.nf_transporte++; if (q.debug_cont === '1') (c._quem = c._quem || []).push(`${p.numero}·${p.conta}·${p.canal_geral}·${String(p.data_pedido).slice(0, 10)}·estado:${p.print_estado || '-'}·sit:${p.nf_situacao ?? '-'}`); }
       }
       return res.status(200).json({ ok: true, contadores: c });
     }
