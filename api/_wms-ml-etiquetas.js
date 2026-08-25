@@ -127,7 +127,35 @@ export async function etiquetasDoMl(lista, conta) {
         if (pedido && t.conteudo) out[String(pedido)] = { formato: 'ZPL', conteudo: t.conteudo, bytes: t.conteudo.length };
       });
     } catch { /* segue */ }
-    if (!fatia.some(sid => out[String(shipDe[sid])])) await pdfEmLote(fatia);
+    // 25/08 (protecao pedida por ele: NUNCA mais etiqueta esticada por PDF sem
+    // necessidade): quem ficou sem ZPL no lote ganha uma SEGUNDA tentativa de
+    // ZPL individual (request de 1 sid = casamento direto). So quem falhar as
+    // duas cai na reserva em PDF — e mesmo assim 1 a 1, do pedido certo.
+    const semZpl = fatia.filter(sid => !out[String(shipDe[sid])]);
+    for (const sid of semZpl) {
+      try {
+        const r1 = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${sid}&response_type=zpl2&label_type=label`, { headers: h });
+        if (r1.ok) {
+          const b1 = new Uint8Array(await r1.arrayBuffer());
+          let conteudo = null;
+          if (b1[0] === 0x50 && b1[1] === 0x4b) {
+            const { unzipSync } = await import('fflate');
+            const z1 = unzipSync(b1);
+            const nomes = Object.keys(z1);
+            if (nomes.length) conteudo = Buffer.from(z1[nomes[0]]).toString('utf8');
+          } else {
+            const t1 = Buffer.from(b1).toString('utf8');
+            if (t1.includes('^XA')) conteudo = t1;
+          }
+          if (conteudo && conteudo.includes('^XA')) {
+            out[String(shipDe[sid])] = { formato: 'ZPL', conteudo, bytes: conteudo.length };
+          }
+        }
+      } catch { /* fica pra reserva */ }
+      await espera(180);
+    }
+    const aindaSemNada = fatia.filter(sid => !out[String(shipDe[sid])]);
+    if (aindaSemNada.length) await pdfEmLote(aindaSemNada);
     await espera(200);
   }
   return out;
