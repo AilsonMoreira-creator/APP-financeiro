@@ -1057,6 +1057,11 @@ export default async function handler(req, res) {
           // terca): envio PROGRAMADO que o espelho ainda nao conhecia — a data
           // de despacho vem impressa no proprio ZPL. Futuro = segura o par,
           // grava o agendamento no espelho e o fluxo de agendadas assume.
+          if (doMl.formato === 'AGENDADO') {
+            if (doMl.agendado_em) supabase.from('wms_pedidos').update({ ml_agendado_em: doMl.agendado_em, atualizado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id).then(() => {}, () => {});
+            semEtiqueta.push(`${p.numero} (programado${doMl.agendado_em ? ' ' + doMl.agendado_em.slice(8, 10) + '/' + doMl.agendado_em.slice(5, 7) : ''})`);
+            continue;
+          }
           if (q.tipo !== 'etiqueta_liberada' && q.reimprimir !== '1' && doMl.formato === 'ZPL' && !p.ml_agendado_em) {
             const mData = String(doMl.conteudo).match(/(?:SEG|TER|QUA|QUI|SEX|SAB|DOM)[^0-9]{0,4}(\d{2})\/(\d{2})\/(\d{4})/);
             if (mData) {

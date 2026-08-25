@@ -58,22 +58,39 @@ export async function etiquetasDoMl(lista, conta) {
   }
   const sids = Object.keys(shipDe);
 
-  // RESERVA: se o ZPL não vier utilizável, pega o PDF em lote — o ML devolve
-  // UMA PÁGINA POR ETIQUETA, na ordem dos shipment_ids.
+  // RESERVA: se o ZPL não vier utilizável, pega o PDF — 25/08: UM POR VEZ.
+  // O lote casava página↔pedido por POSIÇÃO (uma página faltante deslocava
+  // tudo e a etiqueta de um colava no par de outro). Um request por shipment
+  // garante o casamento; e o shipment é consultado antes: envio programado
+  // (buffered/data futura) volta marcado pra ser SEGURADO no lote normal.
   const pdfEmLote = async (fatia) => {
     try {
       const { PDFDocument } = await import('pdf-lib');
-      const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=pdf&label_type=label`, { headers: h });
-      if (!r.ok) return;
-      const bytes = new Uint8Array(await r.arrayBuffer());
-      const doc = await PDFDocument.load(bytes);
-      for (let idx = 0; idx < fatia.length && idx < doc.getPageCount(); idx++) {
-        const uma = await PDFDocument.create();
-        const [pg] = await uma.copyPages(doc, [idx]);
-        uma.addPage(pg);
-        const b64 = Buffer.from(await uma.save()).toString('base64');
-        const pedido = shipDe[fatia[idx]];
-        if (pedido) out[String(pedido)] = { formato: 'PDF', conteudo: b64, bytes: b64.length };
+      for (const sid of fatia) {
+        const pedido = shipDe[sid];
+        if (!pedido || out[String(pedido)]) continue;
+        try {
+          const rS = await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: h });
+          const jS = rS.ok ? await rS.json() : null;
+          if (jS && (jS.substatus === 'buffered')) {
+            const dataLim = jS?.shipping_option?.estimated_handling_limit?.date || null;
+            out[String(pedido)] = { formato: 'AGENDADO', agendado_em: dataLim ? String(dataLim).slice(0, 10) : null };
+            await espera(150); continue;
+          }
+          const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${sid}&response_type=pdf&label_type=label`, { headers: h });
+          if (r.ok) {
+            const bytes = new Uint8Array(await r.arrayBuffer());
+            const doc = await PDFDocument.load(bytes);
+            if (doc.getPageCount() >= 1) {
+              const uma = await PDFDocument.create();
+              const [pg] = await uma.copyPages(doc, [0]);
+              uma.addPage(pg);
+              const b64 = Buffer.from(await uma.save()).toString('base64');
+              out[String(pedido)] = { formato: 'PDF', conteudo: b64, bytes: b64.length };
+            }
+          }
+        } catch { /* este sid fica sem etiqueta */ }
+        await espera(150);
       }
     } catch { /* sem etiqueta */ }
   };
