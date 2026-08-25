@@ -367,7 +367,9 @@ export default async function handler(req, res) {
         // e o criterio vira o da NOTA (nf existe, nao impressa, DANFE nao
         // emitida) — identico ao da previa/botao, sem depender do classificar
         if (p.print_regra === 'MELI_AGENDADO' || agendado || p.ml_ship_substatus === 'buffered') {
-          if (p.nf_id && !p.nf_agendada_impressa_em && p.nf_situacao !== 6) c.nf_agendada++;
+          // 25/08 (155042/155217): nota pronta = AUTORIZADA (5) — cancelada e
+          // pendente nao contam; e par completo ja impresso = nota ja saiu
+          if (p.nf_id && !p.nf_agendada_impressa_em && !p.etiqueta_impressa_em && p.nf_situacao === 5) c.nf_agendada++;
           continue;
         }
         // LIBERADAS: só as que ainda não saíram. Etiqueta impressa (nossa ou
@@ -440,8 +442,8 @@ export default async function handler(req, res) {
           // aqui o que conta é a NOTA: pronta = tem NF e ainda não foi impressa
           // 24/08 (teste dele: 109 no botao): DANFE emitida no painel (sit 6)
           // e nota IMPRESSA — 106 buffered antigos inflavam as prontas
-          if (p.nf_agendada_impressa_em || sit === 6) { grupos[k].impressas++; jaImpressas++; }
-          else if (p.nf_id) { grupos[k].prontas++; prontas++; }
+          if (p.nf_agendada_impressa_em || p.etiqueta_impressa_em || sit === 6) { grupos[k].impressas++; jaImpressas++; }
+          else if (p.nf_id && sit === 5) { grupos[k].prontas++; prontas++; }
           else semEtiqueta++;
         } else if (q.tipo === 'etiqueta_liberada') {
           grupos[k].prontas++; prontas++;   // liberada pelo ML = pode imprimir
@@ -543,7 +545,7 @@ export default async function handler(req, res) {
       const candidatos = peds.filter(p => {
         if (p.ml_ship_status === 'cancelled') return false;   // cancelado NUNCA sai — nem em reimpressao
         if (q.reimprimir === '1') return true;                // reimpressao: inclui impressas no App E no Bling
-        if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em && p.nf_situacao !== 6;
+        if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em && !p.etiqueta_impressa_em && p.nf_situacao === 5;
         if (q.tipo === 'etiqueta_liberada') return true;
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
         if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return false;
@@ -1226,7 +1228,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
       if (q.reimprimir === '1') return true;
       // 25/08 (75 notas carimbadas sem papel): REGUA UNICA aqui tambem —
       // DANFE emitida (6) e nota ja impressa, nao entra de novo
-      if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em && p.nf_situacao !== 6;
+      if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em && !p.etiqueta_impressa_em && p.nf_situacao === 5;
       if (q.tipo === 'etiqueta_liberada') return true;
       if (p.etiqueta_impressa_em) return false;
       return p.print_estado === 'PRONTO' || p.nf_situacao === 5;
