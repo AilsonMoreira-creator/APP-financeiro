@@ -61,6 +61,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   // 22/08: reimpressao POR BLOCO (checkbox na Ordem de impressao) e o modal
   // de auditoria do lote (cada REF ganha o check quando termina)
   const [selRefs, setSelRefs] = useState([]);
+  const [comSep, setComSep] = useState(true);   // 25/08 (ordem dele): separadora de REF, ligada por padrao
   const [lote, setLote] = useState(null);   // {grupos:[{key,loc,ref,qtd,feitas}], enviadas, rodando}
   const [modalCert, setModalCert] = useState(false);
   // PREPARO AUTOMÁTICO (17/08 — redesenho): ao abrir a tela o app já busca e
@@ -235,8 +236,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     //   Imprimir   = so as PENDENTES (nao impressas nem no App nem no Bling)
     //   Reimprimir = TUDO dos grupos marcados (inclui App + Bling)
     const extraSel = reimp
-      ? { refs: selRefs.join(','), reimprimir: '1' }
-      : (selRefs.length ? { refs: selRefs.join(',') } : {});
+      ? { refs: selRefs.join(','), reimprimir: '1', sep: comSep ? '1' : '0' }
+      : { ...(selRefs.length ? { refs: selRefs.join(',') } : {}), sep: comSep ? '1' : '0' };
     const qtdPrevista = reimp ? selProntas + selImpressas : (selRefs.length ? selProntas : vaiSair);
     const msgConfirma = reimp
       ? `REIMPRIMIR ${selRefs.length} grupo(s) (REF ${selRefs.join(', ')}) — ${qtdPrevista} etiqueta(s)?\n\nSai TUDO dos grupos de novo (inclusive as já impressas no App e no Bling): DANFE + etiqueta.`
@@ -297,9 +298,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         jobId = (await rJ.json())?.job_id || null;
       } catch { /* job é auditoria, não trava a impressão */ }
       let totalGeral = 0; let semDanfeTotal = []; let rodadas = 0;
+      let sepCont = ''; // emenda da separadora: grupo cortado entre rodadas nao repete a folha
       while (rodadas < 40) {
         rodadas++;
-        const rL = await fetch(`${API}/wms-etiquetas?${qs(jobId ? { zpl: '1', job: String(jobId), ...extraSel } : { zpl: '1', ...extraSel })}`);
+        const rL = await fetch(`${API}/wms-etiquetas?${qs(jobId ? { zpl: '1', job: String(jobId), sep_cont: sepCont, ...extraSel } : { zpl: '1', sep_cont: sepCont, ...extraSel })}`);
         const bruto = await rL.text();
         let jL;
         try { jL = JSON.parse(bruto); }
@@ -343,6 +345,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         for (let i = 0; i < jL.ids.length; i += 30) {
           await fetch(`${API}/wms-etiquetas?marcar=1&ids=${jL.ids.slice(i, i + 30).join(',')}`);
         }
+        sepCont = jL.ultimo_grupo || sepCont;
         totalGeral += jL.total;
         if (jL.refs?.length) setLote(lt => {
           if (!lt) return lt;
@@ -491,6 +494,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             title="Só as etiquetas logísticas que o Mercado Livre liberou pra postar hoje (a NF já foi impressa antes).">
             🏷 Etiquetas liberadas<Badge n={contadores?.etiqueta_liberada} />
           </button>
+          <label style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontFamily:"Georgia,serif",color:"#2c3e50",border:"1px solid #d8d2c8",borderRadius:10,padding:"7px 12px",cursor:"pointer",background:comSep?"#eef3f8":"#fff",marginRight:8}}>
+            <input type="checkbox" checked={comSep} onChange={e => setComSep(e.target.checked)} style={{accentColor:"#4a7fa5"}} />
+            Imprimir com separador
+          </label>
           <input value={fRef} onChange={e => setFRef(e.target.value)} placeholder="REF específica"
             style={{ padding: '9px 12px', borderRadius: 10, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13.5, width: 130, color: palette.ink }} />
         </div>

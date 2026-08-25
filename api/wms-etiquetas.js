@@ -825,6 +825,7 @@ export default async function handler(req, res) {
       // O front chama em rodadas até `restantes` zerar.
       const comDanfeLote = String(q.tipo || 'nf_transporte') === 'nf_transporte';
       let posPar = 0; // numeracao do par dentro da rodada (regra n1)
+      let grupoAtual = String(q.sep_cont || ''); // emenda da separadora entre rodadas
       const tamLote = Math.max(1, Math.min(parseInt(q.lote, 10) || (comDanfeLote ? 15 : 60), 120));
       const restantes = Math.max(0, candidatos.length - tamLote);
       const candidatosLote = candidatos.slice(0, tamLote);
@@ -1050,7 +1051,7 @@ export default async function handler(req, res) {
         else { foraDoAlvo.push(p.numero); foraIds.push(p.pedido_id); }
       }
 
-      const blocos = []; const idsOk = []; const refsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo]; let grupoAtual = '';
+      const blocos = []; const idsOk = []; const refsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo];
       for (const p of alvo.slice(0, 120)) {
         // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
         let zplDoPedido = null, ehPdf = false, pdf64 = null, zipDanfe64 = null;
@@ -1117,18 +1118,21 @@ export default async function handler(req, res) {
         }
 
         const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
-        if (false && k !== grupoAtual) {   // sem separadora (ordem dele 18/08)
+        // 25/08 (ordem dele): separadora DE VOLTA, com a REF GIGANTE dominando
+        // a folha — a pilha vira: [2277] todas as 2277, [2601] todas as 2601.
+        // Liga/desliga pelo checkbox da tela (sep=0 desliga); sep_cont emenda
+        // as rodadas (grupo cortado no meio nao ganha separadora repetida).
+        if (q.sep !== '0' && k !== grupoAtual) {
           grupoAtual = k;
           const qtd = alvo.filter(x => `${q.por_empresa === '1' ? x.conta + '·' : ''}${x.loc}·${x.ref}` === k).length;
-          // etiqueta separadora 10x15 em ZPL (203dpi: 812x1218 pontos)
           blocos.push({ tipo: 'separador', ref: p.ref, loc: p.loc, empresa: p.conta, pedidos: qtd, zpl:
             `^XA^CI28^PW812^LL1218^LH0,0
-${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase()}^FS` : ''}
-^FO40,260^A0N,170,170^FDLOC ${p.loc}^FS
-^FO40,460^A0N,170,170^FDREF ${p.ref}^FS
-^FO40,680^A0N,80,80^FD${qtd} etiqueta(s)^FS
-^FO40,800^A0N,50,50^FD${String(p.itens?.[0]?.descLimpa || '').slice(0, 30).replace(/[\^~]/g, '')}^FS
-^FO40,900^GB730,6,6^FS
+^FO0,140^FB812,1,0,C^A0N,340,330^FD${String(p.ref).replace(/[\^~]/g, '')}^FS
+^FO40,560^GB730,8,8^FS
+^FO0,640^FB812,1,0,C^A0N,120,120^FDLOC ${String(p.loc).replace(/[\^~]/g, '')}^FS
+${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).toUpperCase()}^FS` : ''}
+^FO0,940^FB812,1,0,C^A0N,70,70^FD${qtd} etiqueta(s)^FS
+^FO0,1060^FB812,1,0,C^A0N,46,46^FD${String(p.itens?.[0]?.descLimpa || '').slice(0, 32).replace(/[\^~]/g, '')}^FS
 ^XZ` });
         }
         // PAR em cascata (19/08): a DANFE sai da MELHOR fonte disponível —
@@ -1199,7 +1203,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
           detalhe: { pares: idsOk.length, restantes, sem_danfe: semDanfe.length ? semDanfe : undefined, pedidos: idsOk },
         }).then?.(() => {}, () => {});
       }
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, restantes });
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, restantes, ultimo_grupo: grupoAtual });
     }
 
     // ── marcar como impressas depois que a térmica confirmou
