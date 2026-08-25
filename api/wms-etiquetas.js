@@ -325,7 +325,9 @@ export default async function handler(req, res) {
     if (q.contadores === '1') {
       const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
       const contasFiltro = String(q.contas || 'todas');
-      const COLS_CONT = 'pedido_id, conta, canal_geral, ml_logistic_type, print_regra, print_estado, print_etiqueta, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_id, nf_situacao, etiqueta_impressa_em, status_wms, situacao_bling';
+      // 25/08: sem data_pedido no select, a regra dos 3 dias comparava com
+      // undefined e NUNCA cortava — os fantasmas viviam so no chip
+      const COLS_CONT = 'pedido_id, numero, data_pedido, conta, canal_geral, ml_logistic_type, print_regra, print_estado, print_etiqueta, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_id, nf_situacao, etiqueta_impressa_em, status_wms, situacao_bling';
       let sel = supabase.from('wms_pedidos')
         .select(COLS_CONT)
         .neq('status_wms', 'cancelado')
