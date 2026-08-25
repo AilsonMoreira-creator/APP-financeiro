@@ -1144,9 +1144,38 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
         if (ehPdf && comDanfe) {
           const norm = await normalizarCasada(pdf64);
           if (norm?.casada) {
-            // documento casado normalizado: DANFE já embutida, tudo 10x15 em pé
-            blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: norm.pdf });
-            emPdf.push(p.numero); parFeito = true;
+            // 25/08 (pedido dele): a Shein tambem sai com a DANFE RICA.
+            // O casado da Shein e SEMPRE [pg1 danfe nativa, pg2 etiqueta]
+            // (amostra 155753 confirmou). Com a rica em maos, corta a pg1
+            // e monta [rica + etiqueta]. Fora do padrao (3+ paginas =
+            // multivolume de ordem desconhecida, ou rica indisponivel),
+            // degrada pro casado inteiro — o comportamento de sempre.
+            let ricaFeita = false;
+            if (String(p.canal_geral || '').toLowerCase().includes('shein')) {
+              try {
+                const { PDFDocument } = await import('pdf-lib');
+                const docC = await PDFDocument.load(Buffer.from(norm.pdf, 'base64'));
+                if (docC.getPageCount() === 2) {
+                  const dResS = await buscarDanfe(p);
+                  if (dResS?.formato === 'ZPL') {
+                    const soEtq = await PDFDocument.create();
+                    const [pgEtq] = await soEtq.copyPages(docC, [1]);
+                    soEtq.addPage(pgEtq);
+                    const b64Etq = Buffer.from(await soEtq.save()).toString('base64');
+                    posPar++;
+                    const campoParS = `^FO18,1176^A0N,22,22^FDPAR ${posPar}/${candidatosLote.length}^FS`;
+                    blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: String(dResS.conteudo).replace('^XZ', campoParS + '^XZ') });
+                    blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: b64Etq });
+                    emPdf.push(p.numero); parFeito = true; ricaFeita = true;
+                  }
+                }
+              } catch { /* degrada pro casado inteiro */ }
+            }
+            if (!ricaFeita) {
+              // documento casado normalizado: DANFE já embutida, tudo 10x15 em pé
+              blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: norm.pdf });
+              emPdf.push(p.numero); parFeito = true;
+            }
           } else if (norm) {
             pdf64 = norm.pdf;   // 1 página: etiqueta simples normalizada; DANFE vem da cascata
           }
