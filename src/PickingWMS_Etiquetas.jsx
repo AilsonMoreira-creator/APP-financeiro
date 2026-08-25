@@ -330,7 +330,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         }
         for (const t of trechos) {
           if (t.modo === 'raw') {
-            await qz.print(config, t.itens.map(b => ({ type: 'raw', format: 'plain', data: b.zpl })));
+            // 25/08 (folha EXTRA esporadica no teste dele): termicas Zebra vem
+            // de fabrica com reprint-after-error ligado — apos qualquer solucos
+            // (pausa, sensor, inicio de job) a ULTIMA etiqueta do buffer sai de
+            // novo sozinha. ^JZN dentro de cada bloco proibe a reimpressao.
+            await qz.print(config, t.itens.map(b => ({ type: 'raw', format: 'plain', data: String(b.zpl).replace(/\^XA/g, '^XA^JZN') })));
           } else {
             await qz.print(cfgPdf, t.itens.map(b => ({ type: 'pixel', format: 'pdf', flavor: 'base64', data: b.pdf })));
           }
