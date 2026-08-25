@@ -35,7 +35,7 @@ export default async function handler(req, res) {
         if (p.print_regra === 'MELUNI' || p.canal_geral === 'Meluni') break;
         const prontoCont = p.print_estado === 'PRONTO' || (p.nf_situacao === 5 && p.print_estado !== 'IMPRESSO' && !p.etiqueta_impressa_em);
         if (!prontoCont) break;
-        if (String(p.data_pedido || '') < new Date(Date.now() - 3 * 86400000).toISOString()) break; // regra dos 3 dias
+        if (String(p.data_pedido || '') < new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10)) break; // regra dos 3 dias
         if (p.ml_ship_status === 'cancelled') break;
         if (painelMl(p)) break;
         if (p.nf_situacao === 6) break;
@@ -61,7 +61,7 @@ export default async function handler(req, res) {
         if (agendadoFut) return;
         const sit = p.nf_situacao;
         if (sit === 6 || painelMl(p) || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return; // ramo impressas
-        if (String(p.data_pedido || '') < new Date(Date.now() - 3 * 86400000).toISOString()) return; // regra dos 3 dias
+        if (String(p.data_pedido || '') < new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10)) return; // regra dos 3 dias
         if ((sit === 5 || p.print_estado === 'PRONTO') && p.ml_ship_status !== 'cancelled') previa.set(String(p.pedido_id), tag);
       })();
     }

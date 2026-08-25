@@ -57,7 +57,7 @@ async function pedidosFiltrados(q) {
   // 24/08 (regra DELE, a mesma do dashboard e do nfe-auto): pedido aberto ha
   // mais de 3 dias e caso resolvido por fora (ex: etiqueta impressa direto no
   // Seller Center da Shopee, que nao deixa sinal) — sai da fila de impressao
-  const desde3 = new Date(Date.now() - 3 * 86400000).toISOString();
+  const desde3 = new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10); // data pura BRT — o dia-limite (3 dias atras) ainda entra
   const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
 
   // 24/08 (caso dele: chip 3 × previa 2 persistente): o limit(500) numa janela
@@ -353,7 +353,7 @@ export default async function handler(req, res) {
       });
       const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0 };
       const dlNossoCont = await setDownloadNosso(supabase, data);
-      const desde3Cont = new Date(Date.now() - 3 * 86400000).toISOString();
+      const desde3Cont = new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10);
       for (const p of (data || [])) {
         // 18/08: Full sai ANTES de tudo — reposição do Full tem ml_agendado_em
         // e vazava pro contador de NF agendada (sem nem ter nota)
