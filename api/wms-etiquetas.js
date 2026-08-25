@@ -1219,14 +1219,19 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
     // 18/08: a DANFE ainda é buscada uma a uma no Bling (~1,5s cada), então
     // um PDF de 60 pedidos estourava o tempo e a aba abria em branco. Teto de
     // 25 por rodada: sai rápido e a última folha avisa quantos faltam.
-    const TETO_PDF = 25;
+    // 25/08: 25 DANFEs A4 passavam do teto de 4,5MB do Vercel — a resposta
+    // era cortada e a aba abria em BRANCO (com o carimbo ja dado). No modo
+    // nota o lote e menor; a ultima folha ja avisa quantas faltam.
+    const TETO_PDF = q.tipo === 'nf_agendada' ? 10 : 25;
     // 18/08: filtrar ANTES de cortar. Cortando primeiro, as 25 primeiras eram
     // quase todas já impressas e o PDF voltava vazio ("nenhuma etiqueta
     // pronta") mesmo com 59 esperando.
     const hojePdf = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
     const elegivel = (p) => {
       if (q.reimprimir === '1') return true;
-      if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em;
+      // 25/08 (75 notas carimbadas sem papel): REGUA UNICA aqui tambem —
+      // DANFE emitida (6) e nota ja impressa, nao entra de novo
+      if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em && p.nf_situacao !== 6;
       if (q.tipo === 'etiqueta_liberada') return true;
       if (p.etiqueta_impressa_em) return false;
       return p.print_estado === 'PRONTO' || p.nf_situacao === 5;
@@ -1323,6 +1328,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
     const fonteN = await saida.embedFont(StandardFonts.Helvetica);
     const P10x15 = [283.5, 425.2]; // 100x150mm em pt
     const semNf = []; const semEtiqueta = [];
+    const agendadasOk = [];
     let grupoAtual = '';
 
     for (const p of prontos) {
@@ -1392,6 +1398,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
                     }
                   });
                   danfeOk = true;
+                  if (soDanfe) agendadasOk.push(p.pedido_id);
                 } catch { /* link não era pdf */ }
               }
             }
@@ -1454,10 +1461,13 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
     // REGISTRO: o que entrou neste PDF fica marcado como impresso (com lote),
     // pra ninguém imprimir duas vezes nem esquecer nenhum
     const lotePdf = `L${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
-    if (q.tipo === 'nf_agendada' && prontos.length) {
+    // 25/08: o carimbo era dado em TODOS os elegiveis ANTES de saber se a
+    // nota saiu — 75 notas marcadas como impressas com a aba em branco.
+    // Agora so quem teve a DANFE de fato montada no PDF ganha o carimbo.
+    if (q.tipo === 'nf_agendada' && agendadasOk.length) {
       await supabase.from('wms_pedidos')
         .update({ nf_agendada_impressa_em: new Date().toISOString() })
-        .in('pedido_id', prontos.map(p => p.pedido_id));
+        .in('pedido_id', agendadasOk);
     }
     // 24/08 REGRA DURA: só é "impresso" quem saiu com o PAR COMPLETO no PDF
     const idsImpressos = soDanfe ? [] : [...paresNoPdf];
