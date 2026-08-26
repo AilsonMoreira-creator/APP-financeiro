@@ -132,8 +132,11 @@ async function pedidosFiltrados(q) {
     // na Exitus) e o PDF depois vinha vazio.
     if (p.print_regra === 'ML_FULL' || p.ml_logistic_type === 'fulfillment') continue;
     if (tipo === 'flex' && !flex) continue;
-    if (tipo === 'meluni' && canal !== 'Meluni') continue;
-    if (tipo === 'nf_transporte' && (flex || canal === 'Meluni')) continue;
+    // 26/08 (caso 71333: pedido Meluni com canal generico "Outros" vazou pro
+    // lote NF+transporte): Meluni se reconhece pelos DOIS campos, sempre.
+    const ehMeluni = canal === 'Meluni' || p.print_regra === 'MELUNI';
+    if (tipo === 'meluni' && !ehMeluni) continue;
+    if (tipo === 'nf_transporte' && (flex || ehMeluni)) continue;
 
     // 17/08 — ENVIOS PROGRAMADOS do Mercado Livre. A equipe imprime a NF antes
     // (com a data em cima) e separa; no dia, imprime só a etiqueta e despacha.
