@@ -377,6 +377,7 @@ export function TelaCaseado({ api }) {
   const [busca, setBusca] = useState('');
   const [nomeFiltro, setNomeFiltro] = useState('todos');
   const [statusFiltro, setStatusFiltro] = useState('todos'); // todos | aberto | entregue
+  const [marcaFiltro, setMarcaFiltro] = useState('todas');   // 26/08 (pedido dele): todas | Meluni | Amícia
   const [gerenciar, setGerenciar] = useState(false);
   const registros = api?.registros || [];
   const nomes = api?.nomes || [];
@@ -386,6 +387,7 @@ export function TelaCaseado({ api }) {
     if (statusFiltro === 'aberto' && r.entregue) return false;
     if (statusFiltro === 'entregue' && !r.entregue) return false;
     if (nomeFiltro !== 'todos' && r.nome !== nomeFiltro) return false;
+    if (marcaFiltro !== 'todas' && String(r.marca || '') !== marcaFiltro) return false;
     if (termo) { const hay = (String(r.ref || '') + ' ' + String(r.descricao || '')).toLowerCase(); if (!hay.includes(termo)) return false; }
     return true;
   });
@@ -419,6 +421,10 @@ export function TelaCaseado({ api }) {
         <button onClick={() => setStatusFiltro('todos')} style={chipStyle(statusFiltro === 'todos')}>Todos</button>
         <button onClick={() => setStatusFiltro('aberto')} style={chipStyle(statusFiltro === 'aberto')}>Em aberto</button>
         <button onClick={() => setStatusFiltro('entregue')} style={chipStyle(statusFiltro === 'entregue')}>Entregues</button>
+        <span style={{ width: 1, height: 20, background: '#d8e2ea', margin: '0 2px' }} />
+        <button onClick={() => setMarcaFiltro('todas')} style={chipStyle(marcaFiltro === 'todas')}>Todas as marcas</button>
+        <button onClick={() => setMarcaFiltro('Meluni')} style={chipStyle(marcaFiltro === 'Meluni')}>Meluni ({registros.filter(r => r.marca === 'Meluni').length})</button>
+        <button onClick={() => setMarcaFiltro('Amícia')} style={chipStyle(marcaFiltro === 'Amícia')}>Amícia ({registros.filter(r => r.marca === 'Amícia').length})</button>
         <span style={{ fontSize: 12, color: '#8a9aa4', marginLeft: 'auto' }}>{nAbertos} aberto(s) · {nEntregues} entregue(s)</span>
       </div>
 
