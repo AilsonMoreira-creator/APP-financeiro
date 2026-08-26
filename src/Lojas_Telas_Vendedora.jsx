@@ -53,6 +53,7 @@ import {
   adminComSaudacao, supabase, spinKeyframes, refDisplay, formatarTelefone,
   AlertaRajadaModal,
   podeOperarCarteira, carteirasExtrasDe,
+  labelDiaPendencias,
 } from './Lojas_Shared.jsx';
 
 // Aba 'Produtos' (admin only) — raio-x de produtos. Isolado em arquivo
@@ -2521,7 +2522,7 @@ export const CardDiaScreen = ({
               .eq('data_geracao', diaAnterior)
               .or('status.is.null,status.eq.pendente');
             if ((pend ?? 0) >= 2) {
-              avisos.push(`Célia, a ${primeiro} deixou de enviar ${pend} sugestões ontem. Se ela tem dúvida ou algum outro motivo, vamos ver com ela. Mas precisamos resolver: todas as sugestões têm que ser feitas.`);
+              avisos.push(`Célia, a ${primeiro} deixou de enviar ${pend} sugestões ${labelDiaPendencias(diaAnterior)}. Se ela tem dúvida ou algum outro motivo, vamos ver com ela. Mas precisamos resolver: todas as sugestões têm que ser feitas.`);
             }
           }
           // alertas de leitura e rajada nas ultimas 48h
@@ -2579,6 +2580,7 @@ export const CardDiaScreen = ({
   // ultimo dia com sugestoes => ao clicar na PRIMEIRA de hoje, abre a tela de
   // atencao (variante "deixar sugestoes sem fazer") e registra pro admin.
   const [pendentesOntem, setPendentesOntem] = useState(0);
+  const [diaPendentes, setDiaPendentes] = useState(null);
   const [alertaPendentesAberto, setAlertaPendentesAberto] = useState(false);
   const [sugestaoPosPendentes, setSugestaoPosPendentes] = useState(null);
   const alertaPendentesJaMostrouRef = useRef(false);
@@ -2596,6 +2598,7 @@ export const CardDiaScreen = ({
           .limit(1);
         const diaAnterior = ult?.[0]?.data_geracao;
         if (!diaAnterior) return;
+        setDiaPendentes(diaAnterior);
         const { count } = await supabase
           .from('lojas_sugestoes_diarias')
           .select('id', { count: 'exact', head: true })
@@ -2845,7 +2848,7 @@ export const CardDiaScreen = ({
         }
       />
       {alertaPendentesAberto && (
-        <AlertaRajadaModal nome={vendedora?.nome} variant="pendentes" onConfirmar={confirmarAlertaPendentes} />
+        <AlertaRajadaModal nome={vendedora?.nome} variant="pendentes" diaPendencias={diaPendentes} onConfirmar={confirmarAlertaPendentes} />
       )}
       <div style={{ padding: 16 }}>
         {/* Carteira extra da Célia (Ailson 05/08/2026): a Vendedora_4 (Bom Retiro,

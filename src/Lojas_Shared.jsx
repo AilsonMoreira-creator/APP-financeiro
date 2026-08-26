@@ -431,7 +431,7 @@ export function LoadingScreen({ phase, error, online }) {
 
 // Tela de atencao do freio de rajada (Ailson 28/07/2026). Nome da vendedora
 // no titulo, botao libera apos 6 segundos — freio de leitura proposital.
-export function AlertaRajadaModal({ nome, onConfirmar, variant = 'rajada' }) {
+export function AlertaRajadaModal({ nome, onConfirmar, variant = 'rajada', diaPendencias }) {
   // FIX 29/07/2026: este arquivo importa React como namespace (import * as
   // React) — useState/useEffect soltos quebravam o modulo inteiro em runtime.
   const [resta, setResta] = React.useState(6);
@@ -449,7 +449,7 @@ export function AlertaRajadaModal({ nome, onConfirmar, variant = 'rajada' }) {
         </div>
         {variant === 'pendentes' ? (
           <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
-            Ontem ficaram <b>sugestões sem fazer</b>. Cada cliente que fica pra trás é uma venda que não aconteceu.
+            {(() => { const l = labelDiaPendencias(diaPendencias); return l === 'ontem' ? 'Ontem ficaram ' : `${l.charAt(0).toUpperCase()}${l.slice(1)} ficaram `; })()}<b>sugestões sem fazer</b>. Cada cliente que fica pra trás é uma venda que não aconteceu.
           </div>
         ) : variant === 'leitura' ? (
           <>
@@ -487,6 +487,19 @@ export function AlertaRajadaModal({ nome, onConfirmar, variant = 'rajada' }) {
       </div>
     </div>
   );
+}
+
+// 26/08 (caso Celia: aviso de segunda dizia "ontem" = domingo, dia sem
+// sugestao): o aviso agora NOMEIA o dia real das pendencias.
+export function labelDiaPendencias(dataISO) {
+  if (!dataISO) return 'ontem';
+  const d = new Date(String(dataISO).slice(0, 10) + 'T12:00:00-03:00');
+  const hoje = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const diffDias = Math.round((new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  if (diffDias <= 1) return 'ontem';
+  const nomes = ['no domingo', 'na segunda-feira', 'na terça-feira', 'na quarta-feira', 'na quinta-feira', 'na sexta-feira', 'no sábado'];
+  const dd = String(d.getDate()).padStart(2, '0'); const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${nomes[d.getDay()]} (${dd}/${mm})`;
 }
 
 export const FRASES_MOTIVACIONAIS = [
