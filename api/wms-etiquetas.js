@@ -1092,7 +1092,7 @@ export default async function handler(req, res) {
       for (const p of candidatosLote) {
         if (doMlZpl[String(p.pedido_id)] || guardados[String(p.pedido_id)] || links[String(p.pedido_id)]) alvo.push(p);
         else if (p.print_estado === 'AGUARDA_LOGISTICA' && p.canal_geral !== 'Mercado Livre') aguardaLogZpl.push(`${p.numero} (${p.canal_geral})`);
-        else { foraDoAlvo.push(p.numero); foraIds.push(p.pedido_id); }
+        else { foraDoAlvo.push(`${p.numero} ${String(p.conta || '').charAt(0).toUpperCase() + String(p.conta || '').slice(1)}`); foraIds.push(p.pedido_id); }
       }
 
       const blocos = []; const idsOk = []; const refsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo];
