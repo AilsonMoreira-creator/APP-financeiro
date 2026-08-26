@@ -1618,6 +1618,15 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   const [filtroOrigemPerdida, setFiltroOrigemPerdida] = useState('todas');
   // Filtro por nº de HSMs de abordagem recebidos (1º/2º/3º envio). Ailson 23/07/2026.
   const [filtroEnviosPerdida, setFiltroEnviosPerdida] = useState('todos');
+  // 26/08 (pedido dele): filtros de montagem de publico da Perdida
+  const [filtroSemTemplate, setFiltroSemTemplate] = useState('');
+  const [filtroSilencio, setFiltroSilencio] = useState('');
+  const [listaTemplates, setListaTemplates] = useState([]);
+  useEffect(() => {
+    if (filtroEtapa !== 'perdida' || listaTemplates.length) return;
+    supabase.from('lojas_whats_templates').select('name').eq('ativo', true).order('name')
+      .then(({ data }) => setListaTemplates((data || []).map(t => t.name)));
+  }, [filtroEtapa]);
   const [perdidaDe, setPerdidaDe] = useState('');
   const [perdidaAte, setPerdidaAte] = useState('');
   const [templateMassa, setTemplateMassa] = useState('pesquisa');
@@ -1643,7 +1652,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   }, [conversaInicial]);
   useEffect(() => { setSelecionados(new Set()); }, [filtroEtapa]);
   // Sai da Perdida -> zera o sub-filtro de pesquisa (Ailson 22/06/2026)
-  useEffect(() => { if (filtroEtapa !== 'perdida') setFiltroPesquisaPerdida('todos'); }, [filtroEtapa]);
+  useEffect(() => { if (filtroEtapa !== 'perdida') { setFiltroPesquisaPerdida('todos'); setFiltroSemTemplate(''); setFiltroSilencio(''); } }, [filtroEtapa]);
 
   // Carrega contadores por etapa pros badges nos chips
   // Ailson 25/05/2026: pra etapas 'conversando' e 'quente', badge eh
@@ -1752,7 +1761,30 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         else if (filtroEnviosPerdida === '2') q = q.eq('hsm_envios', 2);
         else if (filtroEnviosPerdida === '3') q = q.gte('hsm_envios', 3);
       }
-      const { data } = await q;
+      let data;
+      if (filtroEtapa === 'perdida' && (filtroSemTemplate || filtroSilencio)) {
+        // 26/08: montagem de publico — a RPC resolve o "nunca recebeu o
+        // template" (not exists) e o silencio no banco; os demais filtros da
+        // Perdida sao aplicados aqui em cima do resultado
+        const { data: rpc } = await supabase.rpc('fn_sofia_perdidas_filtro', {
+          p_sem_template: filtroSemTemplate || null,
+          p_silencio_dias: filtroSilencio ? parseInt(filtroSilencio, 10) : null,
+          p_limite: 500,
+        });
+        data = (rpc || []).map(c => ({ ...c, handoffs: [], sugestoes: [] }));
+        if (filtroTag !== 'todas') data = data.filter(c => (c.tags || []).some(t => t.id === filtroTag));
+        if (filtroPesquisaPerdida === 'com') data = data.filter(c => c.pesquisa_enviada_em);
+        else if (filtroPesquisaPerdida === 'sem') data = data.filter(c => !c.pesquisa_enviada_em);
+        if (filtroOrigemPerdida === 'desconhecida') data = data.filter(c => !c.origem_lead || c.origem_lead === 'desconhecida');
+        else if (filtroOrigemPerdida !== 'todas') data = data.filter(c => c.origem_lead === filtroOrigemPerdida);
+        if (perdidaDe) data = data.filter(c => c.perdida_em && c.perdida_em >= `${perdidaDe}T00:00:00-03:00`);
+        if (perdidaAte) data = data.filter(c => c.perdida_em && c.perdida_em <= `${perdidaAte}T23:59:59-03:00`);
+        if (filtroEnviosPerdida === '1') data = data.filter(c => Number(c.hsm_envios) === 1);
+        else if (filtroEnviosPerdida === '2') data = data.filter(c => Number(c.hsm_envios) === 2);
+        else if (filtroEnviosPerdida === '3') data = data.filter(c => Number(c.hsm_envios) >= 3);
+      } else {
+        ({ data } = await q);
+      }
       let lista = data || [];
       // Enriquece conversas VENDIDAS com atendido_por da conversao (lojas_conversoes),
       // pra distinguir no card "carrinho fechado por fora" (venda_loja/vendedora) de
@@ -1789,7 +1821,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       jaCarregouListaRef.current = true;
       setLoading(false);
     })();
-  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, filtroEnviosPerdida, perdidaDe, perdidaAte, filtroTag]);
+  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, filtroEnviosPerdida, filtroSemTemplate, filtroSilencio, perdidaDe, perdidaAte, filtroTag]);
 
   // Catálogo dos templates de reativação (curadoria/novidades/dicas) pro
   // seletor do disparo em massa. Carrega 1x quando abre a aba Perdida.
@@ -2450,6 +2482,24 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
                   }}>{label}</button>
               );
             })}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600 }}>🚫 Não recebeu:</span>
+            <select value={filtroSemTemplate} onChange={e => setFiltroSemTemplate(e.target.value)}
+              style={{ fontSize: fz(11), padding: '4px 8px', borderRadius: 6, border: `1px solid ${filtroSemTemplate ? palette.accent : palette.beige}`, fontFamily: FONT, background: palette.surface, color: palette.ink, maxWidth: 220 }}>
+              <option value="">(qualquer template)</option>
+              {listaTemplates.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600 }}>🤫 Última mensagem:</span>
+            <select value={filtroSilencio} onChange={e => setFiltroSilencio(e.target.value)}
+              style={{ fontSize: fz(11), padding: '4px 8px', borderRadius: 6, border: `1px solid ${filtroSilencio ? palette.accent : palette.beige}`, fontFamily: FONT, background: palette.surface, color: palette.ink }}>
+              <option value="">(qualquer data)</option>
+              <option value="7">7+ dias sem mensagem</option>
+              <option value="15">15+ dias sem mensagem</option>
+            </select>
+            <button onClick={() => alert('FILTROS DE MONTAGEM DE PÚBLICO\n\n🚫 Não recebeu: escolhe um template e a lista mostra só quem NUNCA recebeu aquele template — pra reabordar sem repetir a mesma mensagem pra mesma cliente.\n\n🤫 Última mensagem: 7+ ou 15+ dias mostra só quem está em SILÊNCIO há esse tempo (nenhuma mensagem enviada ou recebida no período) — quem teve conversa recente fica de fora, pra não incomodar.\n\nOs dois combinam entre si e com os outros filtros. Com o público na tela, é só selecionar os cards e usar o disparo em massa.')}
+              title="O que fazem esses filtros?"
+              style={{ width: 22, height: 22, borderRadius: 999, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, cursor: 'pointer', fontSize: fz(12), fontWeight: 800, lineHeight: 1 }}>?</button>
           </div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600 }}>📨 Envios:</span>
