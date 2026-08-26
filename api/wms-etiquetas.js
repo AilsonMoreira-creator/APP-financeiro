@@ -675,7 +675,28 @@ export default async function handler(req, res) {
     }
 
     if (q.zpl === '1' && q.tipo === 'nf_agendada') {
-      return res.status(200).json({ total: 0, blocos: [], ids: [], em_pdf: ['nota'], so_pdf: true });
+      // 26/08 (teste dele: "NF normal reduzida" nao serve): a nota agendada
+      // sai na TERMICA como DANFE RICA, com o ENVIAR dd/mm em destaque no
+      // topo. So a nota — a etiqueta fica pro dia, em Etiquetas liberadas.
+      const peds = await pedidosFiltrados(q);
+      const alvoAg = peds.filter(p => !!p.nf_id && !p.nf_agendada_impressa_em && !p.etiqueta_impressa_em && p.nf_situacao === 5);
+      const blocos = []; const idsOk = []; const refsOk = [];
+      let pos = 0;
+      for (const p of alvoAg.slice(0, 15)) {
+        try {
+          const dRes = await buscarDanfe(p);
+          if (dRes?.formato !== 'ZPL') continue;
+          pos++;
+          const dt = p.ml_agendado_em ? `${String(p.ml_agendado_em).slice(8, 10)}/${String(p.ml_agendado_em).slice(5, 7)}` : '';
+          const topo = dt ? `^FO0,6^FB812,1,0,C^A0N,54,54^FDENVIAR ${dt}^FS^FO120,66^GB572,4,4^FS` : '';
+          const rodape = `^FO18,1176^A0N,22,22^FDPAR ${pos}/${Math.min(alvoAg.length, 15)}^FS`;
+          blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc,
+            zpl: String(dRes.conteudo).replace('^XA', '^XA' + topo).replace('^XZ', rodape + '^XZ') });
+          idsOk.push(p.pedido_id); refsOk.push(String(p.ref || ''));
+        } catch { /* proxima */ }
+      }
+      const restAg = Math.max(0, alvoAg.length - idsOk.length);
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: [], sem_danfe: [], sem_etiqueta: [], restantes: restAg, ultimo_grupo: '' });
     }
     if (q.zpl === '1') {
       // 22/08: MELUNI nunca imprime por aqui — etiqueta de logistica e da
@@ -1260,9 +1281,12 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
       const ids = String(q.ids).split(',').map(x => parseInt(x)).filter(Boolean);
       const lote = q.origem === 'fora' ? `FORA${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}` : `T${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
       if (ids.length) {
-        await supabase.from('wms_pedidos')
-          .update({ etiqueta_impressa_em: new Date().toISOString(), etiqueta_lote: lote })
-          .in('pedido_id', ids);
+        // 26/08: nota agendada carimba o campo DELA — a etiqueta continua
+        // pendente pro dia do envio (Etiquetas liberadas)
+        const patch = q.tipo === 'nf_agendada'
+          ? { nf_agendada_impressa_em: new Date().toISOString() }
+          : { etiqueta_impressa_em: new Date().toISOString(), etiqueta_lote: lote };
+        await supabase.from('wms_pedidos').update(patch).in('pedido_id', ids);
       }
       return res.status(200).json({ marcados: ids.length, lote });
     }

@@ -343,7 +343,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         }
         // só marca como impressa depois que a térmica aceitou o trabalho
         for (let i = 0; i < jL.ids.length; i += 30) {
-          await fetch(`${API}/wms-etiquetas?marcar=1&ids=${jL.ids.slice(i, i + 30).join(',')}`);
+          await fetch(`${API}/wms-etiquetas?${qs({ marcar: '1', ids: jL.ids.slice(i, i + 30).join(',') })}`);
         }
         sepCont = jL.ultimo_grupo || sepCont;
         totalGeral += jL.total;
