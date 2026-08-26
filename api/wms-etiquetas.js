@@ -1159,7 +1159,10 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
                   const dResS = await buscarDanfe(p);
                   if (dResS?.formato === 'ZPL') {
                     const soEtq = await PDFDocument.create();
-                    const [pgEtq] = await soEtq.copyPages(docC, [1]);
+                    // 26/08 (teste real): a ordem do casado Shein e
+                    // [pg1 ETIQUETA, pg2 danfe nativa+lista] — a fonte chinesa
+                    // que parecia da etiqueta esta nos ATRIBUTOS da lista.
+                    const [pgEtq] = await soEtq.copyPages(docC, [0]);
                     soEtq.addPage(pgEtq);
                     const b64Etq = Buffer.from(await soEtq.save()).toString('base64');
                     posPar++;
