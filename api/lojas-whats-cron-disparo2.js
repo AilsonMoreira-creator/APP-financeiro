@@ -121,9 +121,11 @@ export default async function handler(req, res) {
 
       try {
         const opts = headerImage ? { headerImage } : {};
-        // 19/08: o nº de variáveis segue o TEMPLATE escolhido — o balonê só
-        // tem {{1}} (nome); mandar saudação junto faria a Meta rejeitar tudo
-        const nVars = Array.isArray(tpl.variables) && tpl.variables.length ? tpl.variables.length : 2;
+        // 26/08 (carrinhos presos desde 19/08): o tpl.variables NUNCA veio —
+        // a coluna nao estava no select e o fallback de 2 variaveis fazia a
+        // Meta rejeitar TODO envio do balone ({{1}} apenas) com o erro 132000.
+        // Agora o numero sai do PROPRIO texto do template: a fonte da verdade.
+        const nVars = Math.max(1, ...((tpl.body_text || '').match(/\{\{(\d+)\}\}/g) || ['{{1}}']).map(x => parseInt(x.replace(/\D/g, ''), 10)));
         const vars = [nome, saud].slice(0, nVars);
         const r = await enviarTemplate(conv.telefone, template, vars, tpl.language || 'pt_BR', opts);
         const metaMsgId = r?.messages?.[0]?.id || null;
