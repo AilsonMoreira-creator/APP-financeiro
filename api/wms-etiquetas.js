@@ -1229,6 +1229,12 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
       if (!idsOk.length && (q.tipo === 'flex' || candidatos.some(p => p.ml_logistic_type === 'self_service'))) {
         return res.status(200).json({ total: 0, blocos: [], ids: [], em_pdf: ['flex'], so_pdf: true });
       }
+      // 26/08: modo seco — monta a rodada inteira e devolve so o RESUMO dos
+      // blocos, sem imprimir, sem marcar, sem log. Auditoria de montagem.
+      if (q.seco === '1') {
+        return res.status(200).json({ seco: true, total: idsOk.length,
+          resumo: blocos.map(b => `${b.tipo}:${b.pedido || b.ref || '?'}`) });
+      }
       if (q.job) {
         await supabase.from('wms_print_log').insert({
           job_id: parseInt(q.job, 10), evento: 'rodada',
