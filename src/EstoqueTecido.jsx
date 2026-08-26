@@ -315,10 +315,13 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
                 <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: C.azul, marginBottom: 6 }}>rolos que chegaram</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', marginBottom: 8 }}>
                   <button onClick={() => setModal({ ...modal, rolos: Math.max(1, (Number(modal.rolos) || 0) - 1) })} style={{ ...btn(C.azul), fontSize: 26, padding: '10px 20px' }}>−</button>
-                  <input type="number" inputMode="numeric" min="1" autoFocus={modal.digitando}
+                  {/* 26/08 (relato dele: nao dava pra apagar e digitar, so o +):
+                      type=number com min=1 rejeita o campo vazio no Safari e
+                      restaura o valor. Entrada livre so de digitos resolve. */}
+                  <input type="text" inputMode="numeric" autoFocus={modal.digitando}
                     value={modal.rolos} placeholder="0"
                     onFocus={e => e.target.select()}
-                    onChange={e => setModal({ ...modal, rolos: e.target.value })}
+                    onChange={e => setModal({ ...modal, rolos: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                     onKeyDown={e => { if (e.key === 'Enter' && Number(modal.rolos) > 0 && !salvando) acao({ acao: 'entrada', cor_id: modal.cor.id, rolos: modal.rolos }); }}
                     style={{ width: 116, textAlign: 'center', padding: 12, fontSize: 32, fontWeight: 800, borderRadius: 12,
                       border: `2px solid ${C.azul}`, background: C.azulSoft, fontFamily: FONT, color: C.ink }} />
@@ -353,7 +356,7 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, marginBottom: 8 }}>📋 Conferência física</div>
                   <div style={{ fontSize: 12.5, color: C.inkMuted, marginBottom: 8 }}>Conte os rolos e digite o que existe de verdade — a diferença fica registrada.</div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <input type="number" inputMode="numeric" value={modal.contado} onChange={e => setModal({ ...modal, contado: e.target.value })}
+                    <input type="text" inputMode="numeric" value={modal.contado} onChange={e => setModal({ ...modal, contado: e.target.value.replace(/\D/g, '').slice(0, 5) })}
                       style={{ width: 110, padding: 12, fontSize: 22, fontWeight: 800, textAlign: 'center', borderRadius: 11, border: `1px solid ${C.bege}`, fontFamily: FONT }} />
                     <button disabled={salvando} onClick={() => acao({ acao: 'conferencia', cor_id: modal.cor.id, contado: modal.contado })} style={btn(C.azul)}>Registrar contagem</button>
                   </div>
@@ -362,7 +365,7 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
                 <div style={{ background: C.begeSoft, borderRadius: 12, padding: 12, marginBottom: 14 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, marginBottom: 8 }}>⚙️ Tirar rolos (baixa manual)</div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <input type="number" inputMode="numeric" value={modal.rolos} onChange={e => setModal({ ...modal, rolos: e.target.value })}
+                    <input type="text" inputMode="numeric" value={modal.rolos} onChange={e => setModal({ ...modal, rolos: e.target.value.replace(/\D/g, '').slice(0, 5) })}
                       style={{ width: 90, padding: 12, fontSize: 20, fontWeight: 700, textAlign: 'center', borderRadius: 11, border: `1px solid ${C.bege}`, fontFamily: FONT }} />
                     <input value={modal.motivo || ''} onChange={e => setModal({ ...modal, motivo: e.target.value })} placeholder="Motivo"
                       style={{ flex: 1, padding: 12, fontSize: 14, borderRadius: 11, border: `1px solid ${C.bege}`, fontFamily: FONT }} />

@@ -2192,7 +2192,10 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
   const totalGeral=totRec.st+totRec.br+totRec.mkt;
   const recTotais={geral:totalGeral,mkt:totRec.mkt};
   const totalDesp=categorias.reduce((s,c)=>s+calcTotalAux(c,auxData,recTotais),0);
-  const salvarCelula=(dia,canal,val)=>{if(canal==="marketplaces")return;setReceitas(prev=>({...prev,[dia]:{...(prev[dia]||{}),[canal]:val}}));};
+  // 26/08 (pedido dele: jan-mar vieram errados do Bling e nao dava pra
+  // corrigir): Marketplaces virou EDITAVEL. O preenchimento automatico do
+  // Bling continua igual — o que for digitado a mao sobrescreve o dia.
+  const salvarCelula=(dia,canal,val)=>{setReceitas(prev=>({...prev,[dia]:{...(prev[dia]||{}),[canal]:val}}));};
   const updateLinhaAux=(cat,idx,field,val)=>setAuxData(prev=>{
     const l=[...(prev[cat]||[])];const oldVal=l[idx]?.[field];l[idx]={...l[idx],[field]:val};
     // Auto-date for fixed categories when valor is entered
@@ -2324,7 +2327,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
                         {editando===key?(
                           <input ref={el=>el&&el.focus({preventScroll:true})} value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:cellPad,fontSize:cellFs,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal)}/>
                         ):(
-                          <div onClick={()=>!futuro&&canal!=="marketplaces"&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:cellFs,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:cellPad,borderRadius:3,transition:"background 0.12s"}}>
+                          <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:cellFs,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:cellPad,borderRadius:3,transition:"background 0.12s"}}>
                             {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                           </div>
                         )}
@@ -2499,7 +2502,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
                           {editando===key?(
                             <input ref={el=>el&&el.focus({preventScroll:true})} value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:cellPad,fontSize:cellFs,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal,"g")}/>
                           ):(
-                            <div onClick={()=>!futuro&&canal!=="marketplaces"&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:cellFs,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:cellPad,borderRadius:3,transition:"background 0.12s"}}>
+                            <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:cellFs,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:cellPad,borderRadius:3,transition:"background 0.12s"}}>
                               {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                             </div>
                           )}
