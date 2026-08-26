@@ -380,7 +380,7 @@
     },
     {
       "path": "/api/lojas-whats-cron-capi-match",
-      "schedule": "0 6 * * *"
+      "schedule": "0 12,21 * * *"
     },
     {
       "path": "/api/lojas-whats-cron-responder",
