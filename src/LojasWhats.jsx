@@ -1621,6 +1621,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   // 26/08 (pedido dele): filtros de montagem de publico da Perdida
   const [filtroSemTemplate, setFiltroSemTemplate] = useState('');
   const [filtroSilencio, setFiltroSilencio] = useState('');
+  const [pubSemTemplate, setPubSemTemplate] = useState('');   // aplicado no clique de Buscar
+  const [pubSilencio, setPubSilencio] = useState('');
   const [listaTemplates, setListaTemplates] = useState([]);
   useEffect(() => {
     if (filtroEtapa !== 'perdida' || listaTemplates.length) return;
@@ -1652,7 +1654,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   }, [conversaInicial]);
   useEffect(() => { setSelecionados(new Set()); }, [filtroEtapa]);
   // Sai da Perdida -> zera o sub-filtro de pesquisa (Ailson 22/06/2026)
-  useEffect(() => { if (filtroEtapa !== 'perdida') { setFiltroPesquisaPerdida('todos'); setFiltroSemTemplate(''); setFiltroSilencio(''); } }, [filtroEtapa]);
+  useEffect(() => { if (filtroEtapa !== 'perdida') { setFiltroPesquisaPerdida('todos'); setFiltroSemTemplate(''); setFiltroSilencio(''); setPubSemTemplate(''); setPubSilencio(''); } }, [filtroEtapa]);
 
   // Carrega contadores por etapa pros badges nos chips
   // Ailson 25/05/2026: pra etapas 'conversando' e 'quente', badge eh
@@ -1762,13 +1764,13 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         else if (filtroEnviosPerdida === '3') q = q.gte('hsm_envios', 3);
       }
       let data;
-      if (filtroEtapa === 'perdida' && (filtroSemTemplate || filtroSilencio)) {
+      if (filtroEtapa === 'perdida' && (pubSemTemplate || pubSilencio)) {
         // 26/08: montagem de publico — a RPC resolve o "nunca recebeu o
         // template" (not exists) e o silencio no banco; os demais filtros da
         // Perdida sao aplicados aqui em cima do resultado
         const { data: rpc } = await supabase.rpc('fn_sofia_perdidas_filtro', {
-          p_sem_template: filtroSemTemplate || null,
-          p_silencio_dias: filtroSilencio ? parseInt(filtroSilencio, 10) : null,
+          p_sem_template: pubSemTemplate || null,
+          p_silencio_dias: pubSilencio ? parseInt(pubSilencio, 10) : null,
           p_limite: 500,
         });
         data = (rpc || []).map(c => ({ ...c, handoffs: [], sugestoes: [] }));
@@ -1821,7 +1823,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       jaCarregouListaRef.current = true;
       setLoading(false);
     })();
-  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, filtroEnviosPerdida, filtroSemTemplate, filtroSilencio, perdidaDe, perdidaAte, filtroTag]);
+  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, filtroEnviosPerdida, pubSemTemplate, pubSilencio, perdidaDe, perdidaAte, filtroTag]);
 
   // Catálogo dos templates de reativação (curadoria/novidades/dicas) pro
   // seletor do disparo em massa. Carrega 1x quando abre a aba Perdida.
@@ -2497,7 +2499,21 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
               <option value="7">7+ dias sem mensagem</option>
               <option value="15">15+ dias sem mensagem</option>
             </select>
-            <button onClick={() => alert('FILTROS DE MONTAGEM DE PÚBLICO\n\n🚫 Não recebeu: escolhe um template e a lista mostra só quem NUNCA recebeu aquele template — pra reabordar sem repetir a mesma mensagem pra mesma cliente.\n\n🤫 Última mensagem: 7+ ou 15+ dias mostra só quem está em SILÊNCIO há esse tempo (nenhuma mensagem enviada ou recebida no período) — quem teve conversa recente fica de fora, pra não incomodar.\n\nOs dois combinam entre si e com os outros filtros. Com o público na tela, é só selecionar os cards e usar o disparo em massa.')}
+            <button onClick={() => { setPubSemTemplate(filtroSemTemplate); setPubSilencio(filtroSilencio); }}
+              disabled={!filtroSemTemplate && !filtroSilencio && !pubSemTemplate && !pubSilencio}
+              style={{ fontSize: fz(11), padding: '5px 14px', borderRadius: 14, border: 'none',
+                background: (filtroSemTemplate || filtroSilencio) ? palette.accent : palette.beige,
+                color: (filtroSemTemplate || filtroSilencio) ? '#fff' : palette.inkMuted,
+                cursor: (filtroSemTemplate || filtroSilencio) ? 'pointer' : 'default', fontFamily: FONT, fontWeight: 700 }}>
+              🔍 Buscar clientes
+            </button>
+            {!!(pubSemTemplate || pubSilencio) && (
+              <button onClick={() => { setFiltroSemTemplate(''); setFiltroSilencio(''); setPubSemTemplate(''); setPubSilencio(''); }}
+                style={{ fontSize: fz(11), padding: '5px 10px', borderRadius: 14, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, cursor: 'pointer', fontFamily: FONT }}>
+                limpar
+              </button>
+            )}
+            <button onClick={() => alert('FILTROS DE MONTAGEM DE PÚBLICO\n\n🚫 Não recebeu: escolhe um template e a lista mostra só quem NUNCA recebeu aquele template — pra reabordar sem repetir a mesma mensagem pra mesma cliente.\n\n🤫 Última mensagem: 7+ ou 15+ dias mostra só quem está em SILÊNCIO há esse tempo (nenhuma mensagem enviada ou recebida no período) — quem teve conversa recente fica de fora, pra não incomodar.\n\nEscolha os filtros e clique em 🔍 Buscar clientes pra montar a lista. Os dois combinam entre si e com os outros filtros. Com o público na tela, é só selecionar os cards e usar o disparo em massa.')}
               title="O que fazem esses filtros?"
               style={{ width: 22, height: 22, borderRadius: 999, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, cursor: 'pointer', fontSize: fz(12), fontWeight: 800, lineHeight: 1 }}>?</button>
           </div>
