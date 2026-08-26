@@ -2117,8 +2117,9 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
   // ja liquido -10%). Sobrepoe no dia 1 e zera os outros dias pra nao duplicar
   // no total. Os lancamentos manuais (Silva Teles/Bom Retiro) ficam intactos —
   // nunca gravamos marketplaces no payload por aqui. Ailson 01/06/2026.
+  const mktTravado=Object.values(receitasBase||{}).some(d=>d?.mkt_travado==="1");
   const receitas=(()=>{
-    if(mktMensal==null)return receitasBase;
+    if(mktMensal==null||mktTravado)return receitasBase;   // travado: valor manual manda
     const out={};
     for(const k of Object.keys(receitasBase))out[k]={...receitasBase[k],marketplaces:""};
     out[1]={...(receitasBase[1]||{}),marketplaces:String(mktMensal)};
@@ -2195,7 +2196,14 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
   // 26/08 (pedido dele: jan-mar vieram errados do Bling e nao dava pra
   // corrigir): Marketplaces virou EDITAVEL. O preenchimento automatico do
   // Bling continua igual — o que for digitado a mao sobrescreve o dia.
-  const salvarCelula=(dia,canal,val)=>{setReceitas(prev=>({...prev,[dia]:{...(prev[dia]||{}),[canal]:val}}));};
+  const salvarCelula=(dia,canal,val)=>{setReceitas(prev=>{
+    const base={...prev,[dia]:{...(prev[dia]||{}),[canal]:val}};
+    // 26/08 (pedido dele): editar Marketplaces a mao TRAVA o mes — o
+    // preenchimento automatico do Bling passa a respeitar o valor digitado
+    // (senao a proxima rodada apagaria a correcao dos meses fechados).
+    if(canal==="marketplaces")base[dia]={...base[dia],mkt_travado:"1"};
+    return base;
+  });};
   const updateLinhaAux=(cat,idx,field,val)=>setAuxData(prev=>{
     const l=[...(prev[cat]||[])];const oldVal=l[idx]?.[field];l[idx]={...l[idx],[field]:val};
     // Auto-date for fixed categories when valor is entered
@@ -2305,7 +2313,14 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
         <div style={{background:"#fff",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none",overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"48px 1fr 1fr 1fr",background:"#4a7fa5",position:"sticky",top:0,zIndex:2}}>
             <div/>
-            {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"8px 10px",fontSize:10,color:"#fff",letterSpacing:0.5,textTransform:"uppercase",fontWeight:700,borderLeft:"1px solid rgba(255,255,255,0.25)"}}>{h}</div>))}
+            {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"8px 10px",fontSize:10,color:"#fff",letterSpacing:0.5,textTransform:"uppercase",fontWeight:700,borderLeft:"1px solid rgba(255,255,255,0.25)",display:"flex",alignItems:"center",gap:6}}>
+              {h}
+              {h==="Marketplaces"&&mktTravado&&(
+                <span onClick={()=>{if(window.confirm("Destravar Marketplaces deste mês?\n\nO valor volta a ser preenchido automaticamente pela soma do Bling e a sua edição manual será substituída na próxima atualização."))setReceitas(prev=>{const o={};for(const k of Object.keys(prev)){const{mkt_travado,...resto}=prev[k]||{};o[k]=resto;}return o;});}}
+                  title="Valor editado à mão — o Bling não sobrescreve. Clique pra destravar."
+                  style={{cursor:"pointer",fontSize:9,background:"rgba(255,255,255,0.9)",color:"#4a7fa5",borderRadius:8,padding:"1px 6px",letterSpacing:0,textTransform:"none",fontWeight:700}}>🔒 manual</span>
+              )}
+            </div>))}
           </div>
           <div style={{minHeight:300,maxHeight:792,overflowY:"auto"}} >
             {Array.from({length:31},(_,i)=>i+1).map(dia=>{
@@ -6768,6 +6783,8 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
 
       // Lançar valor acumulado do mês em Marketplaces (célula do dia 1)
       setReceitasMes(mesAlvo,prev=>{
+        // 26/08: mes com Marketplaces editado a mao nao e sobrescrito
+        if(Object.values(prev||{}).some(d=>d?.mkt_travado==="1"))return prev;
         const limpo={...prev};
         // Limpar marketplaces de outros dias pra não duplicar
         for(const k of Object.keys(limpo)){
@@ -11972,6 +11989,7 @@ export default function App(){
             setReceitasPorMes(prev=>{
               const m=prev[MES_ATUAL]||{};
               const novo=String(liquido);
+              if(Object.values(m).some(d=>d?.mkt_travado==="1"))return prev;   // editado a mao
               if(String(m[1]?.marketplaces??"")===novo)return prev;
               console.log(`BLING: R$ ${liquido.toLocaleString("pt-BR")} atualizado em Lançamentos (silencioso)`);
               return{...prev,[MES_ATUAL]:{...m,[1]:{...(m[1]||{}),marketplaces:novo}}};
