@@ -401,6 +401,7 @@ export default async function handler(req, res) {
         // sozinho ao emitir) — pendencia REAL. O que tira da fila e a DANFE
         // emitida (6), que so acontece quando a nota sai pelo painel.
         if (p.nf_situacao === 6) continue;
+        if (p.print_estado === 'AGUARDA_LOGISTICA' && p.canal_geral !== 'Mercado Livre') { c.aguardando_log = (c.aguardando_log || 0) + 1; continue; }
         if (p.print_regra === 'MELI_FLEX' || p.ml_logistic_type === 'self_service') c.flex++;
         else { c.nf_transporte++; if (q.debug_cont === '1') (c._quem = c._quem || []).push(`${p.numero}·${p.conta}·${p.canal_geral}·${String(p.data_pedido).slice(0, 10)}·estado:${p.print_estado || '-'}·sit:${p.nf_situacao ?? '-'}`); }
       }
@@ -419,7 +420,7 @@ export default async function handler(req, res) {
       const links = {};
       const grupos = {};
       const dlNossoPrev = await setDownloadNosso(supabase, peds);
-      let prontas = 0, jaImpressas = 0, semEtiqueta = 0;
+      let prontas = 0, jaImpressas = 0, semEtiqueta = 0, aguardaLog = 0;
       for (const p of peds) {
         const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
         grupos[k] = grupos[k] || { loc: p.loc, ref: p.ref, empresa: q.por_empresa === '1' ? p.conta : null, pedidos: 0, prontas: 0, impressas: 0, contas: new Set(), canais: new Set() };
@@ -463,7 +464,12 @@ export default async function handler(req, res) {
           // 22/08 (regra dele): Meluni e VISUAL — NF e logistica saem pela
           // Frenet, fora do Bling. Conta o pedido EM ABERTO; atendido some.
           ? (p.situacao_bling !== 9 && (grupos[k].prontas++, prontas++, true))
-          : ((sit === 5 || p.print_estado === 'PRONTO') && p.ml_ship_status !== 'cancelled' && (grupos[k].prontas++, prontas++, true))) { /* contado acima */ }
+          : (p.print_estado === 'AGUARDA_LOGISTICA' && p.canal_geral !== 'Mercado Livre' && sit === 5 && p.ml_ship_status !== 'cancelled')
+            // 26/08 (critica dele: "se nao estava preparada nem devia entrar no
+            // lote"): sem link liberado pelo Bling nao ha o que imprimir — sai
+            // dos grupos e vira o aviso proprio "aguardando logistica"
+            ? (aguardaLog++, grupos[k].pedidos--, true)
+            : ((sit === 5 || p.print_estado === 'PRONTO') && p.ml_ship_status !== 'cancelled' && (grupos[k].prontas++, prontas++, true))) { /* contado acima */ }
         else if (ehFlexLinha) { grupos[k].pedidos--; }   // Flex não tem nota
         else if (p.print_etiqueta === false || p.status_wms === 'finalizado') {
           // 17/08 (ordem dele): Flex/Meluni sem NF e pedido já finalizado NÃO
@@ -477,6 +483,7 @@ export default async function handler(req, res) {
         sincronizado_em: ultimaChecagem,
         total_pedidos: peds.length,
         prontas,
+        aguardando_logistica: aguardaLog,
         ja_impressas: jaImpressas,
         aguardando: semEtiqueta,
         // 22/08 (ele apontou 0/2 e 0/0 na lista): grupo SEM pronta e SEM
@@ -678,8 +685,19 @@ export default async function handler(req, res) {
       // 26/08 (teste dele: "NF normal reduzida" nao serve): a nota agendada
       // sai na TERMICA como DANFE RICA, com o ENVIAR dd/mm em destaque no
       // topo. So a nota — a etiqueta fica pro dia, em Etiquetas liberadas.
-      const peds = await pedidosFiltrados(q);
-      const alvoAg = peds.filter(p => !!p.nf_id && !p.nf_agendada_impressa_em && !p.etiqueta_impressa_em && p.nf_situacao === 5);
+      // 26/08 (0/1 no teste): universo PROPRIO, com o MESMO gate da previa —
+      // buffered ainda sem data gravada tambem entra. Direto do banco.
+      const hojeAg = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+      const d20 = new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10);
+      let qAg = supabase.from('wms_pedidos')
+        .select('conta, pedido_id, numero, canal_geral, itens, data_pedido, nf_id, nf_situacao, ml_agendado_em, ml_ship_substatus, print_regra, nf_agendada_impressa_em, etiqueta_impressa_em, status_wms')
+        .or(`ml_agendado_em.gte.${hojeAg},ml_ship_substatus.eq.buffered,print_regra.eq.MELI_AGENDADO`)
+        .eq('nf_situacao', 5).not('nf_id', 'is', null)
+        .is('nf_agendada_impressa_em', null).is('etiqueta_impressa_em', null)
+        .neq('status_wms', 'cancelado').gte('data_pedido', d20).limit(200);
+      if (q.contas && q.contas !== 'todas') qAg = qAg.in('conta', String(q.contas).split(','));
+      const { data: pedsAg } = await qAg;
+      const alvoAg = (pedsAg || []).map(p => ({ ...p, ref: (p.itens?.[0]?.ref || p.itens?.[0]?.codigo || ''), loc: '' }));
       const blocos = []; const idsOk = []; const refsOk = [];
       let pos = 0;
       for (const p of alvoAg.slice(0, 15)) {
@@ -1067,8 +1085,10 @@ export default async function handler(req, res) {
       const alvo = [];
       const foraDoAlvo = [];
       const foraIds = [];
+      const aguardaLogZpl = [];
       for (const p of candidatosLote) {
         if (doMlZpl[String(p.pedido_id)] || guardados[String(p.pedido_id)] || links[String(p.pedido_id)]) alvo.push(p);
+        else if (p.print_estado === 'AGUARDA_LOGISTICA' && p.canal_geral !== 'Mercado Livre') aguardaLogZpl.push(`${p.numero} (${p.canal_geral})`);
         else { foraDoAlvo.push(p.numero); foraIds.push(p.pedido_id); }
       }
 
@@ -1273,7 +1293,7 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
           detalhe: { pares: idsOk.length, restantes, sem_danfe: semDanfe.length ? semDanfe : undefined, pedidos: idsOk },
         }).then?.(() => {}, () => {});
       }
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, restantes, ultimo_grupo: grupoAtual });
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, aguardando_logistica: aguardaLogZpl, restantes, ultimo_grupo: grupoAtual });
     }
 
     // ── marcar como impressas depois que a térmica confirmou

@@ -314,8 +314,9 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           return;
         }
         if (!jL.total && !totalGeral) {
-          const se = jL.sem_etiqueta || []; const sd = jL.sem_danfe || [];
-          if (se.length || sd.length) throw new Error(`Nada saiu: ${se.length ? `${se.length} pedido(s) sem etiqueta disponível ainda (${se.slice(0, 5).join(', ')}${se.length > 5 ? '…' : ''})` : ''}${se.length && sd.length ? ' · ' : ''}${sd.length ? `${sd.length} sem DANFE (${sd.slice(0, 5).join(', ')}${sd.length > 5 ? '…' : ''})` : ''}. Shopee: o Bling libera o link depois de arranjar a coleta. Roda Preparar agora e tenta de novo.`);
+          const se = jL.sem_etiqueta || []; const sd = jL.sem_danfe || []; const ag = jL.aguardando_logistica || [];
+          if (se.length || sd.length) throw new Error(`Nada saiu: ${se.length ? `${se.length} pedido(s) sem etiqueta disponível ainda (${se.slice(0, 5).join(', ')}${se.length > 5 ? '…' : ''})` : ''}${se.length && sd.length ? ' · ' : ''}${sd.length ? `${sd.length} sem DANFE (${sd.slice(0, 5).join(', ')}${sd.length > 5 ? '…' : ''})` : ''}.`);
+          if (ag.length) throw new Error(`⏳ Nada pra imprimir agora: ${ag.length} pedido(s) aguardando o Bling liberar a etiqueta (${ag.slice(0, 4).join(', ')}${ag.length > 4 ? '…' : ''}). Não é falha — a etiqueta entra sozinha quando a transportadora arranjar a coleta.`);
           throw new Error('Nenhuma etiqueta pronta nesses filtros.');
         }
         if (!jL.total) break;
@@ -346,6 +347,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           await fetch(`${API}/wms-etiquetas?${qs({ marcar: '1', ids: jL.ids.slice(i, i + 30).join(',') })}`);
         }
         sepCont = jL.ultimo_grupo || sepCont;
+        if (jL.aguardando_logistica?.length) setLote(prev => prev ? { ...prev, aguardando: [...new Set([...(prev.aguardando || []), ...jL.aguardando_logistica])] } : prev);
         totalGeral += jL.total;
         if (jL.refs?.length) setLote(lt => {
           if (!lt) return lt;
@@ -664,11 +666,16 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.55)', zIndex: 100001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(2px)' }}>
           <div style={{ background: '#fff', borderRadius: 14, width: 460, maxWidth: '94vw', maxHeight: '84vh', display: 'flex', flexDirection: 'column', boxShadow: '0 14px 48px rgba(0,0,0,0.3)', fontFamily: FONT, overflow: 'hidden' }}>
             <div style={{ padding: '14px 18px', borderBottom: `1px solid ${palette.beigeSoft}`, background: '#f7f4f0' }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: palette.ink }}>{lote.rodando ? '🖨 Imprimindo o lote…' : lote.erro ? '⚠ Lote interrompido' : '✅ Lote concluído'}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: palette.ink }}>{lote.rodando ? '🖨 Imprimindo o lote…' : lote.erro ? '⚠ Lote interrompido' : (lote.grupos.some(g => g.feitas < g.qtd) ? '⚠ Lote com pendências' : '✅ Lote concluído')}</div>
               <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 2 }}>{lote.enviadas} etiqueta(s) enviadas · cada referência ganha o ✓ quando termina</div>
             </div>
             <div style={{ overflowY: 'auto', padding: '8px 14px', flex: 1 }}>
-              {lote.grupos.map(g => {
+              {!lote.rodando && lote.grupos.some(g => g.feitas < g.qtd) && (
+                <div style={{ fontSize: 12, color: '#8a5a00', background: '#fdf3e0', border: '1px solid #f0ddb8', borderRadius: 8, padding: '8px 10px', margin: '6px 0 4px' }}>
+                  ✗ As referências <b>sem o ✓</b> (no topo) tiveram pedidos que não saíram — confere na lista o que faltou antes de fechar.
+                </div>
+              )}
+              {[...lote.grupos].sort((a, b) => (lote.rodando ? 0 : ((a.feitas >= a.qtd) - (b.feitas >= b.qtd)))).map(g => {
                 const feito = g.feitas >= g.qtd && g.qtd > 0;
                 return (
                   <div key={g.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: `1px solid ${palette.beigeSoft}` }}>
@@ -679,6 +686,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
                 );
               })}
               {lote.erro && <div style={{ fontSize: 12, color: '#c0392b', padding: '10px 4px' }}>⚠ {lote.erro}</div>}
+              {!!(lote.aguardando?.length) && (
+                <div style={{ fontSize: 12, color: '#6a5a20', background: '#fbf7ea', border: '1px solid #ece2c2', borderRadius: 8, padding: '8px 10px', marginTop: 8 }}>
+                  ⏳ <b>{lote.aguardando.length} pedido(s) aguardando logística</b> — o Bling ainda não liberou a etiqueta ({lote.aguardando.slice(0, 4).join(', ')}{lote.aguardando.length > 4 ? '…' : ''}). Não é falha de impressão: entram sozinhos quando a transportadora arranjar a coleta. Não entraram neste lote.
+                </div>
+              )}
             </div>
             <div style={{ padding: '12px 16px', borderTop: `1px solid ${palette.beigeSoft}` }}>
               <button onClick={() => setLote(null)} disabled={lote.rodando}
