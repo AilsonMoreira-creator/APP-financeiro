@@ -107,9 +107,14 @@ export async function etiquetasDoMl(lista, conta) {
         const { unzipSync } = await import('fflate');
         const z = unzipSync(bytes);
         for (const nome of Object.keys(z)) {
-          const conteudo = Buffer.from(z[nome]).toString('utf8');
+          const arq = Buffer.from(z[nome]).toString('utf8');
           const sidNoNome = (String(nome).match(/(\d{6,})/) || [])[1];
-          textos.push({ sid: sidNoNome, conteudo });
+          // 26/08 (caso 155915: um ARQUIVO trouxe o lote inteiro — 11 blocos
+          // ^XA — e foi atribuido a UM pedido, que reimprimiu as etiquetas de
+          // todo mundo): a unidade de pareamento e o BLOCO, nunca o arquivo.
+          // O sid do nome so vale quando o arquivo tem um unico bloco.
+          const blocosArq = arq.split(/(?=\^XA)/).filter(x => x.trim().startsWith('^XA'));
+          for (const b of blocosArq) textos.push({ sid: blocosArq.length === 1 ? sidNoNome : null, conteudo: b });
         }
       } else {
         const txt = Buffer.from(bytes).toString('utf8');
@@ -124,7 +129,11 @@ export async function etiquetasDoMl(lista, conta) {
         let sid = (t.sid && shipDe[t.sid]) ? t.sid : null;
         if (!sid && t.conteudo) sid = fatia.find(s => t.conteudo.includes(String(s))) || null;
         const pedido = sid ? shipDe[sid] : null;
-        if (pedido && t.conteudo) out[String(pedido)] = { formato: 'ZPL', conteudo: t.conteudo, bytes: t.conteudo.length };
+        if (pedido && t.conteudo) {
+          const ja = out[String(pedido)];
+          const conteudo = (ja && ja.formato === 'ZPL') ? ja.conteudo + t.conteudo : t.conteudo;
+          out[String(pedido)] = { formato: 'ZPL', conteudo, bytes: conteudo.length };
+        }
       });
     } catch { /* segue */ }
     // 25/08 (protecao pedida por ele: NUNCA mais etiqueta esticada por PDF sem

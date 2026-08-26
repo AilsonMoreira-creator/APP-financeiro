@@ -1175,7 +1175,18 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
               } catch { /* degrada pro casado inteiro */ }
             }
             if (!ricaFeita) {
-              // documento casado normalizado: DANFE já embutida, tudo 10x15 em pé
+              // 26/08 (modo seco pegou etiqueta_pdf saindo SOZINHA): casada de
+              // qualquer canal tambem ganha a RICA na frente — a mini embutida
+              // fica (redundante e inofensiva), mas o PAR existe. Rica
+              // indisponivel = casada inteira, como sempre foi.
+              try {
+                const dResC = await buscarDanfe(p);
+                if (dResC?.formato === 'ZPL') {
+                  posPar++;
+                  const campoParC = `^FO18,1176^A0N,22,22^FDPAR ${posPar}/${candidatosLote.length}^FS`;
+                  blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: String(dResC.conteudo).replace('^XZ', campoParC + '^XZ') });
+                }
+              } catch { /* casada inteira */ }
               blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: norm.pdf });
               emPdf.push(p.numero); parFeito = true;
             }
