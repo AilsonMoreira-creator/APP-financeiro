@@ -139,10 +139,12 @@ export default async function handler(req, res) {
         // ainda receber uma resposta.
       }
 
-      // Claim: zera responder_em ANTES de processar pra reduzir janela de
-      // sobreposicao entre runs. Idempotencia real fica por conta do guard de
-      // sugestao pendente dentro do processarConversa.
-      await zerarResponderEm(c.id);
+      // 26/08 (caso Luciana, mensagens 2x com 4s de diferenca): o claim
+      // virou ATOMICO — o update condicional so afeta a linha se responder_em
+      // AINDA estiver preenchido; a execucao paralela encontra null, afeta 0
+      // linhas e PULA a conversa. Fim da corrida entre runs sobrepostos.
+      const ganhou = await claimAtomico(c.id);
+      if (!ganhou) { pulados.push({ id: c.id, motivo: 'claim_perdido_para_run_paralelo' }); continue; }
 
       try {
         const r = await processarConversa(c.id);
@@ -228,10 +230,13 @@ export default async function handler(req, res) {
   }
 }
 
-async function zerarResponderEm(conversaId) {
-  const { error } = await supabase
+async function claimAtomico(conversaId) {
+  const { data, error } = await supabase
     .from('lojas_whats_conversas')
     .update({ responder_em: null })
-    .eq('id', conversaId);
-  if (error) logErro('cron-responder/zerar', error);
+    .eq('id', conversaId)
+    .not('responder_em', 'is', null)
+    .select('id');
+  if (error) { logErro('cron-responder/claim', error); return false; }
+  return (data || []).length > 0;
 }
