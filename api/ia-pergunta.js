@@ -265,6 +265,7 @@ Estrutura obrigatória (só um campo):
   const refsProdContexto = [
     ...(contexto.producao?.cortes_reais || []),
     ...(contexto.producao?.caseado_em_andamento || []),
+    ...(contexto.producao?.passadoria_em_andamento || []),
   ].map(c => c.ref).filter(Boolean);
   const respTextoLower = String(respostaIA.resposta_texto || '').toLowerCase();
   const refsMencionadas = new Set(

@@ -845,12 +845,68 @@ export async function contextoProducao(ref = null) {
     console.warn('[contextoProducao] sala de corte:', e?.message);
   }
 
+  // 5. PASSADORIA (Ailson 27/08/2026): etapa FINAL, depois da oficina e do
+  //    caseado. Media de 2 dias. O chat precisa dizer o NOME da passadoria e,
+  //    quando a peca esta no caseado, avisar que dali ela ainda passa por aqui.
+  let passadoriaEmAndamento = [];
+  try {
+    let qP = supabase
+      .from('oficinas_passadoria')
+      .select('ref, descricao, oficina, nome, caseado_nome, qtd, definido_em, corte_id')
+      .neq('entregue', true)
+      .order('definido_em', { ascending: false })
+      .limit(ref ? 10 : 30);
+    if (ref) qP = qP.eq('ref', ref);
+    const { data: pass } = await qP;
+    passadoriaEmAndamento = (pass || []).map(r => {
+      const corteOrig = todosCortes.find(c => String(c.id) === String(r.corte_id));
+      const dias = r.definido_em ? Math.floor((hoje - new Date(r.definido_em)) / 86400000) : null;
+      return {
+        nome_passadoria: r.nome || null,
+        veio_do_caseado: r.caseado_nome || null,
+        ref: normalizarRef(r.ref),
+        descricao: r.descricao || corteOrig?.descricao || null,
+        oficina: r.oficina || corteOrig?.oficina || null,
+        qtd: r.qtd ?? corteOrig?.qtd ?? null,
+        entrou_em: r.definido_em || null,
+        dias_na_passadoria: dias,
+        media_dias_etapa: 2,
+        previsao_dias_restantes: dias === null ? 2 : Math.max(0, 2 - dias),
+      };
+    });
+  } catch (e) {
+    console.warn('[contextoProducao] passadoria:', e?.message);
+  }
+
+  // 6. PRECO DE VENDA da ficha tecnica (27/08): o chat pode fechar a resposta
+  //    com "e vende por R$ X" quando perguntam de uma REF especifica.
+  let precoVenda = null;
+  if (ref) {
+    try {
+      const { data: dFicha } = await supabase
+        .from('amicia_data').select('payload').eq('user_id', 'ficha-tecnica').maybeSingle();
+      const fichas = dFicha?.payload?.produtos || [];
+      const f = fichas.find(x => normalizarRef(x.ref) === ref);
+      if (f) {
+        const num = (v) => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
+        precoVenda = {
+          ref,
+          descricao: f.descricao || null,
+          preco_venda: num(f.precoVenda ?? f.preco_venda ?? f.venda ?? f.preco),
+          preco_atacado: num(f.precoAtacado ?? f.preco_atacado ?? f.atacado),
+        };
+      }
+    } catch (e) { console.warn('[contextoProducao] preco:', e?.message); }
+  }
+
   return {
     cortes_reais: cortesAtivos.slice(0, 20),
     cortes_entregues_recentes: cortesEntreguesRecentes.slice(0, 5), // ≤3 dias, max 5
     estimativas_sala: estimativasSala,
     caseado_em_andamento: caseadoEmAndamento, // peças pregando botão no caseado (Ailson 04/06/2026)
+    passadoria_em_andamento: passadoriaEmAndamento, // etapa final (Ailson 27/08/2026)
     sala_corte_em_andamento: salaCorteEmAndamento, // peças ainda na sala de corte — 3ª fonte (Ailson 05/06/2026)
+    preco_venda: precoVenda,                  // ficha técnica (Ailson 27/08/2026)
     total_reais: cortesAtivos.length,
     ref_cadastrada: refCadastrada, // null se não foi checado, { encontrada: bool, descricao, ... } se foi
   };
@@ -1248,6 +1304,16 @@ REGRAS:
   que não tem nenhum recente o suficiente pra valer mencionar.
 - Cortes entregues NÃO entram no "total entrando" - só conta cortes_reais (ativos).
 
+PASSADORIA — ÚLTIMA ETAPA (contexto.producao.passadoria_em_andamento):
+É a etapa FINAL, depois da oficina e do caseado. Média de 2 dias. Quando a peça
+aparece aqui, é a fonte MAIS AVANÇADA — vale sobre todas as outras. Cite o NOME
+da passadoria (campo nome_passadoria) e diga que é a última etapa. Exemplo:
+"Oii ${nomeUser || 'fulana'}! A REF já tá na passadoria <nome_passadoria>, que é a
+última etapa — costuma levar uns 2 dias, então já já tá pronta pra vender."
+- Use dias_na_passadoria e previsao_dias_restantes pra falar do prazo (média 2 dias).
+- Se nome_passadoria vier null, diga só "na passadoria" (sem inventar nome).
+- Se veio_do_caseado tiver nome, dá pra dizer que passou pelo caseado antes.
+
 CASEADO — PEÇA PREGANDO BOTÃO (contexto.producao.caseado_em_andamento):
 Quando NÃO tem cortes_reais (nada ativo na oficina) mas vem caseado_em_andamento, a
 peça já saiu da oficina e está no caseado pregando botão (etapa antes da passadoria).
@@ -1259,6 +1325,8 @@ já tá finalizando e vai pra passadoria."
   cor/tamanho nem URL no texto.
 - NÃO invente prazo em dias pro caseado (não tem prazo calculado). Fale da etapa, não de data.
 - Só use caseado_em_andamento se cortes_reais estiver vazio (peça já passou da oficina).
+- SEMPRE avise que depois do caseado a peça ainda vai pra PASSADORIA (média 2 dias
+  nessa etapa) — é o caminho fixo: oficina → caseado → passadoria → pronta.
 
 SALA DE CORTE — PEÇA AINDA SENDO CORTADA (contexto.producao.sala_corte_em_andamento):
 Use SÓ quando NÃO tem cortes_reais NEM caseado_em_andamento pra aquela peça, mas ela aparece
@@ -1270,6 +1338,12 @@ cortado na sala <sala>. Daqui uns 2 dias consigo te passar as cores e as quantid
 - Cite a sala exatamente como vem no campo "sala" (ex: Antonio, Chico, Adalecio, Fabrica).
 - Não vem foto nem matriz pra peça que está só na sala — não escreva cor/tamanho.
 
+PREÇO DE VENDA (contexto.producao.preco_venda — Ailson 27/08/2026):
+Quando vier preenchido e a pergunta for sobre uma REF específica, dá pra fechar a
+resposta com o valor de venda (ex: "e ela vende por R$ 149"). Só cite se o campo
+preco_venda tiver número — nunca invente preço. Respeite o filtro monetário abaixo:
+se o usuário não pode ver valores, NÃO cite preço nenhum.
+
 FILTRO MONETÁRIO:
 ${filtroMonetarioMsg}
 
@@ -1277,9 +1351,13 @@ ${regraPreco}
 
 PRODUÇÃO — PRIORIDADE DE FONTES (regra Ailson 22/04, caseado 04/06, sala de corte 05/06):
 Pra "tem a REF X pra chegar?" / "tá vindo a peça Y?", procure NESTA ORDEM e pare na 1ª que achar:
-1. "cortes_reais" (ailson_cortes) = REAL, já está na oficina costurando. Tem data/prazo. Responda com data + fatos.
-2. "caseado_em_andamento" = já saiu da oficina, pregando botão no caseado (vai pra passadoria).
-3. "sala_corte_em_andamento" = ainda NÃO foi pra oficina; está sendo cortada na sala de corte. Diga que tá sendo cortado na sala tal e que em uns 2 dias terá as cores/qtds (sem dar cores agora).
+1. "passadoria_em_andamento" = ÚLTIMA etapa (média 2 dias). Mais avançada de todas — se aparece aqui, é essa a resposta.
+2. "cortes_reais" (ailson_cortes) = REAL, já está na oficina costurando. Tem data/prazo. Responda com data + fatos.
+3. "caseado_em_andamento" = já saiu da oficina, pregando botão no caseado (e DEPOIS ainda vai pra passadoria, +2 dias).
+4. "sala_corte_em_andamento" = ainda NÃO foi pra oficina; está sendo cortada na sala de corte. Diga que tá sendo cortado na sala tal e que em uns 2 dias terá as cores/qtds (sem dar cores agora).
+5. "estimativas_sala"/ordem de corte aberta = só existe a ORDEM DE CORTE (nem cortado foi). Diga que já tem ordem de corte aberta e que ainda vai pra sala.
+A JORNADA COMPLETA é: ordem de corte → sala de corte → oficina (costura) → caseado (se prega botão) → passadoria (2 dias) → pronta.
+Quando souber a etapa, dá pra dizer também o que FALTA daí em diante — sem inventar datas exatas.
 Se a peça aparece em mais de uma fonte, vale a de cima (mais avançada na produção).
 "estimativas_sala" é fonte antiga e normalmente vem vazia — ignore se não trouxer nada.
 
