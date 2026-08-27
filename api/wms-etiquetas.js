@@ -317,9 +317,6 @@ async function setDownloadNosso(supabase, peds) {
   return new Set((data || []).map(d => String(d.pedido_id)));
 }
 function impressoPainelMl(p, dlNosso) {
-  // 27/08: no FLEX o ML marca 'printed' sozinho ao preparar o envio — o sinal
-  // do painel nao vale aqui, so o nosso carimbo (senao o Flex some da fila).
-  if (p.print_regra === 'MELI_FLEX' || p.ml_logistic_type === 'self_service') return false;
   return p.ml_ship_substatus === 'printed' && !p.etiqueta_impressa_em && !dlNosso.has(String(p.pedido_id));
 }
 
