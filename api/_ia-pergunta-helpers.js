@@ -1112,6 +1112,46 @@ async function precosDaFicha(ficha, precosSalvos) {
   };
 }
 
+/**
+ * 27/08 (pedido dele): a equipe pergunta pelo NOME da peça ("a bata de linho"),
+ * não pela REF. Tenta casar o texto da pergunta com o título/descrição das
+ * fichas técnicas. Devolve { ref } quando tem UM candidato claro,
+ * { ambiguo: [...] } quando vários batem, ou null quando não achou — aí o chat
+ * pede a referência.
+ */
+export async function refPeloNome(pergunta) {
+  const texto = String(pergunta || '').toLowerCase();
+  if (!texto.trim()) return null;
+  const STOP = new Set(['tem', 'para', 'pra', 'quando', 'chega', 'chegou', 'onde', 'esta', 'está',
+    'como', 'qual', 'quanto', 'que', 'uma', 'meu', 'minha', 'dos', 'das', 'com', 'sem', 'ainda',
+    'peca', 'peça', 'modelo', 'ref', 'referencia', 'referência', 'produto', 'corte', 'oficina',
+    'vai', 'vem', 'ficar', 'pronto', 'pronta', 'novo', 'nova', 'sobre', 'fala', 'sabe']);
+  const palavras = texto.replace(/[?!.,;]/g, ' ').split(/\s+/)
+    .filter(w => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w));
+  if (!palavras.length) return null;
+
+  const { data } = await supabase.from('amicia_data').select('payload').eq('user_id', 'ficha-tecnica').maybeSingle();
+  const fichas = data?.payload?.produtos || [];
+  if (!fichas.length) return null;
+
+  const semAcento = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const alvos = palavras.map(semAcento);
+  const pontuadas = fichas.map(f => {
+    const titulo = semAcento(`${f.descricao || ''} ${f.titulo || ''} ${f.nome || ''}`);
+    if (!titulo.trim()) return null;
+    const acertos = alvos.filter(p => titulo.includes(p)).length;
+    return acertos ? { ref: normalizarRef(f.ref), descricao: f.descricao || f.titulo || f.nome, acertos } : null;
+  }).filter(Boolean).sort((a, b) => b.acertos - a.acertos);
+
+  if (!pontuadas.length) return null;
+  const melhor = pontuadas[0];
+  if (melhor.acertos < 2 && alvos.length >= 2) return { ambiguo: pontuadas.slice(0, 4) };  // fraco demais
+  const empatados = pontuadas.filter(p => p.acertos === melhor.acertos);
+  if (empatados.length > 1) return { ambiguo: empatados.slice(0, 4) };
+  return { ref: melhor.ref, descricao: melhor.descricao, casou_por: 'nome' };
+}
+
+
 export async function contextoFichaTecnica(refOuDesc) {
   // FIX 07/05/2026: estrutura real eh payload.produtos[], nao payload.fichas[]
   const { data } = await supabase
@@ -1337,6 +1377,16 @@ cortado na sala <sala>. Daqui uns 2 dias consigo te passar as cores e as quantid
 - NÃO informe cores nem quantidades dessa peça — ainda não temos, está só na sala.
 - Cite a sala exatamente como vem no campo "sala" (ex: Antonio, Chico, Adalecio, Fabrica).
 - Não vem foto nem matriz pra peça que está só na sala — não escreva cor/tamanho.
+
+PERGUNTA PELO NOME, SEM REF (contexto.ref_por_nome — Ailson 27/08/2026):
+A equipe costuma perguntar pelo nome ("tem a bata de linho pra chegar?").
+- Se ref_por_nome.ref veio preenchido, o sistema JÁ identificou a peça pelo título
+  da ficha técnica: responda normalmente e diga qual REF entendeu, pra ela conferir
+  (ex: "Entendi que é a REF 2277 — bata linho manga bufante, né?").
+- Se veio ref_por_nome.ambiguo (lista), diga as opções encontradas e peça pra ela
+  escolher (cite REF + descrição de cada uma, no máximo 4).
+- Se veio null e a pergunta não tinha REF, PEÇA A REFERÊNCIA de um jeito leve:
+  "Me passa a referência dessa peça que eu já te digo certinho 😊" — nunca chute.
 
 PREÇO DE VENDA (contexto.producao.preco_venda — Ailson 27/08/2026):
 Quando vier preenchido e a pergunta for sobre uma REF específica, dá pra fechar a

@@ -58,6 +58,7 @@ import {
   saudacaoBRT,
   nomeExibicao,
   resolverFotoUrl,
+  refPeloNome,
 } from './_ia-pergunta-helpers.js';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -113,7 +114,18 @@ export default async function handler(req, res) {
 
   // 4 — Classifica intenção
   const intent = classificarIntencao(pergunta);
-  const refFoco = intent.refs[0] || null; // primeira REF mencionada (se alguma)
+  let refFoco = intent.refs[0] || null; // primeira REF mencionada (se alguma)
+
+  // 27/08 (pedido dele): sem REF na pergunta, tenta identificar a peça pelo
+  // NOME, casando com o título das fichas técnicas. Achou uma → segue o fluxo
+  // normal com ela; achou várias → o chat pergunta qual; não achou → pede a REF.
+  let refPorNome = null;
+  if (!refFoco) {
+    try {
+      refPorNome = await refPeloNome(pergunta);
+      if (refPorNome?.ref) refFoco = refPorNome.ref;
+    } catch (e) { console.warn('[ia-pergunta] refPeloNome:', e?.message); }
+  }
 
   // 5 — Carrega contexto do(s) domínio(s)
   let contexto = {};
@@ -156,6 +168,7 @@ export default async function handler(req, res) {
   const nomeUser = nomeExibicao(user.usuario);
   const saudacao = saudacaoBRT();
 
+  if (refPorNome) contexto.ref_por_nome = refPorNome;
   const promptSistema = await buscarPromptSistema(user.admin, intent.categoria, {
     nomeUser, saudacao, primeiraDoDia,
   });
