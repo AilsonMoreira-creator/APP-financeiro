@@ -317,7 +317,9 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           const se = jL.sem_etiqueta || []; const sd = jL.sem_danfe || []; const ag = jL.aguardando_logistica || [];
           if (se.length || sd.length) throw new Error(`Nada saiu: ${se.length ? `${se.length} pedido(s) sem etiqueta disponível ainda (${se.slice(0, 5).join(', ')}${se.length > 5 ? '…' : ''})` : ''}${se.length && sd.length ? ' · ' : ''}${sd.length ? `${sd.length} sem DANFE (${sd.slice(0, 5).join(', ')}${sd.length > 5 ? '…' : ''})` : ''}.`);
           if (ag.length) throw new Error(`⏳ Nada pra imprimir agora: ${ag.length} pedido(s) aguardando o Bling liberar a etiqueta (${ag.slice(0, 4).join(', ')}${ag.length > 4 ? '…' : ''}). Não é falha — a etiqueta entra sozinha quando a transportadora arranjar a coleta.`);
-          throw new Error('Nenhuma etiqueta pronta nesses filtros.');
+          throw new Error(fTipo === 'nf_agendada'
+            ? 'Nenhuma nota agendada pendente: as notas dos envios programados já foram emitidas (ou ainda não têm nota). A etiqueta de cada um sai no dia, em "Etiquetas liberadas".'
+            : 'Nenhuma etiqueta pronta nesses filtros.');
         }
         if (!jL.total) break;
 

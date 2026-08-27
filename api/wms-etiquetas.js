@@ -159,7 +159,11 @@ async function pedidosFiltrados(q) {
     }
     if (tipo === 'etiqueta_liberada' && !etiquetaLiberada) continue;
     // nos demais tipos, o pedido agendado NÃO entra (a etiqueta nem existe)
-    if (['nf_transporte', 'flex'].includes(tipo) && agendadoFuturo) continue;
+    // 27/08 (relato dele: agendada vazando pro NF+transporte): programado
+    // recem-chegado ainda sem data gravada tambem fica de fora — o sinal
+    // oficial do ML (buffered) e a regra MELI_AGENDADO valem sozinhos.
+    if (['nf_transporte', 'flex'].includes(tipo)
+      && (agendadoFuturo || p.ml_ship_substatus === 'buffered' || p.print_regra === 'MELI_AGENDADO')) continue;
     if (loja !== 'todas' && canal !== loja) continue;
     if (limiteCorte && new Date(p.data_pedido).getTime() > limiteCorte) continue;
     const it0 = (p.itens || [])[0] || {};
@@ -313,6 +317,9 @@ async function setDownloadNosso(supabase, peds) {
   return new Set((data || []).map(d => String(d.pedido_id)));
 }
 function impressoPainelMl(p, dlNosso) {
+  // 27/08: no FLEX o ML marca 'printed' sozinho ao preparar o envio — o sinal
+  // do painel nao vale aqui, so o nosso carimbo (senao o Flex some da fila).
+  if (p.print_regra === 'MELI_FLEX' || p.ml_logistic_type === 'self_service') return false;
   return p.ml_ship_substatus === 'printed' && !p.etiqueta_impressa_em && !dlNosso.has(String(p.pedido_id));
 }
 

@@ -60,10 +60,15 @@ export function classificar(p, hojeBRT) {
   }
 
   if (flex) {
+    // 27/08 (relato dele: "o Flex nao pega todos"): no Flex o Bling vira
+    // ATENDIDO sozinho quando o ML muda o status do envio — e o pedido caia
+    // como "ja impresso" sem ninguem ter impresso nada. Vale a LEI dele:
+    // atendido nao e impresso. Aqui so o NOSSO carimbo tira da fila.
+    const saiuFlex = !!p.etiqueta_impressa_em;
     return {
       regra: 'MELI_FLEX', nf: false, etiqueta: true,
-      estado: saiu ? 'IMPRESSO' : 'PRONTO',
-      motivo: saiu ? 'já impresso' : 'Flex: só etiqueta',
+      estado: saiuFlex ? 'IMPRESSO' : 'PRONTO',
+      motivo: saiuFlex ? 'já impresso' : 'Flex: só etiqueta',
     };
   }
 
