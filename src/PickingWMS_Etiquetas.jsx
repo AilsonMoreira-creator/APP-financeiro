@@ -232,6 +232,15 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   };
 
   const imprimirTermica = async (reimp = false) => {
+    // 27/08 (pedido dele): contador zerado = nada a imprimir. O botao avisa em
+    // vez de abrir o modal de "lote interrompido".
+    if (!reimp && !selRefs.length && contadores?.[fTipo] === 0) {
+      setImprimindo(fTipo === 'nf_agendada'
+        ? '✓ Nenhuma nota agendada pendente agora — as dos programados já foram emitidas. A etiqueta sai no dia, em "Etiquetas liberadas".'
+        : '✓ Nenhuma etiqueta pendente nesses filtros agora.');
+      setTimeout(() => setImprimindo(''), 6000);
+      return;
+    }
     // 22/08 (desenho dele): o card tem DUPLA funcao —
     //   Imprimir   = so as PENDENTES (nao impressas nem no App nem no Bling)
     //   Reimprimir = TUDO dos grupos marcados (inclui App + Bling)
