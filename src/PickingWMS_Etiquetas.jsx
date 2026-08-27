@@ -91,6 +91,13 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     // rodar. Agora o preparo puxa a cadeia inteira: situação das notas →
     // classificação → busca das etiquetas.
     try {
+      // 27/08 (ele apontou: pedidos 156192/156208 nao apareciam): a cadeia
+      // comecava na NF e pulava a VARREDURA — pedido que o cron ainda nao
+      // trouxe do Bling nem existia no espelho, entao nao havia o que
+      // preparar e a fila saia incompleta sem avisar. Agora busca primeiro.
+      setPreparo({ rodando: true, msg: 'buscando pedidos novos no Bling…' });
+      await Promise.all(['exitus', 'lumia', 'muniam'].map(c =>
+        fetch(`${API}/wms-sync?conta=${c}`).catch(() => {})));
       await fetch(`${API}/wms-nf-sync?dias=2`);
       await fetch(`${API}/wms-classificar`);
     } catch { /* segue: o preparo ainda tenta o que dá */ }
