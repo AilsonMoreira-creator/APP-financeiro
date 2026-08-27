@@ -967,6 +967,25 @@ function _getSbUrl() {
 // cada render/scroll). null = já buscou e não achou. Ailson 14/07/2026.
 const _sofiaFotoCache = new Map();
 
+// 27/08 (auditoria de consumo do Supabase): a cascata de extensoes deste
+// componente disparou 301 MIL requisicoes em 2h — 99,9% resposta 400, porque
+// REF sem foto no bucket tentava ate 12 URLs A CADA RENDER, pra sempre.
+// Agora a decisao e LEMBRADA no aparelho: qual arquivo funcionou (vai direto
+// nele) e quais REFs nao tem foto (nem tenta, mostra o placeholder).
+const _FOTO_MEM_KEY = 'lojas_fotos_mem_v1';
+const _fotoMem = (() => {
+  try { return JSON.parse(localStorage.getItem(_FOTO_MEM_KEY) || '{}') || {}; } catch { return {}; }
+})();
+let _fotoMemTimer = null;
+function _salvarFotoMem() {
+  if (_fotoMemTimer) return;
+  _fotoMemTimer = setTimeout(() => {
+    _fotoMemTimer = null;
+    try { localStorage.setItem(_FOTO_MEM_KEY, JSON.stringify(_fotoMem)); } catch { /* cota */ }
+  }, 800);
+}
+function _fotoLembrar(ref, valor) { _fotoMem[ref] = valor; _salvarFotoMem(); }
+
 async function _buscarFotoSofia(refNorm) {
   if (_sofiaFotoCache.has(refNorm)) return _sofiaFotoCache.get(refNorm);
   try {
@@ -1031,7 +1050,10 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
 
   // Sequência de tentativas
   const cb = '?v=' + new Date().toISOString().slice(0, 10);
-  const urls = [norm + '.jpg', norm + '.png', norm + '.webp'];
+  const lembrado = _fotoMem[norm];   // nome do arquivo que funcionou, ou 'x' = sem foto
+  const urls = lembrado && lembrado !== 'x'
+    ? [lembrado, norm + '.jpg', norm + '.png', norm + '.webp']
+    : [norm + '.jpg', norm + '.png', norm + '.webp'];
   if (orig !== norm) urls.push(orig + '.jpg', orig + '.png', orig + '.webp');
   const pad4 = norm.padStart(4, '0');
   const pad5 = norm.padStart(5, '0');
@@ -1055,10 +1077,18 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
       // Esgotou 'produtos' e ainda não buscou na Sofia: busca e, se achar, o
       // setSofiaUrl re-renderiza e a img passa a apontar pra ela.
       buscarSofia();
+      _fotoLembrar(norm, 'x');   // sem foto no bucket: nao tenta mais
       e.target.style.display = 'none';
       const ph = e.target.nextSibling;
       if (ph) ph.style.display = 'flex';
     }
+  };
+
+  const onLoadOk = (e) => {
+    const cur = String(e.target.src || '');
+    if (!cur.includes('/produtos/')) return;               // foto da Sofia: nao entra aqui
+    const arq = cur.split('/produtos/')[1]?.split('?')[0];
+    if (arq && _fotoMem[norm] !== arq) _fotoLembrar(norm, arq);
   };
 
   const onClick = (e) => {
@@ -1067,7 +1097,9 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
   };
 
   // Se já resolvemos a foto da Sofia, começa direto por ela (evita piscar).
-  const primeiraUrl = sofiaUrl || (storageBase + urls[0] + cb);
+  // REF marcada como 'sem foto' e sem mídia da Sofia: nem chama o storage.
+  const semFoto = lembrado === 'x' && !sofiaUrl;
+  const primeiraUrl = sofiaUrl || (semFoto ? null : storageBase + urls[0] + cb);
 
   if (aspectRatio) {
     return (
@@ -1076,10 +1108,10 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
         overflow: 'hidden', borderRadius: 8,
         background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
       }}>
-        <img src={primeiraUrl} onError={onError} onClick={onClick}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: onZoom ? 'pointer' : 'default', display: 'block' }} />
+        {!semFoto && <img src={primeiraUrl} onError={onError} onLoad={onLoadOk} onClick={onClick}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: onZoom ? 'pointer' : 'default', display: 'block' }} />}
         <div style={{
-          display: 'none', width: '100%', height: '100%',
+          display: semFoto ? 'flex' : 'none', width: '100%', height: '100%',
           alignItems: 'center', justifyContent: 'center',
           color: '#c0b8b0', fontSize: fz(10), fontFamily: FONT, fontStyle: 'italic',
         }}>
@@ -1097,10 +1129,10 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
       background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
       flexShrink: 0, position: 'relative',
     }}>
-      <img src={primeiraUrl} onError={onError} onClick={onClick}
-        style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: onZoom ? 'pointer' : 'default', display: 'block' }} />
+      {!semFoto && <img src={primeiraUrl} onError={onError} onLoad={onLoadOk} onClick={onClick}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: onZoom ? 'pointer' : 'default', display: 'block' }} />}
       <div style={{
-        display: 'none', width: '100%', height: '100%',
+        display: semFoto ? 'flex' : 'none', width: '100%', height: '100%',
         alignItems: 'center', justifyContent: 'center',
         color: '#c0b8b0', fontSize: fz(9), fontFamily: FONT, fontStyle: 'italic',
         position: 'absolute', top: 0, left: 0,
