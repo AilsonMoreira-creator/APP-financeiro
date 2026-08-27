@@ -149,7 +149,9 @@ const CalcMetaAdsAmicia=({onVoltar,mobile})=>{
     return true;
   }).sort((a,b)=>b.gasto-a.gasto);
 
-  const totals=linhasFiltradas.reduce((acc,l)=>({
+  // 27/08 (pedido dele): a linha de TOTAL e o funil somam TODAS as campanhas
+  // do periodo — inclusive as pausadas que o filtro esconde da tabela.
+  const totals=linhas.reduce((acc,l)=>({
     gasto:acc.gasto+l.gasto,acessos:acc.acessos+l.acessos,compras:acc.compras+l.compras,
     vendas:acc.vendas+l.vendas,impressoes:acc.impressoes+l.impressoes,cliques:acc.cliques+l.cliques,carrinhos:acc.carrinhos+l.carrinhos,
   }),{gasto:0,acessos:0,compras:0,vendas:0,impressoes:0,cliques:0,carrinhos:0});
@@ -161,7 +163,6 @@ const CalcMetaAdsAmicia=({onVoltar,mobile})=>{
 
   // Totais período anterior (mesmas campanhas visíveis) pra Δ% do TOTAL
   const totalsAnt=Object.values(linhasAntMap)
-    .filter(l=>!ocultarPausadas||l.status==='ACTIVE')
     .reduce((acc,l)=>({gasto:acc.gasto+l.gasto,acessos:acc.acessos+l.acessos,compras:acc.compras+l.compras,cliques:acc.cliques+l.cliques,carrinhos:acc.carrinhos+l.carrinhos}),{gasto:0,acessos:0,compras:0,cliques:0,carrinhos:0});
   const totalCpcAnt=totalsAnt.acessos>0?totalsAnt.gasto/totalsAnt.acessos:0;
   const totalCpcLinkAnt=totalsAnt.cliques>0?totalsAnt.gasto/totalsAnt.cliques:0;
@@ -235,7 +236,7 @@ const CalcMetaAdsAmicia=({onVoltar,mobile})=>{
             <button onClick={onVoltar} style={{background:'#fff',border:'1px solid #e8e2da',borderRadius:8,padding:'7px 14px',cursor:'pointer',fontSize:13,color:'#4a7fa5',fontFamily:'Georgia,serif'}}>← Voltar</button>
             <div>
               <div style={{fontSize:10,color:'#a89f94',letterSpacing:2,textTransform:'uppercase'}}>Calculadora · Meta Ads</div>
-              <div style={{fontSize:mobile?18:22,fontWeight:700,color:'#2c3e50'}}>📈 Meta Ads Meluni</div>
+              <div style={{fontSize:mobile?18:22,fontWeight:700,color:'#2c3e50'}}>📈 Meta Ads Amícia</div>
             </div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -351,7 +352,7 @@ const CalcMetaAdsAmicia=({onVoltar,mobile})=>{
               <tfoot>
                 <tr style={{background:'#f7f4f0',borderTop:'2px solid #2c3e50'}}>
                   <td style={{padding:'10px 4px'}}></td>
-                  <td style={{...td,fontWeight:700}}>TOTAL ({linhasFiltradas.length})</td>
+                  <td style={{...td,fontWeight:700}}>TOTAL ({linhas.length}){linhas.length>linhasFiltradas.length&&<span style={{fontWeight:400,fontSize:10,color:'#8a9aa4'}}> · inclui {linhas.length-linhasFiltradas.length} oculta(s)</span>}</td>
                   {vis('gasto')&&cellNum(<b>R$ {fmtR(totals.gasto)}</b>,totalsAnt.gasto>0?delta(totals.gasto,totalsAnt.gasto,false):null)}
                   {vis('impressoes')&&cellNum(<b>{fmtI(totals.impressoes)}</b>)}
                   {vis('acessos')&&cellNum(<b>{fmtI(totals.acessos)}</b>,totalsAnt.acessos>0?delta(totals.acessos,totalsAnt.acessos,true):null)}
@@ -420,7 +421,7 @@ const CalcMetaAdsAmicia=({onVoltar,mobile})=>{
         </div>
 
         {/* Funil do período */}
-        {linhasFiltradas.length>0&&(()=>{
+        {linhas.length>0&&(()=>{
           const comprasReais=blingVendas?blingVendas.pedidos:totals.compras;       // CRM Sofia (fallback Meta se o CRM não carregou)
           const receitaReal=blingVendas?blingVendas.receita:totals.vendas;
           const etapas=[
