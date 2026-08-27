@@ -80,7 +80,9 @@ export default async function handler(req, res) {
           if (!ped?.id) continue;
 
           const lj = ped.loja || {};
-          const lojaNome = lj.descricao || lj.nome || '';
+          // 27/08 (auditoria): o DETALHE do Bling nao devolve o nome da loja
+          // (so o id) — sem isso a coluna ficava vazia. Cai pro canal detectado.
+          let lojaNome = lj.descricao || lj.nome || '';
           const canal = parseCanal(lojaNome, {
             lojaId: lj.id, intermediador: ped.intermediador,
             numeroPedidoLoja: ped.numeroPedidoLoja, contato: ped.contato,
@@ -97,8 +99,12 @@ export default async function handler(req, res) {
             });
           }
           const skusDistintos = new Set(itens.map(i => i.codigo || (i.ref + '|' + i.cor + '|' + i.tamanho))).size;
+          if (!lojaNome) lojaNome = canal.detalhe || canal.geral || '';
           const sitId = Number(ped.situacao?.id ?? ev.payload?.data?.situacao?.id ?? 0) || null;
           const statusInicial = sitId === 9 ? 'finalizado' : 'aberto';
+          // idem pro nome da situacao: o detalhe so traz o id
+          const NOMES_SIT = { 6: 'em aberto', 9: 'atendido', 12: 'cancelado', 15: 'verificado', 24: 'em andamento' };
+          const sitNome = ped.situacao?.nome ? String(ped.situacao.nome).toLowerCase() : (NOMES_SIT[sitId] || null);
 
           await supabase.from('wms_pedidos').upsert({
             status_wms: statusInicial,
@@ -107,7 +113,7 @@ export default async function handler(req, res) {
             numero_loja: ped.numeroLoja || ped.numeroPedidoLoja || null,
             servico_frete: ped.transporte?.volumes?.[0]?.servico || null,
             data_pedido: (ped.data || '').slice(0, 10) || null,
-            situacao_bling: sitId, situacao_nome: ped.situacao?.nome ? String(ped.situacao.nome).toLowerCase() : null,
+            situacao_bling: sitId, situacao_nome: sitNome,
             loja_nome: lojaNome || '', loja_id: lj.id || null,
             canal_geral: canal.geral, canal_detalhe: canal.detalhe,
             cliente_nome: ped.contato?.nome || '',
