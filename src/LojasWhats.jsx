@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 // Raio-X de Produtos do modulo Lojas — acessivel tambem pela Sofia (Ailson 01/08/2026)
 import RaioXProdutosLojas from './Lojas_Telas_Produtos.jsx';
+import CalcMetaAdsAmicia from './CalcMetaAdsAmicia.jsx';   // 27/08 (pedido dele): aba Marketing da Sofia
 import {
   supabase,
   palette, FONT,
@@ -530,6 +531,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
     { id: 'aprendizado', label: 'Aprendizado', icon: Brain },
     { id: 'midias',      label: 'Mídias',      icon: Paperclip },
     { id: 'pesquisa',    label: 'Pesquisa',    icon: FileText },
+    { id: 'marketing',   label: 'Marketing',   icon: TrendingUp },
     { id: 'clientes',    label: 'Clientes',    icon: Users, badge: clientesAbertos },
     { id: 'config',      label: 'Config',      icon: Settings },
     { id: 'produtos',    label: 'Produtos',    icon: Package },
@@ -585,6 +587,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       {activeTab === 'midias' && <MidiasTab refreshTick={refreshTick} />}
       {activeTab === 'pesquisa' && <PesquisaTab refreshTick={refreshTick} onAbrirChat={(id) => { setConversaParaAbrir(id); setActiveTab('conversas'); }} />}
       {activeTab === 'config' && <ConfigTab userId={userId} refreshTick={refreshTick} />}
+      {activeTab === 'marketing' && <CalcMetaAdsAmicia mobile={typeof window !== 'undefined' && window.innerWidth < 640} />}
       {activeTab === 'clientes' && <ClientesTab userId={userId} refreshTick={refreshTick} />}
       {activeTab === 'produtos' && <RaioXProdutosLojas userId={userId} />}
     </div>
