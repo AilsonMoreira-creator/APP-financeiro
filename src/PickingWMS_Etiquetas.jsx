@@ -95,14 +95,17 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       // comecava na NF e pulava a VARREDURA — pedido que o cron ainda nao
       // trouxe do Bling nem existia no espelho, entao nao havia o que
       // preparar e a fila saia incompleta sem avisar. Agora busca primeiro.
-      // 27/08: a varredura completa (5 dias x 3 contas) passa de 5 min e a
-      // tela parecia travada. Agora: janela curta (hoje+ontem, que e o que
-      // interessa pra impressao) e ESPERA CURTA — em 25s o preparo segue e a
-      // varredura termina sozinha por tras; o cron cobre o resto.
-      setPreparo({ rodando: true, msg: 'buscando pedidos novos no Bling…' });
-      const varredura = Promise.all(['exitus', 'lumia', 'muniam'].map(c =>
-        fetch(`${API}/wms-sync?conta=${c}&dias=2`).catch(() => {})));
-      await Promise.race([varredura, new Promise(r => setTimeout(r, 25000))]);
+      // 27/08 (webhooks do Bling no ar): a VARREDURA SAIU DA ABERTURA. Agora o
+      // Bling avisa cada pedido/nota na hora e o wms-webhook-pendentes completa
+      // o pedido novo em ate 2 min — o espelho ja chega pronto. Os crons
+      // (bling-cron 20/20min, wms-nf-sync) seguem como rede de seguranca; o
+      // botao "Preparar agora" continua podendo varrer sob demanda (auto=false).
+      if (!auto) {
+        setPreparo({ rodando: true, msg: 'buscando pedidos novos no Bling…' });
+        const varredura = Promise.all(['exitus', 'lumia', 'muniam'].map(c =>
+          fetch(`${API}/wms-sync?conta=${c}&dias=2`).catch(() => {})));
+        await Promise.race([varredura, new Promise(r => setTimeout(r, 25000))]);
+      }
       await fetch(`${API}/wms-nf-sync?dias=2`);
       await fetch(`${API}/wms-classificar`);
     } catch { /* segue: o preparo ainda tenta o que dá */ }
