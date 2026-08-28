@@ -95,9 +95,13 @@ export default async function handler(req, res) {
         // nao fila de separacao. Continua visivel no Detalhar Pedidos.
         const limiteVelho = new Date(Date.now() - 3 * 3600000 - 3 * 86400000).toISOString().slice(0, 10);
         const corteMs = new Date(corteHoje).getTime();
+        // 28/08 (regra dele): o Flex tem corte PROPRIO e FIXO às 12:30 — não
+        // acompanha o horário configurável da lista. Flex que entra depois
+        // disso é fila de amanhã.
+        const corteFlexMs = new Date(corteDeHoje('12:30')).getTime();
         const porConta = {};
         const porCanal = {};
-        const tot = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, em_separacao_flex: 0, em_separacao_meluni: 0, em_separacao_com_nf_prevista: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
+        const tot = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, em_separacao_flex: 0, em_separacao_meluni: 0, em_separacao_com_nf_prevista: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0, flex_abertos: 0 };
         // NF gerada = a situacao no Bling ja saiu de "em aberto" (hoje vira
         // atendido; no fluxo definitivo vira em andamento). Ailson 07/08/2026.
         const temNf = (nome) => { const n = normSitLocal(nome); return !!n && !n.includes('em aberto') && !n.includes('aberto'); };
@@ -127,6 +131,10 @@ export default async function handler(req, res) {
           const k = porCanal[r.canal_geral || 'Outros'] || (porCanal[r.canal_geral || 'Outros'] = { pendentes: 0, finalizados_hoje: 0 });
           if (r.status_wms === 'pendente') { c.aguardando++; tot.aguardando++; k.pendentes++; }
           else if (r.status_wms === 'aberto') {
+            // FLEX EM ABERTO (28/08): régua própria — corte fixo 12:30. O que
+            // entrou depois já é de amanhã e não entra na conta de hoje.
+            if (ehFlex(r) && (r.data_pedido || hoje) >= limiteVelho
+              && !(r.criado_em && new Date(r.criado_em).getTime() >= corteFlexMs)) tot.flex_abertos++;
             // entrou depois do corte -> fila de AMANHA (vira aberto sozinho na
             // virada do dia, quando o corte de "hoje" passa a ser o de amanha).
             // Ailson 09/08: pos-corte NAO entra nos avisos amarelos de prazo

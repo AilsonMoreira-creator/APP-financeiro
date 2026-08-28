@@ -165,8 +165,11 @@ export default async function handler(req, res) {
       l.innerHTML = '<span style="flex:1">' + txt + '</span><b class="' + classe + '">' + valor + '</b>';
       p.appendChild(l);
     }
-    linhaP('⏳ Aguardando mercadoria', n(t.aguardando), n(t.aguardando) ? 'ambar' : 'verde');
-    linhaP('⚡ Flex em separação', n(t.em_separacao_flex), 'azul');
+    // 28/08 (pedido dele): "Aguardando mercadoria" saiu; entrou Pedidos Full,
+    // com a MESMA regra do histórico (conta no dia em que o pedido entrou).
+    linhaP('📦 Pedidos Full', n((d.vendas_dia || {}).full), 'verde');
+    // Flex em ABERTO — corte próprio de 12:30, não o da lista.
+    linhaP('⚡ Flex em aberto', n(t.flex_abertos), n(t.flex_abertos) ? 'ambar' : 'verde');
     if (prev) linhaP('📄 NF faltando', Math.max(0, prev - comNf), (prev - comNf) ? 'ambar' : 'verde');
     // envios programados do ML Exitus (a etiqueta só libera no dia)
     linhaP('🗓 Agendados Mercado Livre', n(d.agendados_ml), n(d.agendados_ml) ? 'ambar' : 'verde');
@@ -209,7 +212,7 @@ export default async function handler(req, res) {
       var tot = c ? n(c.total) : 0;
       html += '<div class="dia' + (iso === hojeISO ? ' hoje' : '') + '">'
         + '<div class="d">' + d + '</div>'
-        + '<div class="t' + (tot ? ' verde' : '') + '">' + (tot || '·') + '</div>'
+        + '<div class="t">' + (tot || '·') + '</div>'
         + '</div>';
     }
     html += '</div>';
