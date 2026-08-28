@@ -338,7 +338,13 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           return;
         }
         if (!jL.total && !totalGeral) {
-          const se = jL.sem_etiqueta || []; const sd = jL.sem_danfe || []; const ag = jL.aguardando_logistica || [];
+          const se = jL.sem_etiqueta || []; const sd = jL.sem_danfe || []; const ag = jL.aguardando_logistica || []; const pg = jL.programados || [];
+          if (pg.length && !se.length && !sd.length) {
+            // 28/08: lote só com programados não é erro — a etiqueta do ML só
+            // libera no dia. O modal já lista os pedidos por conta.
+            setLote(prev => prev ? { ...prev, programados: [...(prev.programados || []), ...pg] } : prev);
+            break;
+          }
           if (se.length || sd.length) throw new Error(`Nada saiu: ${se.length ? `${se.length} pedido(s) sem etiqueta disponível ainda (${se.slice(0, 5).join(', ')}${se.length > 5 ? '…' : ''})` : ''}${se.length && sd.length ? ' · ' : ''}${sd.length ? `${sd.length} sem DANFE (${sd.slice(0, 5).join(', ')}${sd.length > 5 ? '…' : ''})` : ''}.`);
           if (ag.length) throw new Error(`⏳ Nada pra imprimir agora: ${ag.length} pedido(s) aguardando o Bling liberar a etiqueta (${ag.slice(0, 4).join(', ')}${ag.length > 4 ? '…' : ''}). Não é falha — a etiqueta entra sozinha quando a transportadora arranjar a coleta.`);
           throw new Error(fTipo === 'nf_agendada'
@@ -374,6 +380,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         }
         sepCont = jL.ultimo_grupo || sepCont;
         if (jL.aguardando_logistica?.length) setLote(prev => prev ? { ...prev, aguardando: [...new Set([...(prev.aguardando || []), ...jL.aguardando_logistica])] } : prev);
+        if (jL.programados?.length) setLote(prev => prev ? { ...prev, programados: [...(prev.programados || []), ...jL.programados.filter(np => !(prev.programados || []).some(op => op.numero === np.numero))] } : prev);
         totalGeral += jL.total;
         if (jL.refs?.length) setLote(lt => {
           if (!lt) return lt;
@@ -715,6 +722,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
               {!!(lote.aguardando?.length) && (
                 <div style={{ fontSize: 12, color: '#6a5a20', background: '#fbf7ea', border: '1px solid #ece2c2', borderRadius: 8, padding: '8px 10px', marginTop: 8 }}>
                   ⏳ <b>{lote.aguardando.length} pedido(s) aguardando logística</b> — o Bling ainda não liberou a etiqueta ({lote.aguardando.slice(0, 4).join(', ')}{lote.aguardando.length > 4 ? '…' : ''}). Não é falha de impressão: entram sozinhos quando a transportadora arranjar a coleta. Não entraram neste lote.
+                </div>
+              )}
+              {!!(lote.programados?.length) && (
+                <div style={{ fontSize: 12, color: '#2c3e50', background: '#eef3f8', border: '1px solid #cfe0ee', borderRadius: 8, padding: '8px 10px', marginTop: 8 }}>
+                  📅 <b>{lote.programados.length} pedido(s) com envio programado</b> — {Object.entries(lote.programados.reduce((a, p) => { a[p.conta || '—'] = (a[p.conta || '—'] || 0) + 1; return a; }, {})).map(([c, n]) => `${n} ${c}`).join(' · ')}. Não é falha: o Mercado Livre só libera a etiqueta no dia. Imprima a nota pelo filtro <b>Agendadas</b>. Pedidos: {lote.programados.map(p => p.numero + (p.agendado_em ? ` (${String(p.agendado_em).slice(8, 10)}/${String(p.agendado_em).slice(5, 7)})` : '')).join(', ')}.
                 </div>
               )}
             </div>

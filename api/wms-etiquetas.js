@@ -688,6 +688,173 @@ export default async function handler(req, res) {
       return res.status(200).send(Buffer.from(pdfBytes));
     }
 
+      // 28/08: estas definicoes VIVIAM dentro do bloco `if (q.zpl===1)`,
+      // que abre DEPOIS do bloco das agendadas. A chamada la em cima
+      // estourava ReferenceError e o catch vazio engolia — o botao
+      // Agendadas nunca imprimiu nada desde 26/08. Subiram pra ca.
+      const tk = {};
+      const pegarToken = async (c) => {
+        if (!(c in tk)) tk[c] = await refreshBlingToken(c).catch(() => null);
+        return tk[c];
+      };
+      const xmlCampo = (xml, tag) => {
+        const m = xml.match(new RegExp('<' + tag + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + tag + '>'));
+        return m ? m[1].trim() : '';
+      };
+      // 21/08 (achado da Sthefany): o painel entrega junto uma DANFE "mini"
+      // (so chave/protocolo, sem produtos) que a equipe DESCARTA. Aplicado
+      // SOMENTE no ZPL2 do MERCADO LIVRE (ordem dele 21/08: a Shopee ja sai
+      // certa pelo App — nao mexer no que esta validado). A nossa DANFE rica
+      // e gerada a parte e nunca passa por aqui.
+      const cortarMiniDanfe = (zpl) => {
+        if (!zpl || !/DANFE|Chave de acesso|Protocolo de Autoriza/i.test(zpl)) return zpl;
+        const blocos2 = String(zpl).match(/\^XA[\s\S]*?\^XZ/g);
+        if (!blocos2 || blocos2.length < 2) return zpl;   // bloco unico = etiqueta; nao mexe
+        const uteis = blocos2.filter(b2 => !/DANFE|Chave de acesso|Protocolo de Autoriza/i.test(b2));
+        return uteis.length ? uteis.join('\n') : zpl;    // nunca deixa o pedido sem etiqueta
+      };
+      const xmlItens = (xml) => {
+        const itens = [];
+        const re = /<det[^>]*>([\s\S]*?)<\/det>/g;
+        let m2;
+        while ((m2 = re.exec(xml)) && itens.length < 8) {
+          const det = m2[1];
+          const xp = xmlCampo(det, 'xProd');
+          // 21/08 (pedido dele): REF primeiro, cor e tamanho — o xProd do
+          // Bling traz "... (ref 02773) (H) Cor:PRETO;Tamanho:G2"
+          const ref2 = (xp.match(/ref[.\s]*0*(\d{3,5})/i) || [])[1] || null;
+          const cor2 = (xp.match(/Cor:\s*([^;<]+)/i) || [])[1]?.trim() || null;
+          const tam2 = (xp.match(/Tamanho:\s*([^;<\s]+)/i) || [])[1]?.trim() || null;
+          const descLimpa = xp.replace(/\(ref[^)]*\)/i, '').replace(/\(H\)/i, '').replace(/Cor:[^;<]+;?/i, '').replace(/Tamanho:[^;<\s]+/i, '').replace(/\s+-\s*$/, '').replace(/\s{2,}/g, ' ').trim();
+          itens.push({
+            desc: descLimpa || xp,
+            ref: ref2, cor: cor2, tam: tam2,
+            sku: xmlCampo(det, 'cProd'),
+            qtd: Math.round(parseFloat(xmlCampo(det, 'qCom') || '1')) || 1,
+          });
+        }
+        return itens;
+      };
+      const montarDanfeZpl = (info) => {
+        const esc = (t) => String(t || '').replace(/[\^~]/g, ' ').slice(0, 46);
+        const chaveFmt = (info.chave.match(/.{1,4}/g) || []).join(' ');
+        const dt = info.emissao ? info.emissao.slice(8, 10) + '/' + info.emissao.slice(5, 7) + '/' + info.emissao.slice(0, 4) : '';
+        const valor = info.valor ? Number(info.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
+        return '^XA^CI28^PW812^LL1218^LH0,0'
+          + '^FO30,30^A0N,34,34^FDDANFE SIMPLIFICADO - ETIQUETA^FS'
+          + '^FO30,72^A0N,24,24^FDNF-e Num ' + esc(info.numero) + '  Serie ' + esc(info.serie) + '  Emissao ' + dt + '^FS'
+          + '^FO30,106^GB752,2,2^FS'
+          + '^FO30,124^A0N,22,22^FDEMITENTE^FS'
+          + '^FO30,152^A0N,26,26^FD' + esc(info.emitNome) + '^FS'
+          + '^FO30,184^A0N,24,24^FDCNPJ ' + esc(info.emitCnpj) + '^FS'
+          + '^FO30,222^A0N,22,22^FDDESTINATARIO^FS'
+          + '^FO30,250^A0N,26,26^FD' + esc(info.destNome) + '^FS'
+          + (info.destDoc ? '^FO30,282^A0N,24,24^FDCPF/CNPJ ' + esc(info.destDoc) + '^FS' : '')
+          + '^FO30,320^GB752,2,2^FS'
+          + '^FO30,340^A0N,26,26^FDVALOR TOTAL  R$ ' + valor + '^FS'
+          + (info.protocolo ? '^FO30,376^A0N,22,22^FDProtocolo de autorizacao ' + esc(info.protocolo) + '^FS' : '')
+          + '^FO30,420^A0N,22,22^FDCHAVE DE ACESSO^FS'
+          + '^FO30,450^BY2,2.5,150^BCN,150,N,N,N^FD' + info.chave + '^FS'
+          + '^FO30,616^A0N,22,22^FD' + chaveFmt + '^FS'
+          + '^FO30,652^A0N,20,20^FDConsulta pela chave em www.nfe.fazenda.gov.br^FS'
+          + '^FO30,690^GB752,2,2^FS'
+          + '^FO30,706^A0N,22,22^FDPRODUTOS^FS'
+          + (info.itens || []).slice(0, 6).map((it, ix) => {
+            // REF primeiro (negrito maior), depois cor · tamanho · qtd, e a
+            // descricao curta embaixo — leitura de bancada em 1 segundo
+            const y = 736 + ix * 58;
+            const l1 = (it.ref ? 'REF ' + it.ref + '  ' : '') + (it.cor ? String(it.cor).toUpperCase() + '  ' : '') + (it.tam ? 'TAM ' + it.tam + '  ' : '') + it.qtd + ' pc';
+            const l2 = String(it.desc || '').slice(0, 44) + (!it.ref && it.sku ? ' (' + String(it.sku).slice(0, 14) + ')' : '');
+            return '^FO30,' + y + '^A0N,26,26^FD' + l1.replace(/[\^~]/g, ' ').slice(0, 46) + '^FS'
+              + '^FO30,' + (y + 28) + '^A0N,20,20^FD' + l2.replace(/[\^~]/g, ' ') + '^FS';
+          }).join('')
+          + ((info.itens || []).length > 6 ? '^FO30,' + (736 + 6 * 58) + '^A0N,20,20^FD... e mais ' + (info.itens.length - 6) + ' item(ns)^FS' : '')
+          // 22/08 (pedido dele): envio PROGRAMADO — a data de despacho na
+          // ULTIMA linha, centralizada, um pouco maior que a descricao e em
+          // negrito (ZPL nao tem bold: duas passadas com 1 dot de offset)
+          + (info.agendadoEm ? (() => {
+            const dAg = String(info.agendadoEm).slice(0, 10).split('-').reverse().join('/');
+            const tAg = 'ENVIAR ' + dAg;
+            return '^FO30,1150^FB752,1,0,C^A0N,28,28^FD' + tAg + '^FS'
+                 + '^FO31,1151^FB752,1,0,C^A0N,28,28^FD' + tAg + '^FS';
+          })() : '')
+          + '^XZ';
+      };
+      const buscarDanfe = async (p, cacheDanfe = {}) => {
+        const cache = cacheDanfe[String(p.pedido_id)] || null;
+        if (cache || !p.nf_id) return cache;
+        const tkC = await pegarToken(p.conta);
+        if (!tkC) return null;
+        try {
+          const hb2 = { Authorization: 'Bearer ' + tkC, Accept: 'application/json' };
+          const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${p.nf_id}`, hb2);
+          const nf = typeof nfR.json === 'function' ? await nfR.json().catch(() => ({})) : {};
+
+          // 1º caminho: XML da NFe → DANFE simplificada em ZPL
+          if (nf?.data?.xml) {
+            try {
+              const xr = await fetch(nf.data.xml);
+              if (xr.ok) {
+                const xml = await xr.text();
+                const chave = (xml.match(/Id="NFe(\d{44})"/) || [])[1] || String(nf?.data?.chaveAcesso || '').replace(/\D/g, '');
+                const emit = xmlCampo(xml, 'emit');
+                const dest = xmlCampo(xml, 'dest');
+                const prot = xmlCampo(xml, 'protNFe');
+                if (chave && chave.length === 44) {
+                  const zplDanfe = montarDanfeZpl({
+                    chave,
+                    numero: nf?.data?.numero || xmlCampo(xml, 'nNF'),
+                    serie: nf?.data?.serie ?? xmlCampo(xml, 'serie'),
+                    emissao: String(nf?.data?.dataEmissao || xmlCampo(xml, 'dhEmi') || ''),
+                    emitNome: xmlCampo(emit, 'xNome'),
+                    emitCnpj: xmlCampo(emit, 'CNPJ'),
+                    destNome: xmlCampo(dest, 'xNome'),
+                    destDoc: xmlCampo(dest, 'CPF') || xmlCampo(dest, 'CNPJ'),
+                    valor: nf?.data?.valorNota ?? xmlCampo(xml, 'vNF'),
+                    protocolo: xmlCampo(prot, 'nProt'),
+                    itens: xmlItens(xml),
+                    agendadoEm: p.ml_agendado_em || null,
+                  });
+                  await supabase.from('wms_documentos').upsert({
+                    pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'ZPL',
+                    conteudo: zplDanfe, bytes: zplDanfe.length, hash: hashDoc(zplDanfe), origem: 'xml-nfe', erro: null,
+                  }, { onConflict: 'pedido_id,tipo' });
+                  return { formato: 'ZPL', conteudo: zplDanfe };
+                }
+              }
+            } catch { /* cai pro PDF */ }
+          }
+
+          // 2º caminho (fallback): PDF do linkPDF, como antes
+          const link = nf?.data?.linkPDF || nf?.data?.linkDanfe;
+          if (!link) return null;
+          const acharPdf = async (u) => {
+            const r3 = await fetch(u, { headers: { Accept: 'application/pdf' } });
+            if (!r3.ok) return null;
+            return new Uint8Array(await r3.arrayBuffer());
+          };
+          let db = await acharPdf(link);
+          if (!db) return null;
+          if (db[0] === 0x3c) {
+            const html = Buffer.from(db).toString('utf8');
+            const m = html.match(/https?:\/\/[^"'<>\s]+\.pdf[^"'<>\s]*/i);
+            db = m ? await acharPdf(m[0]) : null;
+            if (!db) return null;
+          }
+          let iniPdf = -1;
+          for (let i2 = 0; i2 < Math.min(db.length - 3, 2048); i2++) {
+            if (db[i2] === 0x25 && db[i2 + 1] === 0x50 && db[i2 + 2] === 0x44 && db[i2 + 3] === 0x46) { iniPdf = i2; break; }
+          }
+          if (iniPdf < 0) return null;
+          const d64 = Buffer.from(iniPdf ? db.slice(iniPdf) : db).toString('base64');
+          await supabase.from('wms_documentos').upsert({
+            pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'PDF',
+            conteudo: d64, bytes: d64.length, hash: hashDoc(d64), origem: 'bling', erro: null,
+          }, { onConflict: 'pedido_id,tipo' });
+          return { formato: 'PDF', conteudo: d64 };
+        } catch { return null; }
+        finally { await new Promise(r2 => setTimeout(r2, 340)); }
+      };
     if (q.zpl === '1' && q.tipo === 'nf_agendada') {
       // 26/08 (teste dele: "NF normal reduzida" nao serve): a nota agendada
       // sai na TERMICA como DANFE RICA, com o ENVIAR dd/mm em destaque no
@@ -695,22 +862,31 @@ export default async function handler(req, res) {
       // 26/08 (0/1 no teste): universo PROPRIO, com o MESMO gate da previa —
       // buffered ainda sem data gravada tambem entra. Direto do banco.
       const hojeAg = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
-      const d20 = new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10);
+      // 28/08 (regra dele): agendado entra com no MAXIMO 3 dias — venda de
+      // sexta aparece como agendada na segunda. A janela de 20 dias era
+      // universo diferente do resto da tela.
+      const d3 = new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10);
       let qAg = supabase.from('wms_pedidos')
         .select('conta, pedido_id, numero, canal_geral, itens, data_pedido, nf_id, nf_situacao, ml_agendado_em, ml_ship_substatus, print_regra, nf_agendada_impressa_em, etiqueta_impressa_em, status_wms')
         .or(`ml_agendado_em.gte.${hojeAg},ml_ship_substatus.eq.buffered,print_regra.eq.MELI_AGENDADO`)
         .eq('nf_situacao', 5).not('nf_id', 'is', null)
         .is('nf_agendada_impressa_em', null).is('etiqueta_impressa_em', null)
-        .neq('status_wms', 'cancelado').gte('data_pedido', d20).limit(200);
+        .neq('status_wms', 'cancelado').gte('data_pedido', d3).limit(200);
       if (q.contas && q.contas !== 'todas') qAg = qAg.in('conta', String(q.contas).split(','));
       const { data: pedsAg } = await qAg;
       const alvoAg = (pedsAg || []).map(p => ({ ...p, ref: (p.itens?.[0]?.ref || p.itens?.[0]?.codigo || ''), loc: '' }));
-      const blocos = []; const idsOk = []; const refsOk = [];
+      const blocos = []; const idsOk = []; const refsOk = []; const semDanfeAg = [];
       let pos = 0;
       for (const p of alvoAg.slice(0, 15)) {
         try {
           const dRes = await buscarDanfe(p);
-          if (dRes?.formato !== 'ZPL') continue;
+          // 28/08: falha de leitura NAO pode virar "nao existe" (licao 3) —
+          // o catch vazio daqui escondia o ReferenceError do buscarDanfe e a
+          // tela dizia "nenhuma nota agendada pendente".
+          if (dRes?.formato !== 'ZPL') {
+            semDanfeAg.push(`${p.numero} (${dRes?.formato ? 'DANFE em ' + dRes.formato : 'sem DANFE no Bling'})`);
+            continue;
+          }
           pos++;
           const dt = p.ml_agendado_em ? `${String(p.ml_agendado_em).slice(8, 10)}/${String(p.ml_agendado_em).slice(5, 7)}` : '';
           const topo = dt ? `^FO0,6^FB812,1,0,C^A0N,54,54^FDENVIAR ${dt}^FS^FO120,66^GB572,4,4^FS` : '';
@@ -718,10 +894,10 @@ export default async function handler(req, res) {
           blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc,
             zpl: String(dRes.conteudo).replace('^XA', '^XA' + topo).replace('^XZ', rodape + '^XZ') });
           idsOk.push(p.pedido_id); refsOk.push(String(p.ref || ''));
-        } catch { /* proxima */ }
+        } catch (e) { semDanfeAg.push(`${p.numero} (${e?.message || 'erro'})`); }
       }
       const restAg = Math.max(0, alvoAg.length - idsOk.length);
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: [], sem_danfe: [], sem_etiqueta: [], restantes: restAg, ultimo_grupo: '' });
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: [], sem_danfe: semDanfeAg, sem_etiqueta: [], restantes: restAg, ultimo_grupo: '' });
     }
     if (q.zpl === '1') {
       // 22/08: MELUNI nunca imprime por aqui — etiqueta de logistica e da
@@ -740,11 +916,6 @@ export default async function handler(req, res) {
           .in('pedido_id', idsLote.slice(i, i + 300));
         (data || []).forEach(d => { if (d.conteudo) guardados[String(d.pedido_id)] = d; });
       }
-      const tk = {};
-      const pegarToken = async (c) => {
-        if (!(c in tk)) tk[c] = await refreshBlingToken(c).catch(() => null);
-        return tk[c];
-      };
       // a situação já vem pré-carregada no banco (cron wms-nf-sync)
       const sitDe = {};
       for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
@@ -928,164 +1099,6 @@ export default async function handler(req, res) {
       // rasterizar A4. Os dados vêm do XML da NFe (emitente, protocolo, tudo).
       // Fallback: se o XML falhar, o PDF do linkPDF sai como antes.
       // Retorna { formato:'ZPL'|'PDF', conteudo } ou null.
-      const xmlCampo = (xml, tag) => {
-        const m = xml.match(new RegExp('<' + tag + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + tag + '>'));
-        return m ? m[1].trim() : '';
-      };
-      // 21/08 (achado da Sthefany): o painel entrega junto uma DANFE "mini"
-      // (so chave/protocolo, sem produtos) que a equipe DESCARTA. Aplicado
-      // SOMENTE no ZPL2 do MERCADO LIVRE (ordem dele 21/08: a Shopee ja sai
-      // certa pelo App — nao mexer no que esta validado). A nossa DANFE rica
-      // e gerada a parte e nunca passa por aqui.
-      const cortarMiniDanfe = (zpl) => {
-        if (!zpl || !/DANFE|Chave de acesso|Protocolo de Autoriza/i.test(zpl)) return zpl;
-        const blocos2 = String(zpl).match(/\^XA[\s\S]*?\^XZ/g);
-        if (!blocos2 || blocos2.length < 2) return zpl;   // bloco unico = etiqueta; nao mexe
-        const uteis = blocos2.filter(b2 => !/DANFE|Chave de acesso|Protocolo de Autoriza/i.test(b2));
-        return uteis.length ? uteis.join('\n') : zpl;    // nunca deixa o pedido sem etiqueta
-      };
-      const xmlItens = (xml) => {
-        const itens = [];
-        const re = /<det[^>]*>([\s\S]*?)<\/det>/g;
-        let m2;
-        while ((m2 = re.exec(xml)) && itens.length < 8) {
-          const det = m2[1];
-          const xp = xmlCampo(det, 'xProd');
-          // 21/08 (pedido dele): REF primeiro, cor e tamanho — o xProd do
-          // Bling traz "... (ref 02773) (H) Cor:PRETO;Tamanho:G2"
-          const ref2 = (xp.match(/ref[.\s]*0*(\d{3,5})/i) || [])[1] || null;
-          const cor2 = (xp.match(/Cor:\s*([^;<]+)/i) || [])[1]?.trim() || null;
-          const tam2 = (xp.match(/Tamanho:\s*([^;<\s]+)/i) || [])[1]?.trim() || null;
-          const descLimpa = xp.replace(/\(ref[^)]*\)/i, '').replace(/\(H\)/i, '').replace(/Cor:[^;<]+;?/i, '').replace(/Tamanho:[^;<\s]+/i, '').replace(/\s+-\s*$/, '').replace(/\s{2,}/g, ' ').trim();
-          itens.push({
-            desc: descLimpa || xp,
-            ref: ref2, cor: cor2, tam: tam2,
-            sku: xmlCampo(det, 'cProd'),
-            qtd: Math.round(parseFloat(xmlCampo(det, 'qCom') || '1')) || 1,
-          });
-        }
-        return itens;
-      };
-      const montarDanfeZpl = (info) => {
-        const esc = (t) => String(t || '').replace(/[\^~]/g, ' ').slice(0, 46);
-        const chaveFmt = (info.chave.match(/.{1,4}/g) || []).join(' ');
-        const dt = info.emissao ? info.emissao.slice(8, 10) + '/' + info.emissao.slice(5, 7) + '/' + info.emissao.slice(0, 4) : '';
-        const valor = info.valor ? Number(info.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
-        return '^XA^CI28^PW812^LL1218^LH0,0'
-          + '^FO30,30^A0N,34,34^FDDANFE SIMPLIFICADO - ETIQUETA^FS'
-          + '^FO30,72^A0N,24,24^FDNF-e Num ' + esc(info.numero) + '  Serie ' + esc(info.serie) + '  Emissao ' + dt + '^FS'
-          + '^FO30,106^GB752,2,2^FS'
-          + '^FO30,124^A0N,22,22^FDEMITENTE^FS'
-          + '^FO30,152^A0N,26,26^FD' + esc(info.emitNome) + '^FS'
-          + '^FO30,184^A0N,24,24^FDCNPJ ' + esc(info.emitCnpj) + '^FS'
-          + '^FO30,222^A0N,22,22^FDDESTINATARIO^FS'
-          + '^FO30,250^A0N,26,26^FD' + esc(info.destNome) + '^FS'
-          + (info.destDoc ? '^FO30,282^A0N,24,24^FDCPF/CNPJ ' + esc(info.destDoc) + '^FS' : '')
-          + '^FO30,320^GB752,2,2^FS'
-          + '^FO30,340^A0N,26,26^FDVALOR TOTAL  R$ ' + valor + '^FS'
-          + (info.protocolo ? '^FO30,376^A0N,22,22^FDProtocolo de autorizacao ' + esc(info.protocolo) + '^FS' : '')
-          + '^FO30,420^A0N,22,22^FDCHAVE DE ACESSO^FS'
-          + '^FO30,450^BY2,2.5,150^BCN,150,N,N,N^FD' + info.chave + '^FS'
-          + '^FO30,616^A0N,22,22^FD' + chaveFmt + '^FS'
-          + '^FO30,652^A0N,20,20^FDConsulta pela chave em www.nfe.fazenda.gov.br^FS'
-          + '^FO30,690^GB752,2,2^FS'
-          + '^FO30,706^A0N,22,22^FDPRODUTOS^FS'
-          + (info.itens || []).slice(0, 6).map((it, ix) => {
-            // REF primeiro (negrito maior), depois cor · tamanho · qtd, e a
-            // descricao curta embaixo — leitura de bancada em 1 segundo
-            const y = 736 + ix * 58;
-            const l1 = (it.ref ? 'REF ' + it.ref + '  ' : '') + (it.cor ? String(it.cor).toUpperCase() + '  ' : '') + (it.tam ? 'TAM ' + it.tam + '  ' : '') + it.qtd + ' pc';
-            const l2 = String(it.desc || '').slice(0, 44) + (!it.ref && it.sku ? ' (' + String(it.sku).slice(0, 14) + ')' : '');
-            return '^FO30,' + y + '^A0N,26,26^FD' + l1.replace(/[\^~]/g, ' ').slice(0, 46) + '^FS'
-              + '^FO30,' + (y + 28) + '^A0N,20,20^FD' + l2.replace(/[\^~]/g, ' ') + '^FS';
-          }).join('')
-          + ((info.itens || []).length > 6 ? '^FO30,' + (736 + 6 * 58) + '^A0N,20,20^FD... e mais ' + (info.itens.length - 6) + ' item(ns)^FS' : '')
-          // 22/08 (pedido dele): envio PROGRAMADO — a data de despacho na
-          // ULTIMA linha, centralizada, um pouco maior que a descricao e em
-          // negrito (ZPL nao tem bold: duas passadas com 1 dot de offset)
-          + (info.agendadoEm ? (() => {
-            const dAg = String(info.agendadoEm).slice(0, 10).split('-').reverse().join('/');
-            const tAg = 'ENVIAR ' + dAg;
-            return '^FO30,1150^FB752,1,0,C^A0N,28,28^FD' + tAg + '^FS'
-                 + '^FO31,1151^FB752,1,0,C^A0N,28,28^FD' + tAg + '^FS';
-          })() : '')
-          + '^XZ';
-      };
-      const buscarDanfe = async (p) => {
-        const cache = danfeGuardada[String(p.pedido_id)] || null;
-        if (cache || !p.nf_id) return cache;
-        const tkC = await pegarToken(p.conta);
-        if (!tkC) return null;
-        try {
-          const hb2 = { Authorization: 'Bearer ' + tkC, Accept: 'application/json' };
-          const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${p.nf_id}`, hb2);
-          const nf = typeof nfR.json === 'function' ? await nfR.json().catch(() => ({})) : {};
-
-          // 1º caminho: XML da NFe → DANFE simplificada em ZPL
-          if (nf?.data?.xml) {
-            try {
-              const xr = await fetch(nf.data.xml);
-              if (xr.ok) {
-                const xml = await xr.text();
-                const chave = (xml.match(/Id="NFe(\d{44})"/) || [])[1] || String(nf?.data?.chaveAcesso || '').replace(/\D/g, '');
-                const emit = xmlCampo(xml, 'emit');
-                const dest = xmlCampo(xml, 'dest');
-                const prot = xmlCampo(xml, 'protNFe');
-                if (chave && chave.length === 44) {
-                  const zplDanfe = montarDanfeZpl({
-                    chave,
-                    numero: nf?.data?.numero || xmlCampo(xml, 'nNF'),
-                    serie: nf?.data?.serie ?? xmlCampo(xml, 'serie'),
-                    emissao: String(nf?.data?.dataEmissao || xmlCampo(xml, 'dhEmi') || ''),
-                    emitNome: xmlCampo(emit, 'xNome'),
-                    emitCnpj: xmlCampo(emit, 'CNPJ'),
-                    destNome: xmlCampo(dest, 'xNome'),
-                    destDoc: xmlCampo(dest, 'CPF') || xmlCampo(dest, 'CNPJ'),
-                    valor: nf?.data?.valorNota ?? xmlCampo(xml, 'vNF'),
-                    protocolo: xmlCampo(prot, 'nProt'),
-                    itens: xmlItens(xml),
-                    agendadoEm: p.ml_agendado_em || null,
-                  });
-                  await supabase.from('wms_documentos').upsert({
-                    pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'ZPL',
-                    conteudo: zplDanfe, bytes: zplDanfe.length, hash: hashDoc(zplDanfe), origem: 'xml-nfe', erro: null,
-                  }, { onConflict: 'pedido_id,tipo' });
-                  return { formato: 'ZPL', conteudo: zplDanfe };
-                }
-              }
-            } catch { /* cai pro PDF */ }
-          }
-
-          // 2º caminho (fallback): PDF do linkPDF, como antes
-          const link = nf?.data?.linkPDF || nf?.data?.linkDanfe;
-          if (!link) return null;
-          const acharPdf = async (u) => {
-            const r3 = await fetch(u, { headers: { Accept: 'application/pdf' } });
-            if (!r3.ok) return null;
-            return new Uint8Array(await r3.arrayBuffer());
-          };
-          let db = await acharPdf(link);
-          if (!db) return null;
-          if (db[0] === 0x3c) {
-            const html = Buffer.from(db).toString('utf8');
-            const m = html.match(/https?:\/\/[^"'<>\s]+\.pdf[^"'<>\s]*/i);
-            db = m ? await acharPdf(m[0]) : null;
-            if (!db) return null;
-          }
-          let iniPdf = -1;
-          for (let i2 = 0; i2 < Math.min(db.length - 3, 2048); i2++) {
-            if (db[i2] === 0x25 && db[i2 + 1] === 0x50 && db[i2 + 2] === 0x44 && db[i2 + 3] === 0x46) { iniPdf = i2; break; }
-          }
-          if (iniPdf < 0) return null;
-          const d64 = Buffer.from(iniPdf ? db.slice(iniPdf) : db).toString('base64');
-          await supabase.from('wms_documentos').upsert({
-            pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'PDF',
-            conteudo: d64, bytes: d64.length, hash: hashDoc(d64), origem: 'bling', erro: null,
-          }, { onConflict: 'pedido_id,tipo' });
-          return { formato: 'PDF', conteudo: d64 };
-        } catch { return null; }
-        finally { await new Promise(r2 => setTimeout(r2, 340)); }
-      };
       // 21/08 (teste dele: "5 prontas" e clique dizia nenhuma): o alvo
       // ignorava a fonte ML (ZPL2) e descartava em SILENCIO quem nao tinha
       // cache nem link do Bling — 6 prontos viravam zero sem explicacao.
@@ -1099,7 +1112,7 @@ export default async function handler(req, res) {
         else { foraDoAlvo.push(`${p.numero} ${String(p.conta || '').charAt(0).toUpperCase() + String(p.conta || '').slice(1)}`); foraIds.push(p.pedido_id); }
       }
 
-      const blocos = []; const idsOk = []; const refsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo];
+      const blocos = []; const idsOk = []; const refsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo]; const programados = [];
       for (const p of alvo.slice(0, 120)) {
         // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
         let zplDoPedido = null, ehPdf = false, pdf64 = null, zipDanfe64 = null;
@@ -1113,7 +1126,10 @@ export default async function handler(req, res) {
           // do proprio ML (substatus buffered → formato AGENDADO da reserva).
           if (doMl.formato === 'AGENDADO') {
             if (doMl.agendado_em) supabase.from('wms_pedidos').update({ ml_agendado_em: doMl.agendado_em, atualizado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id).then(() => {}, () => {});
-            semEtiqueta.push(`${p.numero} (programado${doMl.agendado_em ? ' ' + doMl.agendado_em.slice(8, 10) + '/' + doMl.agendado_em.slice(5, 7) : ''})`);
+            // 28/08 (relato dele): programado NAO e falha de impressao. Sai do
+            // balde generico de "sem etiqueta" e vira lista propria, com a
+            // conta, pra tela mandar a equipe pro filtro Agendadas.
+            programados.push({ numero: p.numero, conta: p.conta, agendado_em: doMl.agendado_em || null });
             continue;
           }
           if (doMl.formato === 'ZPL') zplDoPedido = cortarMiniDanfe(doMl.conteudo);
@@ -1204,7 +1220,7 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
                 const { PDFDocument } = await import('pdf-lib');
                 const docC = await PDFDocument.load(Buffer.from(norm.pdf, 'base64'));
                 if (docC.getPageCount() === 2) {
-                  const dResS = await buscarDanfe(p);
+                  const dResS = await buscarDanfe(p, danfeGuardada);
                   if (dResS?.formato === 'ZPL') {
                     const soEtq = await PDFDocument.create();
                     // 26/08 (teste real): a ordem do casado Shein e
@@ -1228,7 +1244,7 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
               // fica (redundante e inofensiva), mas o PAR existe. Rica
               // indisponivel = casada inteira, como sempre foi.
               try {
-                const dResC = await buscarDanfe(p);
+                const dResC = await buscarDanfe(p, danfeGuardada);
                 if (dResC?.formato === 'ZPL') {
                   posPar++;
                   const campoParC = `^FO18,1176^A0N,22,22^FDPAR ${posPar}/${candidatosLote.length}^FS`;
@@ -1253,7 +1269,7 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
             // 24/08 (pedido dele): a DANFE RICA (REF · cor · tamanho, gerada do
             // XML) vale pra TODOS os canais — Shein incluida. O PDF bagunçado
             // que vem dentro do zip do Bling vira só RESERVA (se o XML falhar).
-            const dRes = (await buscarDanfe(p)) || (zipDanfe64 ? { formato: 'PDF', conteudo: zipDanfe64 } : null);
+            const dRes = (await buscarDanfe(p, danfeGuardada)) || (zipDanfe64 ? { formato: 'PDF', conteudo: zipDanfe64 } : null);
             // 25/08 (regra n1 dele — caso NF 135457): numeracao do PAR no
             // rodape da nota. Se a termica pular uma folha, a conferencia ve
             // o buraco na hora (PAR 3/7 sumiu). Injetada na montagem, nunca
@@ -1300,7 +1316,7 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
           detalhe: { pares: idsOk.length, restantes, sem_danfe: semDanfe.length ? semDanfe : undefined, pedidos: idsOk },
         }).then?.(() => {}, () => {});
       }
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, aguardando_logistica: aguardaLogZpl, restantes, ultimo_grupo: grupoAtual });
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, aguardando_logistica: aguardaLogZpl, programados, restantes, ultimo_grupo: grupoAtual });
     }
 
     // ── marcar como impressas depois que a térmica confirmou

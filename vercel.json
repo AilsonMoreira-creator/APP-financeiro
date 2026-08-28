@@ -504,11 +504,11 @@
     },
     {
       "path": "/api/wms-ml-agenda-sync?limite=150",
-      "schedule": "30 0,2,12-22/2 * * *"
+      "schedule": "30 0,2,10-22/2 * * *"
     },
     {
       "path": "/api/wms-ml-agenda-sync?limite=200",
-      "schedule": "30 0,2,12-22/2 * * *"
+      "schedule": "30 0,2,10-22/2 * * *"
     },
     {
       "path": "/api/wms-nf-sync?dias=2",
