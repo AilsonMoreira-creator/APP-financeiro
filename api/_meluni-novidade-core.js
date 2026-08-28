@@ -52,8 +52,13 @@ export async function carregarTplNovidade(cfgKey, versao) {
   const tpl = v ? tpls[v] : null;
   if (!tpl?.name || !tpl?.body) return null;
   if ((tpl.status || 'ativo') === 'arquivado') return null;
+  // 28/08 (pedido dele): quando o cadastro nao tem primeiro nome, em vez de
+  // pular o cliente a campanha cai numa variante SEM variavel — configurada em
+  // tpl.fallback (nome da outra versao dentro da mesma spec).
+  const tplSemNome = tpl.fallback ? tpls[tpl.fallback] : null;
   return {
     tpl,
+    tplSemNome: (tplSemNome?.name && tplSemNome?.body && (tplSemNome.status || 'ativo') !== 'arquivado') ? tplSemNome : null,
     lang: spec.idioma || tpl.language || 'pt_BR',
     headerImage: tpl.header?.format === 'IMAGE' ? (tpl.header?.sample_url || null) : null,
   };
@@ -85,7 +90,7 @@ export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada 
   // anti-colisão 48h (Ailson 04/08): nenhuma cliente recebe 2 campanhas em <48h
   const campanhaRecente = await telefonesComCampanhaRecente(48).catch(() => new Set());
   if (!conf) return { ok: false, erro: `template ${cfg || 'lara_templates_novidade'}/${versao || '?'} nao configurado` };
-  const { tpl, lang, headerImage } = conf;
+  const { tpl, tplSemNome, lang, headerImage } = conf;
 
   const { data: clientes } = await supabase.from('meluni_clientes')
     .select('id, nome, telefone, whatsapp, bloqueado').in('id', alvo);
@@ -104,7 +109,13 @@ export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada 
       if (congelados && congelados.has(chaveTel(c.whatsapp || c.telefone))) { pulados++; detalhe.push({ id, status: 'atencao' }); continue; }
       if (campanhaRecente.has(tel) || campanhaRecente.has('55' + tel)) { pulados++; detalhe.push({ id, status: 'campanha_48h' }); continue; }
       const nome = primeiroNome(c.nome);
-      if (!nome) { pulados++; detalhe.push({ id, status: 'sem_nome' }); continue; }
+      // 28/08: sem primeiro nome nao trava mais o disparo — cai na variante sem
+      // variavel, se a spec tiver uma. Sem variante, continua pulando.
+      let tplUso = tpl, params = [nome];
+      if (!nome) {
+        if (!tplSemNome) { pulados++; detalhe.push({ id, status: 'sem_nome' }); continue; }
+        tplUso = tplSemNome; params = [];
+      }
 
       const conv = await acharOuCriarConversaCliente(tel, c.nome, c.id);
       if (conv && ETAPAS_FECHADAS.includes(conv.etapa)) { pulados++; detalhe.push({ id, status: 'conversa_fechada' }); continue; }
@@ -117,17 +128,18 @@ export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada 
 
       // dry: passa por TODAS as guardas e para antes da Meta (Ailson 07/08/2026,
       // pra dar pra testar o caminho sem mandar mensagem pra cliente de verdade)
-      if (dry) { enviados++; detalhe.push({ id, status: 'enviaria', tel, nome }); continue; }
-      const r = await enviarTemplateLara('55' + tel, tpl.name, [nome], { language: lang, headerImage });
+      if (dry) { enviados++; detalhe.push({ id, status: 'enviaria', tel, nome: nome || '(sem nome)', template: tplUso.name }); continue; }
+      const hdr = (tplUso.header?.format === 'IMAGE' ? (tplUso.header?.sample_url || null) : null) || headerImage;
+      const r = await enviarTemplateLara('55' + tel, tplUso.name, params, { language: lang, headerImage: hdr });
       const metaMsgId = r?.messages?.[0]?.id || null;
       const nowIso = new Date().toISOString();
 
       if (conv?.id) {
         await supabase.from('meluni_mensagens').insert({
           conversa_id: conv.id, direcao: 'saida', autor: 'lara_clientes',
-          tipo_midia: 'template', template_usado: tpl.name,
-          texto: renderTpl(tpl.body, [nome]), midia_url: headerImage || null,
-          botao: tpl.botao?.url ? { text: tpl.botao.text || 'Ver no site', url: tpl.botao.url } : null,
+          tipo_midia: 'template', template_usado: tplUso.name,
+          texto: renderTpl(tplUso.body, params), midia_url: hdr || null,
+          botao: tplUso.botao?.url ? { text: tplUso.botao.text || 'Ver no site', url: tplUso.botao.url } : null,
           meta_message_id: metaMsgId, enviada_em: nowIso,
         });
         await supabase.from('meluni_conversas').update({

@@ -82,10 +82,14 @@ async function disparar(ids, { cfg, versao, dry = false }) {
       }
 
       const nome = primeiroNome(await resolverPrimeiroNome(tel, c.nome).catch(() => c.nome)) || 'cliente';
+      // 28/08: template SEM variavel (ex.: a variante sem nome da campanha) nao
+      // pode receber parametro — a Meta devolve 132000 e o envio morre.
+      const nVars = (String(tpl.body || '').match(/\{\{\d+\}\}/g) || []).length;
+      const params = nVars ? [nome] : [];
 
-      if (dry) { enviados++; detalhe.push({ id: c.id, status: 'enviaria', tel, nome }); continue; }
+      if (dry) { enviados++; detalhe.push({ id: c.id, status: 'enviaria', tel, nome, vars: nVars }); continue; }
 
-      const r = await enviarTemplateLara(tel, tpl.name, [nome], { language: lang, headerImage });
+      const r = await enviarTemplateLara(tel, tpl.name, params, { language: lang, headerImage });
       const metaId = r?.messages?.[0]?.id || null;
       const agora = new Date().toISOString();
 
@@ -93,7 +97,7 @@ async function disparar(ids, { cfg, versao, dry = false }) {
         await supabase.from('meluni_mensagens').insert({
           conversa_id: conv.id, direcao: 'saida', autor: 'lara_perdidos',
           tipo_midia: 'template', template_usado: tpl.name,
-          texto: renderTpl(tpl.body, [nome]), midia_url: headerImage || null,
+          texto: renderTpl(tpl.body, params), midia_url: headerImage || null,
           botao: tpl.botao?.url ? { text: tpl.botao.text || 'Ver no site', url: tpl.botao.url } : null,
           meta_message_id: metaId, enviada_em: agora,
         });
