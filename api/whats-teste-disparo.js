@@ -52,6 +52,31 @@ function headerImagemDe(components) {
   return h?.example?.header_handle?.[0] || null;
 }
 
+// 28/08: o header_handle que a Meta devolve no example NAO e um link publico —
+// mandar ele em image.link faz a Meta ACEITAR a chamada e falhar a entrega
+// depois, sem erro nenhum na resposta (foi o que segurou o 1o teste). O link
+// bom mora nas specs do meluni_config (header.sample_url), entao procuramos
+// o template por nome em todas as chaves de template.
+async function criativoDaSpec(nomeTpl) {
+  try {
+    const { supabase } = await import('./_meluni-whats-helpers.js');
+    const { data } = await supabase.from('meluni_config').select('chave, valor');
+    for (const linha of (data || [])) {
+      const v = linha?.valor;
+      const tpls = v?.templates || (v?.template ? { _u: v } : null);
+      if (!tpls) continue;
+      for (const k of Object.keys(tpls)) {
+        const t = tpls[k];
+        const nome = t?.name || t?.template;
+        if (nome !== nomeTpl) continue;
+        const url = t?.header?.sample_url || t?.sample_url || v?.sample_url;
+        if (url) return url;
+      }
+    }
+  } catch { /* sem spec: segue sem imagem */ }
+  return null;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -65,13 +90,22 @@ export default async function handler(req, res) {
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
   const marca = String((req.method === 'POST' ? body?.marca : req.query?.marca) || 'lara').toLowerCase();
   if (!['lara', 'sofia'].includes(marca)) return res.status(400).json({ ok: false, erro: 'marca invalida (lara|sofia)' });
+  // GET só lista. Envio por GET existe pra depuração e exige as duas flags de
+  // propósito, pra ninguém disparar abrindo um link sem querer.
+  const enviarPorGet = req.method === 'GET' && req.query?.executar === '1' && req.query?.confirmo === '1';
+  if (enviarPorGet) {
+    body = {
+      marca, template: req.query?.template, telefone: req.query?.telefone,
+      nome: req.query?.nome, imagem_url: req.query?.imagem_url,
+    };
+  }
 
   const waba = wabaDe(marca);
   if (!waba) return res.status(500).json({ ok: false, erro: `WABA da ${marca} nao configurada` });
 
   try {
     // ── GET: lista os aprovados pra tela montar o seletor ──
-    if (req.method === 'GET') {
+    if (req.method === 'GET' && !enviarPorGet) {
       const url = `${GRAPH}/${waba}/message_templates?fields=name,status,category,language,components&limit=200`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       const txt = await r.text();
@@ -91,7 +125,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, marca, telefone_padrao: TEL_TESTE_PADRAO, templates });
     }
 
-    if (req.method !== 'POST') return res.status(405).json({ ok: false, erro: 'use GET ou POST' });
+    if (req.method !== 'POST' && !enviarPorGet) return res.status(405).json({ ok: false, erro: 'use GET ou POST' });
 
     // ── POST: envia o teste ──
     const nomeTeste = String(body?.nome || 'Ailson').trim() || 'Ailson';
@@ -119,7 +153,19 @@ export default async function handler(req, res) {
     else if (nVars === 2) params = [saudacaoBRT(), nomeTeste];
     else if (nVars > 2) params = [saudacaoBRT(), nomeTeste, ...Array(nVars - 2).fill('teste')];
 
-    const headerImage = headerImagemDe(tpl.components);
+    const temImagem = !!headerImagemDe(tpl.components);
+    // link publico de verdade: o informado, ou o da spec. Sem isso, a mensagem
+    // e aceita e some — melhor recusar aqui e dizer o motivo.
+    const headerImage = temImagem
+      ? (String(body?.imagem_url || '').trim() || await criativoDaSpec(nome))
+      : null;
+    if (temImagem && !headerImage) {
+      return res.status(400).json({
+        ok: false, erro: 'template_com_imagem_sem_criativo',
+        dica: 'esse template tem foto no topo e eu nao achei o link do criativo nas configs. Mande imagem_url no corpo.',
+        template: nome,
+      });
+    }
     const lang = tpl.language || 'pt_BR';
 
     const r = marca === 'lara'
