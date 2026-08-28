@@ -553,6 +553,14 @@
     {
       "path": "/api/wms-webhook-pendentes",
       "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "40,50 11 * * 6"
+    },
+    {
+      "path": "/api/wms-preparar-lote?limite=150",
+      "schedule": "55 11 * * 6"
     }
   ]
 }
