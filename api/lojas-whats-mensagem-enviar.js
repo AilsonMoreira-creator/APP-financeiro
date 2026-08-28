@@ -81,6 +81,7 @@ export default async function handler(req, res) {
     let metaResp = null;
     let metaMsgId = null;
     let tipoMidiaMsg = 'text';
+    let catalogoErro = null;
 
     try {
       if (midiaFinal && (midiaFinal.tipo === 'foto' || midiaFinal.tipo === 'video' || midiaFinal.tipo === 'cores')) {
@@ -100,11 +101,25 @@ export default async function handler(req, res) {
         }
         if (midiaFinal && midiaFinal.tipo === 'catalogo') {
           // catalogo separado
-          await enviarMidiaSofia({
+          // 28/08: o retorno era DESCARTADO — a mensagem ficava sem
+          // meta_message_id (presa em 'enviando' pra sempre) e a falha passava
+          // batido. Pior: a trava do lojas-catalogo-reenvio olha
+          // meta_message_id, entao quem recebia o catalogo pela mao da equipe
+          // nao era reconhecido e podia receber de novo.
+          const rCat = await enviarMidiaSofia({
             telefone: conv.telefone, midia: midiaFinal,
             conversaId: conv.id, decididaPor: 'assistente_anexou',
           });
           tipoMidiaMsg = 'document';
+          if (rCat?.ok && rCat.message_id) {
+            metaResp = { messages: [{ id: rCat.message_id }] };
+          } else {
+            // falha fechada: registra status 'erro' pro reenvio automatico
+            // pegar (mesmo mecanismo do incidente de 19/08) em vez de fingir
+            // que o catalogo saiu.
+            catalogoErro = rCat?.erro || 'falha desconhecida no envio do catalogo';
+            logErro('msg-enviar/catalogo', new Error(catalogoErro));
+          }
         }
       }
       metaMsgId = metaResp?.messages?.[0]?.id || null;
@@ -135,7 +150,8 @@ export default async function handler(req, res) {
         midia_url: midiaUrlMsg,
         meta_message_id: metaMsgId,
         enviada_por_vendedora_id: vendedora_id || null,
-        status: 'enviando',
+        status: catalogoErro ? 'erro' : 'enviando',
+        erro: catalogoErro,
         meta_response: metaResp,
         enviada_em: agora,
       })
@@ -154,7 +170,7 @@ export default async function handler(req, res) {
     }
     // Catalogo enviado → marca pra cron-catalogo monitorar follow-up 6h.
     // Webhook reseta esse campo qdo cliente responder qualquer coisa.
-    if (midiaFinal?.tipo === 'catalogo') {
+    if (midiaFinal?.tipo === 'catalogo' && !catalogoErro) {
       updConv.catalogo_enviado_em = agora;
       updConv.catalogo_followup_6h_em = null; // reseta caso ja tinha um anterior
       log('msg-enviar', `conversa=${conversa_id} CATALOGO enviado → timer 6h ativo`);
@@ -162,7 +178,10 @@ export default async function handler(req, res) {
     await supabase.from('lojas_whats_conversas').update(updConv).eq('id', conversa_id);
 
     log('msg-enviar', `conversa=${conversa_id} autor=${autor} midia=${midiaFinal?.id || 'no'}`);
-    return res.json({ ok: true, message_id: metaMsgId, mensagem_id: msgRow?.id });
+    return res.json({
+      ok: !catalogoErro, message_id: metaMsgId, mensagem_id: msgRow?.id,
+      ...(catalogoErro ? { catalogo_erro: catalogoErro } : {}),
+    });
   } catch (e) {
     console.error('[msg-enviar] exception:', e);
     return res.status(500).json({ error: e.message });
