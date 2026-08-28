@@ -92,7 +92,9 @@ export default async function handler(req, res) {
     for (const c of conversas) {
       // Pula etapas fechadas sem nem chamar a IA (e zera o timer).
       if (ETAPAS_FECHADAS.includes(c.etapa)) {
-        await zerarResponderEm(c.id);
+        // 28/08: era zerarResponderEm, renomeada pra claimAtomico em 26/08 — a
+        // chamada velha ficou pra tras e derrubava o run inteiro (ReferenceError).
+        await claimAtomico(c.id);
         pulados++;
         detalhe.push({ id: c.id, motivo: 'etapa_fechada', etapa: c.etapa });
         continue;
@@ -111,7 +113,13 @@ export default async function handler(req, res) {
       if (await tagsCongelamEnvio(c.tags)) { congeladas++; continue; }
 
       if (c.apresentacao_grupo && !c.apresentacao_enviada_em) {
-        await zerarResponderEm(c.id);
+        // 28/08: mesma correcao da etapa fechada. Aqui o claim ATOMICO tambem
+        // protege contra dois runs mandarem a abertura (video/fotos) 2x.
+        if (!(await claimAtomico(c.id))) {
+          pulados++;
+          detalhe.push({ id: c.id, motivo: 'claim_perdido_abertura' });
+          continue;
+        }
         const variante = c.apresentacao_variante === 'texto_fotos' ? 'texto_fotos' : 'video';
         let raOk = false;
         try {
@@ -144,7 +152,11 @@ export default async function handler(req, res) {
       // AINDA estiver preenchido; a execucao paralela encontra null, afeta 0
       // linhas e PULA a conversa. Fim da corrida entre runs sobrepostos.
       const ganhou = await claimAtomico(c.id);
-      if (!ganhou) { pulados.push({ id: c.id, motivo: 'claim_perdido_para_run_paralelo' }); continue; }
+      if (!ganhou) {
+        pulados++;
+        detalhe.push({ id: c.id, motivo: 'claim_perdido_para_run_paralelo' });
+        continue;
+      }
 
       try {
         const r = await processarConversa(c.id);
