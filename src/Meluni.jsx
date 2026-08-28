@@ -27,6 +27,7 @@ import {
   Plus, Trash2,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
+import TesteDisparo from './TesteDisparo.jsx';
 import CalcMetaAdsMeluni from './CalcMetaAdsMeluni.jsx';
 import MeluniAnalise from './CalcAnaliseMeluni';
 
@@ -4146,6 +4147,9 @@ function SecaoTreinar() {
         {aba === 'lara' && <TreinoLaraPergunta onSalvar={salvar} />}
       </div>
       <BaseTreinada itens={base} loading={loadingBase} onExcluir={excluir} onSalvar={salvar} />
+      <div style={{ marginTop: 14 }}>
+        <TesteDisparo marca="lara" palette={palette} FONT={FONT} />
+      </div>
     </div>
   );
 }

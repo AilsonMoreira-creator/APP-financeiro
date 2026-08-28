@@ -46,6 +46,7 @@ import {
   palette, FONT,
   Header, TabBar, SectionTitle, LoadingScreen,
 } from './Lojas_Shared.jsx';
+import TesteDisparo from './TesteDisparo.jsx';
 import ClientesTab from './ClientesSofia.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -3919,6 +3920,7 @@ function ConfigTab({ userId, refreshTick }) {
 
   return (
     <div style={{ padding: 14, fontFamily: FONT }}>
+      <TesteDisparo marca="sofia" palette={palette} FONT={FONT} />
       <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 12 }}>
         Edite com cuidado. Cache é invalidado em ~1min.
       </div>
