@@ -163,6 +163,9 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
   const [prodManual, setProdManual] = useState(config.prod_ref_manual ?? '');
   const [prodModo, setProdModo] = useState(config.prod_ref_modo === 'manual' ? 'manual' : 'auto');
   const [dur, setDur] = useState(config.duracoes || {});
+  // 28/08 (pedido dele): horário de corte editável — a TV e a lista passam a
+  // usar esse valor assim que salvar.
+  const [corteLista, setCorteLista] = useState(config.corte_lista || '12:00');
   const [medias, setMedias] = useState(null);
   useEffect(() => {
     (async () => {
@@ -365,6 +368,18 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
         )}
       </div>
 
+      <div style={{ background: '#fff', border: `1.5px solid ${palette.beige}`, borderRadius: 13, padding: 14, marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>⏰ Horário de corte</div>
+        <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 10 }}>
+          Divide a fila entre o que sai hoje e o que fica pra amanhã. Vale na tela da TV e na lista de separação assim que salvar.
+        </div>
+        <input
+          type="time"
+          value={corteLista}
+          onChange={(e) => setCorteLista(e.target.value)}
+          style={{ padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${palette.beige}`, fontSize: 16, fontFamily: FONT, color: palette.ink }}
+        />
+      </div>
       <button onClick={() => onSalvar({
         situacoes_aberto: abertas, situacoes_finalizado: finalizadas,
         canais: canais.filter(c => c.corte || c.envio),
@@ -372,6 +387,7 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
         fluxo_ref_manual: refManual, fluxo_ref_modo: refModo,
         prod_ref_manual: prodManual, prod_ref_modo: prodModo,
         duracoes: dur,
+        corte_lista: corteLista,
       })} disabled={salvando} style={{ width: '100%', padding: '14px', borderRadius: 13, border: 'none', background: '#1e8e4e', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, opacity: salvando ? 0.6 : 1 }}>
         {salvando ? 'Salvando…' : '💾 Salvar configurações'}
       </button>

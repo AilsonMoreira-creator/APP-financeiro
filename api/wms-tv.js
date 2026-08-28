@@ -69,6 +69,14 @@ export default async function handler(req, res) {
   @keyframes pulsa { 0%,100% { opacity: 1 } 50% { opacity: .82 } }
   .barra { height: 2.4vh; border-radius: 99px; background: ${claro ? '#e8dfd0' : '#2b3746'}; overflow: hidden; margin-top: 1vh; }
   .barra > div { height: 100%; background: #4ed08a; transition: width .6s; }
+  /* calendario do mes (28/08) — entrou no lugar do painel "Por empresa" */
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: .35vw; }
+  .cal .dow { font-size: 1.3vh; opacity: .5; text-align: center; padding-bottom: .4vh; }
+  .cal .dia { border-radius: .7vh; padding: .5vh .2vw; text-align: center; background: ${claro ? '#f3ece1' : '#212b36'}; }
+  .cal .dia.vazio { background: transparent; }
+  .cal .dia .d { font-size: 1.2vh; opacity: .5 }
+  .cal .dia .t { font-size: 2vh; font-weight: 800 }
+  .cal .dia.hoje { outline: .3vh solid #4ed08a; }
 </style>
 </head>
 <body>
@@ -78,9 +86,8 @@ export default async function handler(req, res) {
     <span class="relogio" id="relogio">--:--</span>
   </header>
 
-  <div class="grade">
+  <div class="grade" style="grid-template-columns:repeat(2,1fr)">
     <div class="card"><div class="rotulo">Pedidos abertos</div><div class="numero azul" id="abertos">–</div><div class="sub" id="pecas">&nbsp;</div></div>
-    <div class="card"><div class="rotulo">Em separação</div><div class="numero ambar" id="sep">–</div><div class="sub" id="nf">&nbsp;</div></div>
     <div class="card"><div class="rotulo">Prontos hoje</div><div class="numero verde" id="fin">–</div><div class="sub" id="ritmo">&nbsp;</div></div>
   </div>
 
@@ -88,8 +95,8 @@ export default async function handler(req, res) {
 
   <div class="faixa" style="margin-bottom:1.2vh">
     <div class="painel">
-      <div class="rotulo" style="margin-bottom:1vh">Por empresa</div>
-      <div id="contas"></div>
+      <div class="rotulo" id="calrot" style="margin-bottom:1vh">Finalizados no mês</div>
+      <div id="calendario"></div>
     </div>
     <div class="painel">
       <div id="pendencias"></div>
@@ -123,9 +130,7 @@ export default async function handler(req, res) {
     var t = d.total || {};
     document.getElementById('abertos').textContent = n(t.abertos);
     document.getElementById('pecas').textContent = n(t.pra_amanha) ? (n(t.pra_amanha) + ' pra amanhã') : '\u00a0';
-    document.getElementById('sep').textContent = n(t.em_separacao);
     var prev = n(t.em_separacao_com_nf_prevista), comNf = n(t.em_separacao_nf);
-    document.getElementById('nf').textContent = prev ? ('NF ' + comNf + ' de ' + prev) : '\\u00a0';
     document.getElementById('fin').textContent = n(t.finalizados_hoje);
 
     // falta pro corte
@@ -150,19 +155,8 @@ export default async function handler(req, res) {
     var ritmo = Math.round(n(t.finalizados_hoje) / horas);
     document.getElementById('ritmo').textContent = ritmo ? (ritmo + ' pedidos/hora') : '\\u00a0';
 
-    // por empresa
-    var cont = document.getElementById('contas'); cont.innerHTML = '';
-    var nomes = { exitus:'Exitus', lumia:'Lumia', muniam:'Muniam' };
-    Object.keys(d.por_conta || {}).forEach(function(k){
-      var c = d.por_conta[k];
-      var linha = document.createElement('div');
-      linha.className = 'linha';
-      linha.innerHTML = '<span style="flex:1">' + (nomes[k]||k) + '</span>' +
-        '<b class="azul">' + n(c.abertos) + '</b><span style="opacity:.5">separar</span>' +
-        '<b class="ambar">' + n(c.em_separacao) + '</b><span style="opacity:.5">na mão</span>' +
-        '<b class="verde">' + n(c.finalizados_hoje) + '</b><span style="opacity:.5">prontos</span>';
-      cont.appendChild(linha);
-    });
+    // (o card "Em separação" e o painel "Por empresa" saíram a pedido dele em
+    // 28/08 — no lugar deles entrou o calendário do mês)
 
     // pendências
     var p = document.getElementById('pendencias'); p.innerHTML = '';
@@ -197,14 +191,52 @@ export default async function handler(req, res) {
     document.getElementById('sync').textContent = s ? ('atualizado ' + fmtHora(s)) : '';
   }
 
+  // CALENDÁRIO DO MÊS (28/08, pedido dele): mesma fonte da tela Histórico de
+  // finalizados — acao=historico. Muda pouco, então recarrega de 10 em 10 min.
+  function desenharCal(dias){
+    var el = document.getElementById('calendario'); if (!el) return;
+    var agora = new Date(Date.now() - 3*3600000);
+    var ano = agora.getUTCFullYear(), mes = agora.getUTCMonth();
+    var hojeISO = agora.toISOString().slice(0,10);
+    var primeiro = new Date(Date.UTC(ano, mes, 1)).getUTCDay();
+    var qtdDias = new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate();
+    var html = '<div class="cal">';
+    ['D','S','T','Q','Q','S','S'].forEach(function(x){ html += '<div class="dow">' + x + '</div>'; });
+    for (var i = 0; i < primeiro; i++) html += '<div class="dia vazio"></div>';
+    for (var d = 1; d <= qtdDias; d++) {
+      var iso = ano + '-' + String(mes+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+      var c = (dias || {})[iso] || null;
+      var tot = c ? n(c.total) : 0;
+      html += '<div class="dia' + (iso === hojeISO ? ' hoje' : '') + '">'
+        + '<div class="d">' + d + '</div>'
+        + '<div class="t' + (tot ? ' verde' : '') + '">' + (tot || '·') + '</div>'
+        + '</div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  }
+  function carregarCal(){
+    fetch(API + '?acao=historico')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d && d.ok) {
+          desenharCal(d.dias);
+          var rot = document.getElementById('calrot');
+          if (rot && d.mes) rot.textContent = 'Finalizados no mês — ' + d.mes.slice(5,7) + '/' + d.mes.slice(0,4);
+        }
+      })
+      .catch(function(){ /* calendário é complemento: falha não derruba a TV */ });
+  }
+
   function carregar(){
     fetch(API + '?acao=dashboard')
       .then(function(r){ return r.json(); })
       .then(function(d){ if (d && d.ok) pintar(d); })
       .catch(function(){ document.getElementById('sync').textContent = 'sem conexão — tentando de novo'; });
   }
-  carregar();
+  carregar(); carregarCal();
   setInterval(carregar, 60000);
+  setInterval(carregarCal, 600000);
   setInterval(function(){ location.reload(); }, 3600000); // recarrega de hora em hora
 </script>
 </body>

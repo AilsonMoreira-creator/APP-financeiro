@@ -31,15 +31,23 @@ export const WMS_CONFIG_DEFAULT = {
 // (Ailson 07/08/2026). A config tem corte POR CANAL, mas ele so serve pros
 // avisos de prazo; pra separacao vale um horario so.
 export const CORTE_LISTA = '12:00';
+// 28/08 (pedido dele): o horario de corte virou campo na tela de Config —
+// muda ali e a TV/lista acompanham na hora. A constante acima e so o padrao
+// de quando ainda nao foi configurado.
+export function corteHhmm(cfg) {
+  const v = String(cfg?.corte_lista || '').trim();
+  return /^\d{2}:\d{2}$/.test(v) ? v : CORTE_LISTA;
+}
 // normalizacao local (o wms-sync ja importa daqui; nao da pra importar de la
 // sem criar ciclo)
 const normSitLocal = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 // Instante do corte de HOJE em BRT (ISO). Pedido com criado_em >= isso e
 // pos-corte. criado_em = quando o sync viu o pedido pela 1a vez (precisao de
 // 15 min de manha / 30 min de tarde, que e o intervalo do cron).
-export function corteDeHoje() {
+export function corteDeHoje(hhmm) {
   const hojeBrt = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
-  return new Date(`${hojeBrt}T${CORTE_LISTA}:00-03:00`).toISOString();
+  const h = /^\d{2}:\d{2}$/.test(String(hhmm || '')) ? hhmm : CORTE_LISTA;
+  return new Date(`${hojeBrt}T${h}:00-03:00`).toISOString();
 }
 
 export async function lerWmsConfig() {
@@ -57,6 +65,7 @@ export async function lerWmsConfig() {
       prod_ref_manual: p.prod_ref_manual != null && p.prod_ref_manual !== '' ? Number(p.prod_ref_manual) : null,
       prod_ref_modo: p.prod_ref_modo === 'manual' ? 'manual' : 'auto',
       duracoes: { ...WMS_CONFIG_DEFAULT.duracoes, ...(p.duracoes || {}) },
+      corte_lista: /^\d{2}:\d{2}$/.test(String(p.corte_lista || '')) ? p.corte_lista : CORTE_LISTA,
     };
   } catch { return { ...WMS_CONFIG_DEFAULT }; }
 }
@@ -72,6 +81,8 @@ export default async function handler(req, res) {
       const acao = String(req.query?.acao || 'dashboard');
 
       if (acao === 'dashboard') {
+        const cfgDash = await lerWmsConfig();
+        const corteHoje = corteDeHoje(corteHhmm(cfgDash));
         const { data: rows, error } = await supabase.from('wms_pedidos')
           .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em, situacao_nome, servico_frete, ml_logistic_type, canal_detalhe')
           .neq('status_wms', 'cancelado');
@@ -83,7 +94,7 @@ export default async function handler(req, res) {
         // do dia — e caso antigo/orfao (cancelado na plataforma, esquecido),
         // nao fila de separacao. Continua visivel no Detalhar Pedidos.
         const limiteVelho = new Date(Date.now() - 3 * 3600000 - 3 * 86400000).toISOString().slice(0, 10);
-        const corteMs = new Date(corteDeHoje()).getTime();
+        const corteMs = new Date(corteHoje).getTime();
         const porConta = {};
         const porCanal = {};
         const tot = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, em_separacao_flex: 0, em_separacao_meluni: 0, em_separacao_com_nf_prevista: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
@@ -141,7 +152,7 @@ export default async function handler(req, res) {
         }
         const { data: ultSync } = await supabase.from('wms_pedidos')
           .select('visto_em').order('visto_em', { ascending: false }).limit(1);
-        const config = await lerWmsConfig();
+        const config = cfgDash;
 
         // ENVIOS PROGRAMADOS do Mercado Livre (17/08, pra TV): pedido que só
         // libera a etiqueta num dia futuro — a equipe imprime a NF antes.
@@ -151,7 +162,7 @@ export default async function handler(req, res) {
           .neq('status_wms', 'cancelado')
           .gte('ml_agendado_em', hojeAg);
 
-        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: CORTE_LISTA, corte_em: corteDeHoje(), agendados_ml: agendadosMl || 0, ultimo_sync: ultSync?.[0]?.visto_em || null });
+        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: corteHhmm(cfgDash), corte_em: corteHoje, agendados_ml: agendadosMl || 0, ultimo_sync: ultSync?.[0]?.visto_em || null });
       }
 
       if (acao === 'config') {
@@ -490,7 +501,8 @@ export default async function handler(req, res) {
         if (loja) q = q.eq('canal_geral', loja);
         const { data, error } = await q;
         if (error) throw error;
-        return res.status(200).json({ ok: true, pedidos: data || [], corte_em: corteDeHoje(), corte_lista: CORTE_LISTA });
+        const cfgCorte = await lerWmsConfig();
+        return res.status(200).json({ ok: true, pedidos: data || [], corte_em: corteDeHoje(corteHhmm(cfgCorte)), corte_lista: corteHhmm(cfgCorte) });
       }
 
       return res.status(400).json({ error: 'acao inválida' });
@@ -519,6 +531,7 @@ export default async function handler(req, res) {
           prod_ref_manual: (c.prod_ref_manual === '' || c.prod_ref_manual == null) ? null : Number(c.prod_ref_manual),
           prod_ref_modo: c.prod_ref_modo === 'manual' ? 'manual' : 'auto',
           duracoes: { ...WMS_CONFIG_DEFAULT.duracoes, ...(c.duracoes || {}) },
+          corte_lista: /^\d{2}:\d{2}$/.test(String(c.corte_lista || '')) ? String(c.corte_lista) : CORTE_LISTA,
           _updated: new Date().toISOString(),
         };
         const { error } = await supabase.from('amicia_data')
