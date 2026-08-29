@@ -62,6 +62,9 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   // de auditoria do lote (cada REF ganha o check quando termina)
   const [selRefs, setSelRefs] = useState([]);
   const [comSep, setComSep] = useState(true);   // 25/08 (ordem dele): separadora de REF, ligada por padrao
+  // 29/08: aba Cancelados — lista propria, nao entra em nenhuma impressao
+  const [cancelados, setCancelados] = useState([]);
+  const [cancCarregando, setCancCarregando] = useState(false);
   const [lote, setLote] = useState(null);   // {grupos:[{key,loc,ref,qtd,feitas}], enviadas, rodando}
   const [modalCert, setModalCert] = useState(false);
   // PREPARO AUTOMÁTICO (17/08 — redesenho): ao abrir a tela o app já busca e
@@ -464,6 +467,19 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   }, [API, qs, onErro]);
 
   useEffect(() => { carregar(); setSelRefs([]); }, [carregar]);
+  // aba Cancelados: lista propria, buscada quando o chip e aberto (e depois de
+  // cada impressao, que pode ter descoberto cancelado na consulta ao ML)
+  useEffect(() => {
+    if (fTipo !== 'cancelados') return;
+    let vivo = true;
+    setCancCarregando(true);
+    fetch(`${API}/wms-cancelados${fConta !== 'todas' ? `?contas=${fConta}` : ''}`)
+      .then(r => r.json())
+      .then(j => { if (vivo && j?.ok) setCancelados(j.pedidos || []); })
+      .catch(() => {})
+      .finally(() => { if (vivo) setCancCarregando(false); });
+    return () => { vivo = false; };
+  }, [fTipo, fConta, carregar]);
   // contadores de cada botão de IMPRIMIR (leitura leve, só do banco)
   useEffect(() => {
     const buscar = () => fetch(`${API}/wms-etiquetas?contadores=1&contas=${fConta}`)
@@ -553,6 +569,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           <button onClick={() => setFTipo('etiqueta_liberada')} style={btn(fTipo === 'etiqueta_liberada')}
             title="Só as etiquetas logísticas que o Mercado Livre liberou pra postar hoje (a NF já foi impressa antes).">
             🏷 Etiquetas liberadas<Badge n={contadores?.etiqueta_liberada} />
+          </button>
+          <button onClick={() => setFTipo('cancelados')} style={btn(fTipo === 'cancelados')}
+            title="Pedidos cancelados no marketplace com a nota ainda viva. Cancele a nota no Bling e o pedido sai daqui sozinho.">
+            🚫 Cancelados<Badge n={contadores?.cancelados} />
           </button>
           <label style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontFamily:"Georgia,serif",color:"#2c3e50",border:"1px solid #d8d2c8",borderRadius:10,padding:"7px 12px",cursor:"pointer",background:comSep?"#eef3f8":"#fff",marginRight:8}}>
             <input type="checkbox" checked={comSep} onChange={e => setComSep(e.target.checked)} style={{accentColor:"#4a7fa5"}} />
@@ -659,6 +679,31 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         {fTipo === 'nf_agendada' && (
           <div style={{ fontSize: 12, color: palette.inkSoft, background: '#fdf6e3', border: '1px solid #e8d9a8', borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
             Envio programado do Mercado Livre: sai <b>só a nota</b>, com a data de envio no cabeçalho dela (mesma quantidade de folhas de sempre). Separe a mercadoria e guarde — no dia, use “Etiquetas liberadas”. A NF continua valendo.
+          </div>
+        )}
+        {fTipo === 'cancelados' && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: palette.inkSoft, background: '#fdeceb', border: '1px solid #f0c4c0', borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
+              Pedidos <b>cancelados no marketplace</b> com a nota ainda viva. Não entram em nenhuma impressão. <b>Cancele a nota no Bling</b> — assim que ela ficar cancelada, o pedido sai daqui sozinho.
+            </div>
+            {cancCarregando && <div style={{ fontSize: 12.5, color: palette.inkMuted, padding: '6px 2px' }}>Carregando…</div>}
+            {!cancCarregando && !cancelados.length && (
+              <div style={{ fontSize: 12.5, color: '#1e8e4e', padding: '6px 2px' }}>✓ Nenhum pedido cancelado pendente.</div>
+            )}
+            {cancelados.map(c => (
+              <div key={c.pedido_id} style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 9, padding: '9px 11px', marginBottom: 7, fontSize: 12.5, color: palette.ink }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                  <b>{c.numero}</b>
+                  <span style={{ color: palette.inkMuted }}>{String(c.conta || '').charAt(0).toUpperCase() + String(c.conta || '').slice(1)} · {c.canal}</span>
+                  {!!c.ref && <span style={{ color: palette.inkMuted }}>REF {c.ref}</span>}
+                  <span style={{ color: palette.inkMuted }}>{String(c.data_pedido || '').slice(8, 10)}/{String(c.data_pedido || '').slice(5, 7)}</span>
+                </div>
+                <div style={{ marginTop: 4, color: '#c0392b' }}>
+                  Nota <b>{c.nf_situacao_nome}</b> — precisa cancelar no Bling
+                  {c.ja_imprimiu && <span style={{ color: '#6a5a20' }}> · ⚠ já saiu papel desse pedido, descarte</span>}
+                </div>
+              </div>
+            ))}
           </div>
         )}
         {fTipo === 'etiqueta_liberada' && (

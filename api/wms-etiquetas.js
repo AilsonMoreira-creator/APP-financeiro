@@ -131,6 +131,9 @@ async function pedidosFiltrados(q) {
     // armazém do ML e ele mesmo despacha. Estava inflando "prontas" (eram 218
     // na Exitus) e o PDF depois vinha vazio.
     if (p.print_regra === 'ML_FULL' || p.ml_logistic_type === 'fulfillment') continue;
+    // 29/08: cancelado no marketplace fica fora de TODA lista de impressao
+    // (vive na aba Cancelados ate a nota ser cancelada no Bling).
+    if (p.ml_ship_status === 'cancelled') continue;
     if (tipo === 'flex' && !flex) continue;
     // 26/08 (caso 71333: pedido Meluni com canal generico "Outros" vazou pro
     // lote NF+transporte): Meluni se reconhece pelos DOIS campos, sempre.
@@ -380,13 +383,21 @@ export default async function handler(req, res) {
         if (vistos.has(k)) return false;
         vistos.add(k); return true;
       });
-      const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0 };
+      const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0, cancelados: 0 };
       const dlNossoCont = await setDownloadNosso(supabase, data);
       const desde3Cont = new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10);
       for (const p of (data || [])) {
         // 18/08: Full sai ANTES de tudo — reposição do Full tem ml_agendado_em
         // e vazava pro contador de NF agendada (sem nem ter nota)
         if (p.print_regra === 'ML_FULL' || p.ml_logistic_type === 'fulfillment') continue;
+        // 29/08: CANCELADO no marketplace sai de todos os chips de impressao e
+        // vai pra aba Cancelados — ate a nota ser cancelada no Bling (sit 2),
+        // que fecha o ciclo. Foi o caso 156475: o ML ja dizia 'cancelled' as
+        // 09:32 e a nota foi impressa as 10:08 assim mesmo.
+        if (p.ml_ship_status === 'cancelled') {
+          if (p.nf_id && p.nf_situacao !== 2) c.cancelados++;
+          continue;
+        }
         const agendado = p.ml_agendado_em && String(p.ml_agendado_em) > hoje;
         // AGENDADAS: sai do contador assim que a nota é impressa (carimbo nosso
         // ou DANFE emitida no Bling) — ordem dele 17/08
