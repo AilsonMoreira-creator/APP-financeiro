@@ -324,6 +324,20 @@ async function setDownloadNosso(supabase, peds) {
 // Agendado cujo dia JA chegou nao e agendada: ou a etiqueta liberou (vai pro
 // par completo) ou ele espera o ML liberar. So nota autorizada (5) entra, e o
 // carimbo proprio e a unica prova de que a nota ja saiu.
+// ── MAGALU (Ailson 29/08/2026) ─────────────────────────────────────────────
+// Regra dele: "deu errado no app, elas ja vao no Bling". No Magalu isso e a
+// rotina — a nota vira 6 sem NUNCA ter passado pelo app, e o 6 tirava o pedido
+// de todos os chips ("ja impresso"), entao o Magalu nunca aparecia pra
+// imprimir. So aqui o 6 deixa de valer como prova; nos outros canais a regra
+// segue igual. Prova de impressao no Magalu = carimbo NOSSO.
+export function ehMagalu(p) {
+  return /magalu/i.test(`${p?.canal_geral || ''} ${p?.canal_detalhe || ''}`);
+}
+export function notaSaiuPeloPainel(p, sit) {
+  const s = sit === undefined ? p?.nf_situacao : sit;
+  return s === 6 && !ehMagalu(p);
+}
+
 export function ehAgendadaPendente(p, hojeBRT) {
   const agendadoFuturo = p.ml_agendado_em && String(p.ml_agendado_em) > hojeBRT;
   const eAgendada = agendadoFuturo
@@ -428,7 +442,7 @@ export default async function handler(req, res) {
         // 24/08 (correcao dele): atendido(9) e so "NF gerada" (o Bling atende
         // sozinho ao emitir) — pendencia REAL. O que tira da fila e a DANFE
         // emitida (6), que so acontece quando a nota sai pelo painel.
-        if (p.nf_situacao === 6) continue;
+        if (notaSaiuPeloPainel(p)) continue;
         if (p.print_estado === 'AGUARDA_LOGISTICA' && p.canal_geral !== 'Mercado Livre') { c.aguardando_log = (c.aguardando_log || 0) + 1; continue; }
         if (p.print_regra === 'MELI_FLEX' || p.ml_logistic_type === 'self_service') c.flex++;
         else { c.nf_transporte++; if (q.debug_cont === '1') (c._quem = c._quem || []).push(`${p.numero}·${p.conta}·${p.canal_geral}·${String(p.data_pedido).slice(0, 10)}·estado:${p.print_estado || '-'}·sit:${p.nf_situacao ?? '-'}`); }
@@ -471,12 +485,12 @@ export default async function handler(req, res) {
           // aqui o que conta é a NOTA: pronta = tem NF e ainda não foi impressa
           // 24/08 (teste dele: 109 no botao): DANFE emitida no painel (sit 6)
           // e nota IMPRESSA — 106 buffered antigos inflavam as prontas
-          if (p.nf_agendada_impressa_em || p.etiqueta_impressa_em || sit === 6) { grupos[k].impressas++; jaImpressas++; }
+          if (p.nf_agendada_impressa_em || p.etiqueta_impressa_em || notaSaiuPeloPainel(p, sit)) { grupos[k].impressas++; jaImpressas++; }
           else if (p.nf_id && sit === 5) { grupos[k].prontas++; prontas++; }
           else semEtiqueta++;
         } else if (q.tipo === 'etiqueta_liberada') {
           grupos[k].prontas++; prontas++;   // liberada pelo ML = pode imprimir
-        } else if (sit === 6 || impressoPainelMl(p, dlNossoPrev) || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
+        } else if (notaSaiuPeloPainel(p, sit) || impressoPainelMl(p, dlNossoPrev) || p.etiqueta_impressa_em || (p.print_estado === 'IMPRESSO' && !ehMagalu(p))) {
           // 20/08 (ele apontou: "540 impressas" impossível): situação 6 de
           // QUALQUER dia entrava na conta de hoje. Agora "já impressas" =
           // carimbo NOSSO de hoje OU impressa PELO BLING (sit 6/atendido, sem
@@ -583,7 +597,7 @@ export default async function handler(req, res) {
         if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em && !p.etiqueta_impressa_em && p.nf_situacao === 5;
         if (q.tipo === 'etiqueta_liberada') return true;
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
-        if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return false;
+        if (notaSaiuPeloPainel(p, sit) || p.etiqueta_impressa_em || (p.print_estado === 'IMPRESSO' && !ehMagalu(p))) return false;
         // 24/08 (correcao dele): atendido(9) NAO significa impresso — o Bling
         // atende o pedido sozinho ao GERAR a NF. O sinal de painel e sit 6.
         if (impressoPainelMl(p, dlNossoSaida)) return false; // impresso no painel do ML (sem download nosso)
@@ -914,11 +928,12 @@ export default async function handler(req, res) {
             continue;
           }
           pos++;
-          const dt = p.ml_agendado_em ? `${String(p.ml_agendado_em).slice(8, 10)}/${String(p.ml_agendado_em).slice(5, 7)}` : '';
-          const topo = dt ? `^FO0,6^FB812,1,0,C^A0N,54,54^FDENVIAR ${dt}^FS^FO120,66^GB572,4,4^FS` : '';
+          // 29/08 (foto dele): a data saia DUAS vezes — no topo, em corpo 54,
+          // por cima do titulo "DANFE SIMPLIFICADO - ETIQUETA" (ilegivel), e no
+          // rodape. Fica so a do rodape, que a montagem da DANFE rica ja poe.
           const rodape = `^FO18,1176^A0N,22,22^FDPAR ${pos}/${Math.min(alvoAg.length, 15)}^FS`;
           blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc,
-            zpl: String(dRes.conteudo).replace('^XA', '^XA' + topo).replace('^XZ', rodape + '^XZ') });
+            zpl: String(dRes.conteudo).replace('^XZ', rodape + '^XZ') });
           idsOk.push(p.pedido_id); refsOk.push(String(p.ref || ''));
         } catch (e) { semDanfeAg.push(`${p.numero} (${e?.message || 'erro'})`); }
       }

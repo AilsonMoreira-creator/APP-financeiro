@@ -32,7 +32,13 @@ export function classificar(p, hojeBRT) {
   const temNf = !!p.nf_id;
   const sit = p.nf_situacao;
   const nfPronta = sit === 5;
-  const nfImpressa = sit === 6;
+  // 29/08 (Sthefany: "etiqueta Magalu nao sai no app"): no Magalu a nota vira
+  // 6 sem passar pelo app — elas imprimem no Bling quando falha. Com sit 6
+  // valendo como "ja impresso", o pedido virava IMPRESSO e sumia de todos os
+  // chips: 11 pedidos em 7 dias, nenhum com carimbo nosso. So no Magalu a
+  // prova passa a ser o carimbo NOSSO; nos outros canais nada muda.
+  const ehMagalu = /magalu/i.test(`${p.canal_geral || ''} ${p.canal_detalhe || ''}`);
+  const nfImpressa = sit === 6 && !ehMagalu;
   const nfMorta = sit === 2 || sit === 4 || sit === 9 || sit === 11;
   const nfEmTransito = sit === 1 || sit === 8;
   const rotuloMorta = sit === 2 ? 'nota cancelada — precisa emitir outra'
@@ -92,7 +98,7 @@ export default async function handler(req, res) {
   const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   try {
     const { data: peds } = await supabase.from('wms_pedidos')
-      .select('pedido_id, conta, canal_geral, ml_logistic_type, status_wms, nf_id, nf_situacao, ml_agendado_em, etiqueta_impressa_em, nf_agendada_impressa_em')
+      .select('pedido_id, conta, canal_geral, canal_detalhe, ml_logistic_type, status_wms, nf_id, nf_situacao, ml_agendado_em, etiqueta_impressa_em, nf_agendada_impressa_em')
       .neq('status_wms', 'cancelado')
       .gte('criado_em', new Date(Date.now() - 5 * 86400000).toISOString())
       .limit(2000);
