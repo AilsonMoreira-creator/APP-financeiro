@@ -164,11 +164,24 @@ export default async function handler(req, res) {
 
         // ENVIOS PROGRAMADOS do Mercado Livre (17/08, pra TV): pedido que só
         // libera a etiqueta num dia futuro — a equipe imprime a NF antes.
+        // 29/08 (regra dele): a TV mostra AGENDADO FUTURO e só. Agendado com
+        // data de hoje já teve a NF impressa durante a semana e só espera a
+        // etiqueta logística — esse vive em "Etiquetas liberadas", não aqui.
+        // A régua antiga era só `ml_agendado_em >= hoje`, sem mais nada: dos 82
+        // que a TV mostrava, 17 eram Full, 13 já despachados, 3 cancelados e 41
+        // eram de hoje. Pendente de verdade: 32.
         const hojeAg = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
-        const { count: agendadosMl } = await supabase.from('wms_pedidos')
-          .select('pedido_id', { count: 'exact', head: true })
+        const { data: agLinhas } = await supabase.from('wms_pedidos')
+          .select('pedido_id, ml_agendado_em, ml_ship_status, print_regra, ml_logistic_type, etiqueta_impressa_em')
           .neq('status_wms', 'cancelado')
-          .gte('ml_agendado_em', hojeAg);
+          .gt('ml_agendado_em', hojeAg)
+          .limit(600);
+        const agendadosMl = (agLinhas || []).filter(p =>
+          p.ml_ship_status !== 'cancelled'
+          && !p.etiqueta_impressa_em
+          && p.print_regra !== 'ML_FULL'
+          && p.ml_logistic_type !== 'fulfillment'
+        ).length;
 
         return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: corteHhmm(cfgDash), corte_em: corteHoje, agendados_ml: agendadosMl || 0, ultimo_sync: ultSync?.[0]?.visto_em || null });
       }
