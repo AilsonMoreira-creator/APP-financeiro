@@ -453,10 +453,15 @@ export default async function handler(req, res) {
           .eq('ml_ship_status', 'cancelled')
           .is('cancelado_arquivado_em', null)
           .gte('data_pedido', desde30).limit(300);
-        if (contas !== 'todas') qc = qc.in('conta', contas.split(','));
-        const { data: canc } = await qc;
+        if (contasFiltro !== 'todas') qc = qc.in('conta', contasFiltro.split(','));
+        const { data: canc, error: errCanc } = await qc;
+        if (errCanc) throw errCanc;
         c.cancelados = (canc || []).filter(p => p.nf_id && p.nf_situacao !== 2).length;
-      } catch { /* contador é complemento: falha não derruba os outros chips */ }
+      } catch (e) {
+        // falha honesta: o chip diz que nao conseguiu contar, em vez de zero
+        c.cancelados = null;
+        c.cancelados_erro = String(e?.message || e);
+      }
       return res.status(200).json({ ok: true, contadores: c });
     }
 
