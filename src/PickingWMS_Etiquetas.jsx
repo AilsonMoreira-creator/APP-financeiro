@@ -65,6 +65,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   // 29/08: aba Cancelados — lista propria, nao entra em nenhuma impressao
   const [cancelados, setCancelados] = useState([]);
   const [cancCarregando, setCancCarregando] = useState(false);
+  const [cancSel, setCancSel] = useState([]);
+  const [arquivando, setArquivando] = useState(false);
   const [lote, setLote] = useState(null);   // {grupos:[{key,loc,ref,qtd,feitas}], enviadas, rodando}
   const [modalCert, setModalCert] = useState(false);
   // PREPARO AUTOMÁTICO (17/08 — redesenho): ao abrir a tela o app já busca e
@@ -467,6 +469,25 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   }, [API, qs, onErro]);
 
   useEffect(() => { carregar(); setSelRefs([]); }, [carregar]);
+  // arquivar (ordem dele 29/08): tira o card da vista sem mexer na nota
+  const arquivarCancelados = async () => {
+    if (!cancSel.length || arquivando) return;
+    setArquivando(true);
+    try {
+      const r = await fetch(`${API}/wms-cancelados`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: cancSel }),
+      });
+      const j = await r.json();
+      if (j?.ok) {
+        setCancelados(l => l.filter(c => !cancSel.includes(c.pedido_id)));
+        setCancSel([]);
+        carregar();   // atualiza o badge do chip
+      }
+    } catch { /* silencioso: a lista continua na tela pra tentar de novo */ }
+    setArquivando(false);
+  };
+
   // aba Cancelados: lista propria, buscada quando o chip e aberto (e depois de
   // cada impressao, que pode ter descoberto cancelado na consulta ao ML)
   useEffect(() => {
@@ -690,8 +711,24 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             {!cancCarregando && !cancelados.length && (
               <div style={{ fontSize: 12.5, color: '#1e8e4e', padding: '6px 2px' }}>✓ Nenhum pedido cancelado pendente.</div>
             )}
+            {!!cancelados.length && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => setCancSel(cancSel.length === cancelados.length ? [] : cancelados.map(c => c.pedido_id))}
+                  style={{ fontSize: 12.5, fontFamily: FONT, color: palette.ink, background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 9, padding: '7px 11px', cursor: 'pointer' }}>
+                  {cancSel.length === cancelados.length ? 'Limpar seleção' : 'Selecionar todos'}
+                </button>
+                <button onClick={arquivarCancelados} disabled={!cancSel.length || arquivando}
+                  style={{ fontSize: 12.5, fontFamily: FONT, color: '#fff', background: !cancSel.length || arquivando ? '#9bb0c4' : '#4a7fa5', border: 'none', borderRadius: 9, padding: '7px 13px', fontWeight: 700, cursor: !cancSel.length || arquivando ? 'default' : 'pointer' }}>
+                  {arquivando ? 'Arquivando…' : `📦 Arquivar${cancSel.length ? ` (${cancSel.length})` : ''}`}
+                </button>
+              </div>
+            )}
             {cancelados.map(c => (
-              <div key={c.pedido_id} style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 9, padding: '9px 11px', marginBottom: 7, fontSize: 12.5, color: palette.ink }}>
+              <div key={c.pedido_id} style={{ background: '#fff', border: `1px solid ${cancSel.includes(c.pedido_id) ? '#4a7fa5' : palette.beige}`, borderRadius: 9, padding: '9px 11px', marginBottom: 7, fontSize: 12.5, color: palette.ink, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <input type="checkbox" checked={cancSel.includes(c.pedido_id)}
+                  onChange={() => setCancSel(s => s.includes(c.pedido_id) ? s.filter(x => x !== c.pedido_id) : [...s, c.pedido_id])}
+                  style={{ accentColor: '#4a7fa5', marginTop: 3, cursor: 'pointer' }} />
+                <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
                   <b>{c.numero}</b>
                   <span style={{ color: palette.inkMuted }}>{String(c.conta || '').charAt(0).toUpperCase() + String(c.conta || '').slice(1)} · {c.canal}</span>
@@ -701,6 +738,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
                 <div style={{ marginTop: 4, color: '#c0392b' }}>
                   Nota <b>{c.nf_situacao_nome}</b> — precisa cancelar no Bling
                   {c.ja_imprimiu && <span style={{ color: '#6a5a20' }}> · ⚠ já saiu papel desse pedido, descarte</span>}
+                </div>
                 </div>
               </div>
             ))}

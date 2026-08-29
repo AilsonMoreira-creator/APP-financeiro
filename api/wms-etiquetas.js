@@ -394,10 +394,9 @@ export default async function handler(req, res) {
         // vai pra aba Cancelados — ate a nota ser cancelada no Bling (sit 2),
         // que fecha o ciclo. Foi o caso 156475: o ML ja dizia 'cancelled' as
         // 09:32 e a nota foi impressa as 10:08 assim mesmo.
-        if (p.ml_ship_status === 'cancelled') {
-          if (p.nf_id && p.nf_situacao !== 2) c.cancelados++;
-          continue;
-        }
+        // cancelado sai de TODOS os chips de impressao; o contador dele e
+        // calculado a parte (janela propria, ver abaixo)
+        if (p.ml_ship_status === 'cancelled') continue;
         const agendado = p.ml_agendado_em && String(p.ml_agendado_em) > hoje;
         // AGENDADAS: sai do contador assim que a nota é impressa (carimbo nosso
         // ou DANFE emitida no Bling) — ordem dele 17/08
@@ -444,6 +443,20 @@ export default async function handler(req, res) {
         if (p.print_regra === 'MELI_FLEX' || p.ml_logistic_type === 'self_service') c.flex++;
         else { c.nf_transporte++; if (q.debug_cont === '1') (c._quem = c._quem || []).push(`${p.numero}·${p.conta}·${p.canal_geral}·${String(p.data_pedido).slice(0, 10)}·estado:${p.print_estado || '-'}·sit:${p.nf_situacao ?? '-'}`); }
       }
+      // 29/08 (ordem dele): SÓ o cancelamento enxerga período antigo (30 dias)
+      // — as outras situações seguem a regra dos 3 dias, pra não ressuscitar
+      // pedido velho na fila. Consulta própria, mesma régua do /wms-cancelados.
+      try {
+        const desde30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+        let qc = supabase.from('wms_pedidos')
+          .select('pedido_id, nf_id, nf_situacao')
+          .eq('ml_ship_status', 'cancelled')
+          .is('cancelado_arquivado_em', null)
+          .gte('data_pedido', desde30).limit(300);
+        if (contas !== 'todas') qc = qc.in('conta', contas.split(','));
+        const { data: canc } = await qc;
+        c.cancelados = (canc || []).filter(p => p.nf_id && p.nf_situacao !== 2).length;
+      } catch { /* contador é complemento: falha não derruba os outros chips */ }
       return res.status(200).json({ ok: true, contadores: c });
     }
 
