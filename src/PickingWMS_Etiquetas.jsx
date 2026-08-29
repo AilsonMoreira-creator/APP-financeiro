@@ -345,7 +345,32 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             setLote(prev => prev ? { ...prev, programados: [...(prev.programados || []), ...pg] } : prev);
             break;
           }
-          if (se.length || sd.length) throw new Error(`Nada saiu: ${se.length ? `${se.length} pedido(s) sem etiqueta disponível ainda (${se.slice(0, 5).join(', ')}${se.length > 5 ? '…' : ''})` : ''}${se.length && sd.length ? ' · ' : ''}${sd.length ? `${sd.length} sem DANFE (${sd.slice(0, 5).join(', ')}${sd.length > 5 ? '…' : ''})` : ''}.`);
+          if (se.length || sd.length) {
+            // 29/08 (caso 156647/156649/156653): antes de chamar de erro, PERGUNTA
+            // AO ML. Os tres eram agendados e o espelho ainda nao sabia — o
+            // agenda-sync so passaria uma hora depois. A consulta acontece aqui,
+            // no instante da decisao, e o resultado aparece no lugar do erro.
+            const idsChecar = jL.sem_etiqueta_ids || [];
+            if (idsChecar.length) {
+              setLote(prev => prev ? { ...prev, consultandoMl: idsChecar.length, erro: null } : prev);
+              try {
+                const rc = await fetch(`${API}/wms-ml-checar-pedidos`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ids: idsChecar }),
+                });
+                const jc = await rc.json();
+                if (jc?.ok) {
+                  setLote(prev => prev ? { ...prev, consultandoMl: 0, checagemMl: jc } : prev);
+                  carregar();
+                  break;
+                }
+                setLote(prev => prev ? { ...prev, consultandoMl: 0 } : prev);
+              } catch {
+                setLote(prev => prev ? { ...prev, consultandoMl: 0 } : prev);
+              }
+            }
+            throw new Error(`Nada saiu: ${se.length ? `${se.length} pedido(s) sem etiqueta disponível ainda (${se.slice(0, 5).join(', ')}${se.length > 5 ? '…' : ''})` : ''}${se.length && sd.length ? ' · ' : ''}${sd.length ? `${sd.length} sem DANFE (${sd.slice(0, 5).join(', ')}${sd.length > 5 ? '…' : ''})` : ''}.`);
+          }
           if (ag.length) throw new Error(`⏳ Nada pra imprimir agora: ${ag.length} pedido(s) aguardando o Bling liberar a etiqueta (${ag.slice(0, 4).join(', ')}${ag.length > 4 ? '…' : ''}). Não é falha — a etiqueta entra sozinha quando a transportadora arranjar a coleta.`);
           throw new Error(fTipo === 'nf_agendada'
             ? 'Nenhuma nota agendada pendente: as notas dos envios programados já foram emitidas (ou ainda não têm nota). A etiqueta de cada um sai no dia, em "Etiquetas liberadas".'
@@ -729,6 +754,40 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
                   📅 <b>{lote.programados.length} pedido(s) com envio programado</b> — {Object.entries(lote.programados.reduce((a, p) => { a[p.conta || '—'] = (a[p.conta || '—'] || 0) + 1; return a; }, {})).map(([c, n]) => `${n} ${c}`).join(' · ')}. Não é falha: o Mercado Livre só libera a etiqueta no dia. Imprima a nota pelo filtro <b>Agendadas</b>. Pedidos: {lote.programados.map(p => p.numero + (p.agendado_em ? ` (${String(p.agendado_em).slice(8, 10)}/${String(p.agendado_em).slice(5, 7)})` : '')).join(', ')}.
                 </div>
               )}
+              {!!lote.consultandoMl && (
+                <div style={{ fontSize: 12.5, color: '#2c3e50', background: '#eef3f8', border: '1px solid #cfe0ee', borderRadius: 8, padding: '10px 12px', marginTop: 8 }}>
+                  🔎 Consultando {lote.consultandoMl} pedido(s) no Mercado Livre…
+                </div>
+              )}
+              {lote.checagemMl && (() => {
+                const c = lote.checagemMl;
+                const lista = (arr, f) => arr.map(f).join(', ');
+                return (
+                  <div style={{ fontSize: 12.5, color: '#2c3e50', background: '#f7f4f0', border: '1px solid #e8e2da', borderRadius: 8, padding: '10px 12px', marginTop: 8, lineHeight: 1.6 }}>
+                    <b>Consulta ao Mercado Livre — {c.consultados} pedido(s)</b>
+                    {!!c.agendados?.length && (
+                      <div style={{ marginTop: 6, color: '#1e6fa8' }}>
+                        📅 <b>{c.agendados.length} são agendados</b> — foram para a aba <b>Agendadas</b>: {lista(c.agendados, p => `${p.numero} (${p.em_br})`)}
+                      </div>
+                    )}
+                    {!!c.cancelados?.length && (
+                      <div style={{ marginTop: 6, color: '#c0392b' }}>
+                        🚫 <b>{c.cancelados.length} cancelado(s) no Mercado Livre</b>: {lista(c.cancelados, p => p.numero)}. Cancele a nota no Bling.
+                      </div>
+                    )}
+                    {!!c.liberados?.length && (
+                      <div style={{ marginTop: 6, color: '#1e8e4e' }}>
+                        ✓ <b>{c.liberados.length} já liberado(s)</b> — tente imprimir de novo: {lista(c.liberados, p => p.numero)}
+                      </div>
+                    )}
+                    {!!c.sem_resposta?.length && (
+                      <div style={{ marginTop: 6, color: '#6a5a20' }}>
+                        ⚠ <b>{c.sem_resposta.length} sem resposta</b>: {lista(c.sem_resposta, p => `${p.numero} — ${p.motivo}`)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div style={{ padding: '12px 16px', borderTop: `1px solid ${palette.beigeSoft}` }}>
               <button onClick={() => setLote(null)} disabled={lote.rodando}
