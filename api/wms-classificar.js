@@ -32,13 +32,7 @@ export function classificar(p, hojeBRT) {
   const temNf = !!p.nf_id;
   const sit = p.nf_situacao;
   const nfPronta = sit === 5;
-  // 29/08 (Sthefany: "etiqueta Magalu nao sai no app"): no Magalu a nota vira
-  // 6 sem passar pelo app — elas imprimem no Bling quando falha. Com sit 6
-  // valendo como "ja impresso", o pedido virava IMPRESSO e sumia de todos os
-  // chips: 11 pedidos em 7 dias, nenhum com carimbo nosso. So no Magalu a
-  // prova passa a ser o carimbo NOSSO; nos outros canais nada muda.
-  const ehMagalu = /magalu/i.test(`${p.canal_geral || ''} ${p.canal_detalhe || ''}`);
-  const nfImpressa = sit === 6 && !ehMagalu;
+  const nfImpressa = sit === 6;
   const nfMorta = sit === 2 || sit === 4 || sit === 9 || sit === 11;
   const nfEmTransito = sit === 1 || sit === 8;
   const rotuloMorta = sit === 2 ? 'nota cancelada — precisa emitir outra'
