@@ -66,7 +66,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const [cancelados, setCancelados] = useState([]);
   const [cancCarregando, setCancCarregando] = useState(false);
   const [cancSel, setCancSel] = useState([]);
+  const [cancTick, setCancTick] = useState(0);
   const [arquivando, setArquivando] = useState(false);
+  const [atualizandoCanc, setAtualizandoCanc] = useState(false);
+  const [msgAtualiza, setMsgAtualiza] = useState('');
   const [lote, setLote] = useState(null);   // {grupos:[{key,loc,ref,qtd,feitas}], enviadas, rodando}
   const [modalCert, setModalCert] = useState(false);
   // PREPARO AUTOMÁTICO (17/08 — redesenho): ao abrir a tela o app já busca e
@@ -469,6 +472,33 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   }, [API, qs, onErro]);
 
   useEffect(() => { carregar(); setSelRefs([]); }, [carregar]);
+  // atualizar situacao (ordem dele 29/08): rele a nota no Bling. Sem selecao,
+  // atualiza a lista toda. Quem ja estiver cancelado (sit 2) sai sozinho.
+  const atualizarCancelados = async () => {
+    if (atualizandoCanc) return;
+    const ids = cancSel.length ? cancSel : cancelados.map(c => c.pedido_id);
+    if (!ids.length) return;
+    setAtualizandoCanc(true); setMsgAtualiza('');
+    try {
+      const r = await fetch(`${API}/wms-cancelados`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'atualizar', ids }),
+      });
+      const j = await r.json();
+      if (j?.ok) {
+        const saiu = j.saiu_da_aba || 0;
+        const falhou = (j.sem_resposta || []).length;
+        setMsgAtualiza(`${(j.atualizados || []).length} conferido(s)`
+          + (saiu ? ` · ${saiu} já cancelado(s) no Bling, saíram da lista` : '')
+          + (falhou ? ` · ${falhou} sem resposta` : ''));
+        setCancSel([]);
+        setCancTick(t => t + 1);
+        carregar();
+      } else setMsgAtualiza(j?.erro || 'falhou');
+    } catch (e) { setMsgAtualiza(String(e?.message || e)); }
+    setAtualizandoCanc(false);
+  };
+
   // arquivar (ordem dele 29/08): tira o card da vista sem mexer na nota
   const arquivarCancelados = async () => {
     if (!cancSel.length || arquivando) return;
@@ -500,7 +530,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       .catch(() => {})
       .finally(() => { if (vivo) setCancCarregando(false); });
     return () => { vivo = false; };
-  }, [fTipo, fConta, carregar]);
+  }, [fTipo, fConta, carregar, cancTick]);
   // contadores de cada botão de IMPRIMIR (leitura leve, só do banco)
   useEffect(() => {
     const buscar = () => fetch(`${API}/wms-etiquetas?contadores=1&contas=${fConta}`)
@@ -721,6 +751,12 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
                   style={{ fontSize: 12.5, fontFamily: FONT, color: '#fff', background: !cancSel.length || arquivando ? '#9bb0c4' : '#4a7fa5', border: 'none', borderRadius: 9, padding: '7px 13px', fontWeight: 700, cursor: !cancSel.length || arquivando ? 'default' : 'pointer' }}>
                   {arquivando ? 'Arquivando…' : `📦 Arquivar${cancSel.length ? ` (${cancSel.length})` : ''}`}
                 </button>
+                <button onClick={atualizarCancelados} disabled={atualizandoCanc}
+                  title="Relê a situação da nota no Bling. Quem já estiver cancelado sai da lista sozinho."
+                  style={{ fontSize: 12.5, fontFamily: FONT, color: palette.ink, background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 9, padding: '7px 12px', cursor: atualizandoCanc ? 'default' : 'pointer', opacity: atualizandoCanc ? 0.6 : 1 }}>
+                  {atualizandoCanc ? 'Consultando o Bling…' : `🔄 Atualizar situação${cancSel.length ? ` (${cancSel.length})` : ''}`}
+                </button>
+                {!!msgAtualiza && <span style={{ fontSize: 12, color: palette.inkMuted }}>{msgAtualiza}</span>}
               </div>
             )}
             {cancelados.map(c => (
