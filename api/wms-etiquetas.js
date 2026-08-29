@@ -152,10 +152,11 @@ async function pedidosFiltrados(q) {
       && p.ml_ship_substatus === 'ready_to_print'
       && !p.etiqueta_impressa_em;
     if (tipo === 'nf_agendada') {
-      if (!(agendadoFuturo || p.ml_ship_substatus === 'buffered')) continue;
-      // 17/08 (ordem dele): a nota do agendado sai UMA vez — some da lista
-      // depois de impressa (carimbo próprio, separado do da etiqueta)
-      if (p.nf_agendada_impressa_em && q.reimprimir !== '1') continue;
+      // 29/08: regua unica (ver ehAgendadaPendente) — o chip, esta lista e o
+      // ZPL agora concordam. `reimprimir=1` ignora so o carimbo proprio.
+      if (!ehAgendadaPendente(p, hojeBRT)
+        && !(q.reimprimir === '1' && p.nf_agendada_impressa_em
+          && (p.ml_agendado_em > hojeBRT || p.ml_ship_substatus === 'buffered' || p.print_regra === 'MELI_AGENDADO'))) continue;
     }
     if (tipo === 'etiqueta_liberada' && !etiquetaLiberada) continue;
     // nos demais tipos, o pedido agendado NÃO entra (a etiqueta nem existe)
@@ -316,6 +317,25 @@ async function setDownloadNosso(supabase, peds) {
   const { data } = await supabase.from('wms_documentos').select('pedido_id').in('pedido_id', ids).in('tipo', ['ETIQUETA', 'PREVIA_PNG']);
   return new Set((data || []).map(d => String(d.pedido_id)));
 }
+// ── REGUA UNICA DE AGENDADA (Ailson 29/08/2026) ────────────────────────────
+// Antes cada lugar tinha a sua: o contador exigia agendamento estritamente
+// FUTURO, o caminho do lote aceitava `>= hoje`. Resultado: chip dizia 1 e o
+// lote montava 2. Lei nº 3 dele — a mesma algebra no chip, na lista e no ZPL.
+// Agendado cujo dia JA chegou nao e agendada: ou a etiqueta liberou (vai pro
+// par completo) ou ele espera o ML liberar. So nota autorizada (5) entra, e o
+// carimbo proprio e a unica prova de que a nota ja saiu.
+export function ehAgendadaPendente(p, hojeBRT) {
+  const agendadoFuturo = p.ml_agendado_em && String(p.ml_agendado_em) > hojeBRT;
+  const eAgendada = agendadoFuturo
+    || p.ml_ship_substatus === 'buffered'
+    || p.print_regra === 'MELI_AGENDADO';
+  return !!(eAgendada
+    && p.nf_id
+    && p.nf_situacao === 5
+    && !p.nf_agendada_impressa_em
+    && !p.etiqueta_impressa_em);
+}
+
 function impressoPainelMl(p, dlNosso) {
   return p.ml_ship_substatus === 'printed' && !p.etiqueta_impressa_em && !dlNosso.has(String(p.pedido_id));
 }
@@ -373,10 +393,11 @@ export default async function handler(req, res) {
         // 24/08 (teste dele: chip 3 vs botao 109): buffered TAMBEM e agendado,
         // e o criterio vira o da NOTA (nf existe, nao impressa, DANFE nao
         // emitida) — identico ao da previa/botao, sem depender do classificar
+        // 29/08: regua unica (ehAgendadaPendente) — o chip contava so o
+        // agendamento estritamente futuro enquanto o lote montava tambem o
+        // "agendado pra hoje", entao o numero nunca batia com o papel.
+        if (ehAgendadaPendente(p, hoje)) { c.nf_agendada++; continue; }
         if (p.print_regra === 'MELI_AGENDADO' || agendado || p.ml_ship_substatus === 'buffered') {
-          // 25/08 (155042/155217): nota pronta = AUTORIZADA (5) — cancelada e
-          // pendente nao contam; e par completo ja impresso = nota ja saiu
-          if (p.nf_id && !p.nf_agendada_impressa_em && !p.etiqueta_impressa_em && p.nf_situacao === 5) c.nf_agendada++;
           continue;
         }
         // LIBERADAS: só as que ainda não saíram. Etiqueta impressa (nossa ou
@@ -868,13 +889,18 @@ export default async function handler(req, res) {
       const d3 = new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10);
       let qAg = supabase.from('wms_pedidos')
         .select('conta, pedido_id, numero, canal_geral, itens, data_pedido, nf_id, nf_situacao, ml_agendado_em, ml_ship_substatus, print_regra, nf_agendada_impressa_em, etiqueta_impressa_em, status_wms')
-        .or(`ml_agendado_em.gte.${hojeAg},ml_ship_substatus.eq.buffered,print_regra.eq.MELI_AGENDADO`)
+        .or(`ml_agendado_em.gt.${hojeAg},ml_ship_substatus.eq.buffered,print_regra.eq.MELI_AGENDADO`)
         .eq('nf_situacao', 5).not('nf_id', 'is', null)
         .is('nf_agendada_impressa_em', null).is('etiqueta_impressa_em', null)
         .neq('status_wms', 'cancelado').gte('data_pedido', d3).limit(200);
       if (q.contas && q.contas !== 'todas') qAg = qAg.in('conta', String(q.contas).split(','));
       const { data: pedsAg } = await qAg;
-      const alvoAg = (pedsAg || []).map(p => ({ ...p, ref: (p.itens?.[0]?.ref || p.itens?.[0]?.codigo || ''), loc: '' }));
+      // 29/08: o banco ja filtra, mas a regua unica manda — assim o lote nunca
+      // monta um pedido que o chip nao contou (era o caso do agendado pra HOJE,
+      // que entrava aqui pelo `gte` e ficava de fora do contador).
+      const alvoAg = (pedsAg || [])
+        .filter(p => ehAgendadaPendente(p, hojeAg))
+        .map(p => ({ ...p, ref: (p.itens?.[0]?.ref || p.itens?.[0]?.codigo || ''), loc: '' }));
       const blocos = []; const idsOk = []; const refsOk = []; const semDanfeAg = [];
       let pos = 0;
       for (const p of alvoAg.slice(0, 15)) {
