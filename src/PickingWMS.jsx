@@ -175,6 +175,12 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
     const d = new Date(v);
     return isNaN(d) ? '' : new Date(d.getTime() - 3 * 3600000).toISOString().slice(0, 16);
   });
+  const [lemFim, setLemFim] = useState(() => {
+    const v = String(config.lembrete_fim || '');
+    if (!v) return '';
+    const d = new Date(v);
+    return isNaN(d) ? '' : new Date(d.getTime() - 3 * 3600000).toISOString().slice(0, 16);
+  });
   const [medias, setMedias] = useState(null);
   useEffect(() => {
     (async () => {
@@ -206,8 +212,28 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
 
   const setCanal = (i, campo, valor) => setCanais(cs => cs.map((c, j) => j === i ? { ...c, [campo]: valor } : c));
 
+  // 30/08 (pedido dele): salvar em cima e embaixo — mesma função, sem rolar.
+  const salvarTudo = () => onSalvar({
+    situacoes_aberto: abertas, situacoes_finalizado: finalizadas,
+    canais: canais.filter(c => c.corte || c.envio),
+    avisos_fluxo_ativo: avisosFluxo, aviso_prod_ativo: avisoProd,
+    fluxo_ref_manual: refManual, fluxo_ref_modo: refModo,
+    prod_ref_manual: prodManual, prod_ref_modo: prodModo,
+    duracoes: dur,
+    corte_lista: corteLista,
+    lembrete_texto: lemTexto,
+    lembrete_em: lemEm ? new Date(lemEm + ':00-03:00').toISOString() : '',
+    lembrete_fim: lemFim ? new Date(lemFim + ':00-03:00').toISOString() : '',
+  });
+  const BotaoSalvar = ({ mb }) => (
+    <button onClick={salvarTudo} disabled={salvando} style={{ width: '100%', padding: '14px', borderRadius: 13, border: 'none', background: '#1e8e4e', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, opacity: salvando ? 0.6 : 1, marginBottom: mb || 0 }}>
+      {salvando ? 'Salvando…' : '💾 Salvar configurações'}
+    </button>
+  );
+
   return (
     <div style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
+      <BotaoSalvar mb={14} />
       <div style={{ background: '#fff', border: `1.5px solid ${palette.beige}`, borderRadius: 13, padding: 14, marginBottom: 12 }}>
         <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>⏰ Horário de corte</div>
         <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 10 }}>
@@ -232,12 +258,27 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
           placeholder="Ex.: Hoje tem coleta extra da Shein às 15h"
           style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${palette.beige}`, fontSize: 14, fontFamily: FONT, color: palette.ink, marginBottom: 8 }}
         />
-        <input
-          type="datetime-local"
-          value={lemEm}
-          onChange={(e) => setLemEm(e.target.value)}
-          style={{ padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${palette.beige}`, fontSize: 15, fontFamily: FONT, color: palette.ink }}
-        />
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 12, color: palette.inkSoft }}>
+            Exibir a partir de<br />
+            <input
+              type="datetime-local"
+              value={lemEm}
+              onChange={(e) => setLemEm(e.target.value)}
+              style={{ padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${palette.beige}`, fontSize: 15, fontFamily: FONT, color: palette.ink, marginTop: 3 }}
+            />
+          </label>
+          <label style={{ fontSize: 12, color: palette.inkSoft }}>
+            Até (opcional — pode atravessar dias)<br />
+            <input
+              type="datetime-local"
+              value={lemFim}
+              onChange={(e) => setLemFim(e.target.value)}
+              style={{ padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${palette.beige}`, fontSize: 15, fontFamily: FONT, color: palette.ink, marginTop: 3 }}
+            />
+          </label>
+        </div>
+        <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 6 }}>Sem término, o lembrete some sozinho às 23:59 do dia de início.</div>
       </div>
 
       {/* situações do funil */}
@@ -409,19 +450,7 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
         )}
       </div>
 
-      <button onClick={() => onSalvar({
-        situacoes_aberto: abertas, situacoes_finalizado: finalizadas,
-        canais: canais.filter(c => c.corte || c.envio),
-        avisos_fluxo_ativo: avisosFluxo, aviso_prod_ativo: avisoProd,
-        fluxo_ref_manual: refManual, fluxo_ref_modo: refModo,
-        prod_ref_manual: prodManual, prod_ref_modo: prodModo,
-        duracoes: dur,
-        corte_lista: corteLista,
-        lembrete_texto: lemTexto,
-        lembrete_em: lemEm ? new Date(lemEm + ':00-03:00').toISOString() : '',
-      })} disabled={salvando} style={{ width: '100%', padding: '14px', borderRadius: 13, border: 'none', background: '#1e8e4e', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, opacity: salvando ? 0.6 : 1 }}>
-        {salvando ? 'Salvando…' : '💾 Salvar configurações'}
-      </button>
+      <BotaoSalvar />
       <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 9, textAlign: 'center' }}>As situações valem a partir do próximo "Sincronizar Bling". Pedido que entrar numa situação de Finalizado sai do funil sozinho.</div>
     </div>
   );

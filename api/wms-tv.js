@@ -203,11 +203,19 @@ export default async function handler(req, res) {
       var cfgL = d.config || {};
       var lemTexto = String(cfgL.lembrete_texto || '').trim();
       var lemMs = cfgL.lembrete_em ? new Date(cfgL.lembrete_em).getTime() : NaN;
+      // 30/08 (2a ordem dele): termino OPCIONAL — com ele, o lembrete persiste
+      // ate a data/hora marcada (pode ser dias); sem ele, vale ate 23:59 do
+      // dia do inicio, como antes.
+      var lemFimMs = cfgL.lembrete_fim ? new Date(cfgL.lembrete_fim).getTime() : NaN;
       var mostra = false;
       if (lemTexto && !isNaN(lemMs)) {
-        var diaBrt = new Date(lemMs - 3*3600000).toISOString().slice(0,10);
-        var fimDia = new Date(diaBrt + 'T23:59:59-03:00').getTime();
-        mostra = Date.now() >= lemMs && Date.now() <= fimDia;
+        var fimMs;
+        if (!isNaN(lemFimMs)) { fimMs = lemFimMs; }
+        else {
+          var diaBrt = new Date(lemMs - 3*3600000).toISOString().slice(0,10);
+          fimMs = new Date(diaBrt + 'T23:59:59-03:00').getTime();
+        }
+        mostra = Date.now() >= lemMs && Date.now() <= fimMs;
       }
       lemEl.style.display = mostra ? 'block' : 'none';
       lemEl.textContent = mostra ? ('\ud83d\udccc ' + lemTexto) : '';

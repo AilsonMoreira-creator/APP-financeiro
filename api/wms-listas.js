@@ -70,6 +70,9 @@ export async function lerWmsConfig() {
       // ate o fim do dia da exibicao (23:59 BRT) e some sozinho.
       lembrete_texto: String(p.lembrete_texto || ''),
       lembrete_em: String(p.lembrete_em || ''),
+      // 30/08 (2a ordem dele): termino opcional — o lembrete pode persistir
+      // varios dias. Sem termino, vale a regra antiga (fim do dia do inicio).
+      lembrete_fim: String(p.lembrete_fim || ''),
     };
   } catch { return { ...WMS_CONFIG_DEFAULT }; }
 }
@@ -578,6 +581,7 @@ export default async function handler(req, res) {
           corte_lista: /^\d{2}:\d{2}$/.test(String(c.corte_lista || '')) ? String(c.corte_lista) : CORTE_LISTA,
           lembrete_texto: String(c.lembrete_texto || '').slice(0, 200),
           lembrete_em: String(c.lembrete_em || ''),
+          lembrete_fim: String(c.lembrete_fim || ''),
           _updated: new Date().toISOString(),
         };
         const { error } = await supabase.from('amicia_data')
