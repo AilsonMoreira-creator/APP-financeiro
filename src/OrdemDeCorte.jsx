@@ -420,6 +420,7 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
           ordemEditando={ordemEditando}
           usuario={usuario}
           mediaRef={mediaRef}
+          ordensExistentes={ordens}
           onClose={() => { setShowNova(false); setEditandoId(null); }}
           onSalvo={() => { setShowNova(false); setEditandoId(null); carregar(); }}
         />
@@ -846,7 +847,7 @@ function MatrizEstimativa({ grade, cores, pcrolo, refStr }) {
   );
 }
 
-function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo }) {
+function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, ordensExistentes = [], onClose, onSalvo }) {
   const isEdit = !!ordemEditando;
 
   // Etapa: 'ref' (escolhendo ref) ou 'completa' (ref escolhida, preenchendo grade/cores)
@@ -858,7 +859,23 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
   );
 
   // Campos da ordem
-  const [grupo, setGrupo] = useState(ordemEditando?.grupo ?? '');
+  // 30/08 (regra dele): grupo automatico DIA-A-DIA — numero sequencial do dia
+  // + letra do dia (seg=A ter=B qua=C qui=D sex=E sab=F dom=H, sem G pra nao
+  // confundir com tamanho). Sugerido ao abrir, mas continua editavel.
+  const sugerirGrupo = () => {
+    const agoraBrt = new Date(Date.now() - 3 * 3600000);
+    const letra = ['H', 'A', 'B', 'C', 'D', 'E', 'F'][agoraBrt.getUTCDay()];
+    const hojeBrt = agoraBrt.toISOString().slice(0, 10);
+    let maior = 0;
+    for (const o of ordensExistentes) {
+      const criadaBrt = o.created_at ? new Date(new Date(o.created_at).getTime() - 3 * 3600000).toISOString().slice(0, 10) : '';
+      if (criadaBrt !== hojeBrt) continue;
+      const m = String(o.grupo || '').toUpperCase().match(new RegExp('^(\\d{1,3})' + letra + '$'));
+      if (m) maior = Math.max(maior, parseInt(m[1]));
+    }
+    return `${maior + 1}${letra}`;
+  };
+  const [grupo, setGrupo] = useState(ordemEditando ? (ordemEditando.grupo ?? '') : sugerirGrupo());
   const [grade, setGrade] = useState(ordemEditando?.grade || {});
   const [cores, setCores] = useState(ordemEditando?.cores || []);
 
@@ -925,16 +942,16 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
 
     setSaving(true);
     try {
-      const grupoNum = grupo === '' || grupo === null ? null : Math.max(0, Math.min(9, parseInt(grupo) || 0));
+      const grupoTxt = String(grupo || '').trim().toUpperCase() || null;
       let body, url, method;
       if (isEdit) {
         url = '/api/ordens-corte-atualizar';
         method = 'PUT';
-        body = { id: ordemEditando.id, version: ordemEditando.version, usuario, grade, cores, grupo: grupoNum, motivo_edicao: motivo.trim() };
+        body = { id: ordemEditando.id, version: ordemEditando.version, usuario, grade, cores, grupo: grupoTxt, motivo_edicao: motivo.trim() };
       } else {
         url = '/api/ordens-corte-criar';
         method = 'POST';
-        body = { ref: produto.ref, grade, cores, grupo: grupoNum, criada_por: usuario };
+        body = { ref: produto.ref, grade, cores, grupo: grupoTxt, criada_por: usuario };
       }
       const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'X-User': usuario }, body: JSON.stringify(body) });
       const d = await r.json();
@@ -1047,11 +1064,11 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
               padding: isMobile ? '10px 12px' : '12px 16px', flexWrap: 'wrap',
             }}>
               <span style={{ fontFamily: FN, fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>Grupo</span>
-              <input type="text" maxLength={1} value={grupo}
-                onChange={e => setGrupo(e.target.value.replace(/[^0-9]/g, '').slice(0, 1))}
+              <input type="text" maxLength={4} value={grupo}
+                onChange={e => setGrupo(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 4))}
                 placeholder="—"
                 style={{
-                  width: 48, height: 44, textAlign: 'center',
+                  width: 72, height: 44, textAlign: 'center',
                   border: '1.5px solid #e8e2da', borderRadius: 8,
                   fontFamily: FN, fontSize: 22, fontWeight: 'bold',
                   color: '#1C2533', background: '#fff',

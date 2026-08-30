@@ -45,10 +45,18 @@ export default async function handler(req, res) {
     const errCores = validateCores(body.cores);
     if (errCores) return res.status(400).json({ error: errCores });
 
-    if (body.grupo !== undefined && body.grupo !== null) {
-      if (!Number.isInteger(body.grupo) || body.grupo < 0 || body.grupo > 9) {
-        return res.status(400).json({ error: 'grupo deve ser inteiro entre 0 e 9' });
+    // 30/08 (regra dele): grupo virou codigo DIA-A-DIA — numero sequencial do
+    // dia + letra do dia da semana (seg=A ter=B qua=C qui=D sex=E sab=F dom=H,
+    // SEM G pra nao confundir com o tamanho G). Ex.: 2a ordem de terca = 2B.
+    // Continua editavel: se vier no body, vale o que veio; vazio = automatico.
+    let grupoFinal = null;
+    if (body.grupo !== undefined && body.grupo !== null && String(body.grupo).trim() !== '') {
+      grupoFinal = String(body.grupo).trim().toUpperCase();
+      if (!/^[0-9A-Z]{1,4}$/.test(grupoFinal)) {
+        return res.status(400).json({ error: 'grupo deve ter 1 a 4 letras/numeros (ex.: 1A)' });
       }
+    } else {
+      grupoFinal = await gerarGrupoDoDia();
     }
 
     const origem = body.origem === 'os_amicia' ? 'os_amicia' : 'manual';
@@ -74,7 +82,7 @@ export default async function handler(req, res) {
       ref: produto.ref, // usa a ref normalizada do cadastro
       descricao: produto.descricao || null,
       tecido: produto.tecido,
-      grupo: (body.grupo !== undefined && body.grupo !== null) ? body.grupo : null,
+      grupo: grupoFinal,
       grade: body.grade,
       cores: body.cores,
       total_rolos,
@@ -110,5 +118,27 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error('criar catch:', e);
     return res.status(500).json({ error: e?.message || 'erro interno' });
+  }
+}
+
+// Proximo grupo do dia: letra pelo dia da semana BRT e numero = maior
+// sequencial ja usado hoje com essa letra + 1. Falha de leitura nao trava a
+// criacao: sem resposta do banco, sai "1<letra>".
+const LETRA_DIA = ['H', 'A', 'B', 'C', 'D', 'E', 'F']; // dom, seg, ..., sab (G pulado)
+async function gerarGrupoDoDia() {
+  const agoraBrt = new Date(Date.now() - 3 * 3600000);
+  const letra = LETRA_DIA[agoraBrt.getUTCDay()];
+  const hojeIni = agoraBrt.toISOString().slice(0, 10) + 'T00:00:00-03:00';
+  try {
+    const { data } = await supabase.from('ordens_corte')
+      .select('grupo').gte('created_at', hojeIni).not('grupo', 'is', null);
+    let maior = 0;
+    for (const r of (data || [])) {
+      const m = String(r.grupo || '').toUpperCase().match(new RegExp('^(\\d{1,3})' + letra + '$'));
+      if (m) maior = Math.max(maior, parseInt(m[1]));
+    }
+    return `${maior + 1}${letra}`;
+  } catch {
+    return `1${letra}`;
   }
 }

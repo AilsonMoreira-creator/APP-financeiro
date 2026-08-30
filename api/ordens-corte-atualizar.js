@@ -78,10 +78,17 @@ export default async function handler(req, res) {
       }
     }
     if (body.grupo !== undefined && body.grupo !== atual.grupo) {
-      if (body.grupo !== null && (!Number.isInteger(body.grupo) || body.grupo < 0 || body.grupo > 9)) {
-        return res.status(400).json({ error: 'grupo deve ser inteiro entre 0 e 9 (ou null)' });
+      // 30/08 (regra dele): grupo e codigo dia-a-dia (ex.: 1A, 2B) — texto
+      // curto, sempre maiusculo. Continua podendo limpar com null.
+      if (body.grupo !== null) {
+        const g = String(body.grupo).trim().toUpperCase();
+        if (!/^[0-9A-Z]{1,4}$/.test(g)) {
+          return res.status(400).json({ error: 'grupo deve ter 1 a 4 letras/numeros (ex.: 1A) — ou null' });
+        }
+        updates.grupo = g;
+      } else {
+        updates.grupo = null;
       }
-      updates.grupo = body.grupo;
     }
 
     // Detecta se houve mudança em campo crítico → motivo obrigatório
