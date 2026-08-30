@@ -507,10 +507,6 @@
       "schedule": "30 0,2,10-22/2 * * *"
     },
     {
-      "path": "/api/wms-ml-agenda-sync?limite=200",
-      "schedule": "30 0,2,10-22/2 * * *"
-    },
-    {
       "path": "/api/wms-nf-sync?dias=2",
       "schedule": "*/20 9-23 * * *"
     },
