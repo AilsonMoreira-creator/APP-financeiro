@@ -903,7 +903,7 @@ function MatrizEstimativa({ grade, cores, pcrolo, refStr }) {
 // 30/08 — modal da ponte Sala de Corte -> Oficinas. A previa ja veio validada
 // do backend (mesma ref, concluidas, qtds lancadas); aqui so se decide
 // oficina, numero e valor. A qtd e TRAVADA: a fonte e o que o Pedro lancou.
-function ModalGerarOficina({ previa, ids, usuario, onClose, onGerado }) {
+export function ModalGerarOficina({ previa, ids, usuario, onClose, onGerado }) {
   const [oficina, setOficina] = useState('');
   const [nCorte, setNCorte] = useState('');
   const [valorUnit, setValorUnit] = useState(previa.valor_sugerido != null ? String(previa.valor_sugerido) : '');

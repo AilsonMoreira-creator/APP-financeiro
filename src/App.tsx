@@ -5,7 +5,7 @@ import CalcMetaAdsMeluni from "./CalcMetaAdsMeluni.jsx";
 import CalcDivergencia from "./CalcDivergencia.jsx";
 import { CalcAnaliseMeluni } from "./CalcAnaliseMeluni";
 import MLPerguntas from './MLPerguntas';
-import OrdemDeCorte from './OrdemDeCorte';
+import OrdemDeCorte, { ModalGerarOficina } from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
 import EstoqueTecido from './EstoqueTecido';
 import MapeamentoSkus from './MapeamentoSkus';
@@ -7736,6 +7736,37 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   },[produtos,dbLoaded]);
 
   const concluidos=cortesSala.filter(c=>c.status==="concluido");
+  // 30/08 PONTE SALA DE CORTE -> OFICINAS (fluxo validado por ele): os cards
+  // dos ultimos concluidos ganham o GRUPO da ordem de origem, caixa de selecao
+  // e o botao de gerar o corte na oficina. O vinculo vem de ordens_corte
+  // (corte_id -> {id, grupo, carimbo}).
+  const [ordemDoCorte,setOrdemDoCorte]=useState({});
+  const [selPonte,setSelPonte]=useState(()=>new Set());
+  const [modalPonte,setModalPonte]=useState(null);   // { previa, ids }
+  const [carregandoPonte,setCarregandoPonte]=useState(false);
+  useEffect(()=>{let vivo=true;(async()=>{try{
+    const ids=concluidos.map(c=>String(c.id));
+    if(!ids.length){if(vivo)setOrdemDoCorte({});return;}
+    const {data}=await supabase.from('ordens_corte')
+      .select('id,grupo,corte_id,oficina_nome,oficina_corte_num')
+      .in('corte_id',ids.slice(0,80));
+    if(!vivo)return;
+    const m={};(data||[]).forEach(o=>{if(o.corte_id!=null)m[String(o.corte_id)]=o;});
+    setOrdemDoCorte(m);
+  }catch(e){console.error('ponte oficinas:',e);}})();return()=>{vivo=false};},[cortesSala.length,concluidos.map(c=>c.id).join(',')]);
+  const abrirPonte=async()=>{
+    if(carregandoPonte||!selPonte.size)return;
+    const ordemIds=[...selPonte].map(cid=>ordemDoCorte[String(cid)]?.id).filter(Boolean);
+    if(!ordemIds.length){alert('nenhum card selecionado tem ordem de corte vinculada');return;}
+    setCarregandoPonte(true);
+    try{
+      const r=await fetch(`/api/ordens-corte-gerar-oficina?ids=${ordemIds.join(',')}`);
+      const d=await r.json();
+      if(!d.ok){alert(d.erro||'nao deu pra montar a previa');return;}
+      setModalPonte({previa:d,ids:ordemIds});
+    }catch(e){alert(String(e?.message||e));}
+    finally{setCarregandoPonte(false);}
+  };
   const pendentes=cortesSala.filter(c=>c.status==="pendente").sort((a,b)=>new Date(a.data)-new Date(b.data));
   const hoje=new Date();
   const parados=pendentes.filter(c=>{const d=new Date(c.data+"T12:00:00");return(hoje-d)/(1000*60*60*24)>3;});
@@ -8005,11 +8036,24 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
 
           {/* Últimos concluídos */}
           {concluidos.length>0&&(<div style={{marginTop:16}}>
-            <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Últimos concluídos</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>Últimos concluídos</div>
+              {selPonte.size>0&&(
+                <button onClick={abrirPonte} disabled={carregandoPonte} style={{display:"inline-flex",alignItems:"center",gap:7,background:"#1e8e4e",color:"#fff",border:"none",borderRadius:9,padding:"7px 13px",fontSize:12.5,fontWeight:700,cursor:carregandoPonte?"wait":"pointer",fontFamily:"Georgia,serif",opacity:carregandoPonte?0.6:1}}>
+                  <SvgCortes size={17}/>{carregandoPonte?"Conferindo…":`Gerar corte oficina (${selPonte.size})`}
+                </button>
+              )}
+            </div>
             {[...concluidos].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,5).map(c=>(
               <div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:"1px solid #e8e2da",marginBottom:6}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                   <div style={{display:"flex",gap:10,flex:1,alignItems:"center"}}>
+                    {(()=>{const o=ordemDoCorte[String(c.id)];
+                      if(!o)return null;
+                      if(o.oficina_corte_num)return null;
+                      const marcado=selPonte.has(c.id);
+                      return(<input type="checkbox" checked={marcado} onChange={()=>setSelPonte(p=>{const n=new Set(p);if(n.has(c.id))n.delete(c.id);else n.add(c.id);return n;})} style={{width:17,height:17,accentColor:"#1e8e4e",cursor:"pointer",flexShrink:0}}/>);
+                    })()}
                     <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -8017,7 +8061,10 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
                         <span style={{fontSize:11,color:"#a89f94"}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span>
                       </div>
                       <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:2}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}</div>
-                      <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#a89f94"}}>{c.qtdRolos}r → {fmt(c.qtdPecas)} pç</span></div>
+                      <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#a89f94"}}>{c.qtdRolos}r → {fmt(c.qtdPecas)} pç</span>{(()=>{const o=ordemDoCorte[String(c.id)];if(!o)return null;return(<>
+                      {o.grupo&&<span style={{fontSize:10,fontWeight:800,color:"#2c3e50",background:"#eef3f8",border:"1px solid #cfe0ee",borderRadius:3,padding:"1px 7px"}}>GRUPO {o.grupo}</span>}
+                      {o.oficina_corte_num&&<span title="Corte já gerado no módulo Oficinas" style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#1e8e4e",background:"#eaf6ee",border:"1px solid #bfe3cc",borderRadius:3,padding:"1px 7px"}}><SvgCortes size={13}/>{o.oficina_nome} · {o.oficina_corte_num}</span>}
+                    </>);})()}</div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:8,alignItems:"center",marginLeft:8}}>
@@ -8028,6 +8075,17 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
               </div>
             ))}
           </div>)}
+
+          {modalPonte&&(
+            <ModalGerarOficina previa={modalPonte.previa} ids={modalPonte.ids} usuario={usuario}
+              onClose={()=>setModalPonte(null)}
+              onGerado={()=>{setModalPonte(null);setSelPonte(new Set());
+                // recarrega o vinculo pra estampar o carimbo sem F5
+                supabase.from('ordens_corte').select('id,grupo,corte_id,oficina_nome,oficina_corte_num')
+                  .in('corte_id',concluidos.map(c=>String(c.id)).slice(0,80))
+                  .then(({data})=>{const m={};(data||[]).forEach(o=>{if(o.corte_id!=null)m[String(o.corte_id)]=o;});setOrdemDoCorte(m);});
+              }}/>
+          )}
 
           {/* Modal Peças */}
           {editandoPecas&&(
