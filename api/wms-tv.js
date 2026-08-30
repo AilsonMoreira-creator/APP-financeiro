@@ -103,6 +103,8 @@ export default async function handler(req, res) {
     </div>
   </div>
 
+  <div id="lembrete" style="display:none;margin-bottom:1.2vh;padding:1.6vh 1.6vw;border:1px solid rgba(255,255,255,.3);border-radius:14px;color:#fff;font-size:3vh;font-weight:700;line-height:1.35"></div>
+
   <div style="display:flex;justify-content:flex-end">
     <div class="card" style="padding:1.2vh 1.4vw;display:flex;align-items:baseline;gap:1vw">
       <span class="rotulo" style="font-size:1.6vh">Falta pro corte</span>
@@ -173,6 +175,9 @@ export default async function handler(req, res) {
     if (prev) linhaP('📄 NF faltando', Math.max(0, prev - comNf), (prev - comNf) ? 'ambar' : 'verde');
     // envios programados do ML Exitus (a etiqueta só libera no dia)
     linhaP('🗓 Agendados Mercado Livre', n(d.agendados_ml), n(d.agendados_ml) ? 'ambar' : 'verde');
+    // 30/08 (pedido dele): liberadas HOJE, mesma regua do chip "Etiquetas
+    // liberadas" da tela de impressao — TV e aba mostram o mesmo numero.
+    linhaP('🏷 Etiquetas Meli liberadas hoje', n(d.etiquetas_liberadas_hoje), n(d.etiquetas_liberadas_hoje) ? 'ambar' : 'verde');
     linhaP('📅 Entraram após o corte', n(t.pra_amanha), 'azul');
 
     // alertas grandes
@@ -189,6 +194,24 @@ export default async function handler(req, res) {
     }
     if (n(t.aguardando) >= 10)
       alerta('ambar', '⏳ ' + n(t.aguardando) + ' pedidos esperando mercadoria da passadoria');
+
+    // 30/08 (pedido dele): LEMBRETE em letras brancas no final da tela.
+    // Aparece a partir da data/hora marcada na Config e some sozinho as
+    // 23:59 BRT do dia marcado. textContent = sem risco de HTML no texto.
+    var lemEl = document.getElementById('lembrete');
+    if (lemEl) {
+      var cfgL = d.config || {};
+      var lemTexto = String(cfgL.lembrete_texto || '').trim();
+      var lemMs = cfgL.lembrete_em ? new Date(cfgL.lembrete_em).getTime() : NaN;
+      var mostra = false;
+      if (lemTexto && !isNaN(lemMs)) {
+        var diaBrt = new Date(lemMs - 3*3600000).toISOString().slice(0,10);
+        var fimDia = new Date(diaBrt + 'T23:59:59-03:00').getTime();
+        mostra = Date.now() >= lemMs && Date.now() <= fimDia;
+      }
+      lemEl.style.display = mostra ? 'block' : 'none';
+      lemEl.textContent = mostra ? ('\ud83d\udccc ' + lemTexto) : '';
+    }
 
     var s = d.ultimo_sync ? new Date(d.ultimo_sync) : null;
     document.getElementById('sync').textContent = s ? ('atualizado ' + fmtHora(s)) : '';

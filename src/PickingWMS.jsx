@@ -166,6 +166,15 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
   // 28/08 (pedido dele): horário de corte editável — a TV e a lista passam a
   // usar esse valor assim que salvar.
   const [corteLista, setCorteLista] = useState(config.corte_lista || '12:00');
+  // 30/08 (pedido dele): lembrete da TV — texto + data/hora a partir da qual
+  // exibe. Some sozinho as 23:59 do dia marcado.
+  const [lemTexto, setLemTexto] = useState(config.lembrete_texto || '');
+  const [lemEm, setLemEm] = useState(() => {
+    const v = String(config.lembrete_em || '');
+    if (!v) return '';
+    const d = new Date(v);
+    return isNaN(d) ? '' : new Date(d.getTime() - 3 * 3600000).toISOString().slice(0, 16);
+  });
   const [medias, setMedias] = useState(null);
   useEffect(() => {
     (async () => {
@@ -199,6 +208,38 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
 
   return (
     <div style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
+      <div style={{ background: '#fff', border: `1.5px solid ${palette.beige}`, borderRadius: 13, padding: 14, marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>⏰ Horário de corte</div>
+        <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 10 }}>
+          Divide a fila entre o que sai hoje e o que fica pra amanhã. Vale na tela da TV e na lista de separação assim que salvar.
+        </div>
+        <input
+          type="time"
+          value={corteLista}
+          onChange={(e) => setCorteLista(e.target.value)}
+          style={{ padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${palette.beige}`, fontSize: 16, fontFamily: FONT, color: palette.ink }}
+        />
+      </div>
+      <div style={{ background: '#fff', border: `1.5px solid ${palette.beige}`, borderRadius: 13, padding: 14, marginBottom: 14 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>📌 Lembrete na TV</div>
+        <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 10 }}>
+          Aparece em letras brancas no final da TV a partir da data e horário marcados, e some sozinho no fim daquele dia. Deixe o texto vazio pra não exibir nada.
+        </div>
+        <input
+          value={lemTexto}
+          maxLength={200}
+          onChange={(e) => setLemTexto(e.target.value)}
+          placeholder="Ex.: Hoje tem coleta extra da Shein às 15h"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${palette.beige}`, fontSize: 14, fontFamily: FONT, color: palette.ink, marginBottom: 8 }}
+        />
+        <input
+          type="datetime-local"
+          value={lemEm}
+          onChange={(e) => setLemEm(e.target.value)}
+          style={{ padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${palette.beige}`, fontSize: 15, fontFamily: FONT, color: palette.ink }}
+        />
+      </div>
+
       {/* situações do funil */}
       <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
         <div style={{ fontSize: 14.5, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>Situações que alimentam os cards</div>
@@ -368,18 +409,6 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
         )}
       </div>
 
-      <div style={{ background: '#fff', border: `1.5px solid ${palette.beige}`, borderRadius: 13, padding: 14, marginBottom: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>⏰ Horário de corte</div>
-        <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 10 }}>
-          Divide a fila entre o que sai hoje e o que fica pra amanhã. Vale na tela da TV e na lista de separação assim que salvar.
-        </div>
-        <input
-          type="time"
-          value={corteLista}
-          onChange={(e) => setCorteLista(e.target.value)}
-          style={{ padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${palette.beige}`, fontSize: 16, fontFamily: FONT, color: palette.ink }}
-        />
-      </div>
       <button onClick={() => onSalvar({
         situacoes_aberto: abertas, situacoes_finalizado: finalizadas,
         canais: canais.filter(c => c.corte || c.envio),
@@ -388,6 +417,8 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
         prod_ref_manual: prodManual, prod_ref_modo: prodModo,
         duracoes: dur,
         corte_lista: corteLista,
+        lembrete_texto: lemTexto,
+        lembrete_em: lemEm ? new Date(lemEm + ':00-03:00').toISOString() : '',
       })} disabled={salvando} style={{ width: '100%', padding: '14px', borderRadius: 13, border: 'none', background: '#1e8e4e', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, opacity: salvando ? 0.6 : 1 }}>
         {salvando ? 'Salvando…' : '💾 Salvar configurações'}
       </button>

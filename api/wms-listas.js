@@ -66,6 +66,10 @@ export async function lerWmsConfig() {
       prod_ref_modo: p.prod_ref_modo === 'manual' ? 'manual' : 'auto',
       duracoes: { ...WMS_CONFIG_DEFAULT.duracoes, ...(p.duracoes || {}) },
       corte_lista: /^\d{2}:\d{2}$/.test(String(p.corte_lista || '')) ? p.corte_lista : CORTE_LISTA,
+      // 30/08: LEMBRETE da TV — texto + a partir de quando exibir (ISO). Vale
+      // ate o fim do dia da exibicao (23:59 BRT) e some sozinho.
+      lembrete_texto: String(p.lembrete_texto || ''),
+      lembrete_em: String(p.lembrete_em || ''),
     };
   } catch { return { ...WMS_CONFIG_DEFAULT }; }
 }
@@ -183,7 +187,26 @@ export default async function handler(req, res) {
           && p.ml_logistic_type !== 'fulfillment'
         ).length;
 
-        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: corteHhmm(cfgDash), corte_em: corteHoje, agendados_ml: agendadosMl || 0, ultimo_sync: ultSync?.[0]?.visto_em || null });
+        // 30/08 (pedido dele): ETIQUETAS MELI LIBERADAS HOJE — mesma regua do
+        // chip "Etiquetas liberadas" da tela de impressao (Lei 3: os numeros
+        // tem que bater entre TV e tela): agendado cujo dia chegou, ML em
+        // ready_to_ship/ready_to_print, ainda sem o carimbo nosso. Vira o
+        // proximo dia sozinho porque a data anda.
+        const { data: libLinhas } = await supabase.from('wms_pedidos')
+          .select('pedido_id, ml_agendado_em, ml_ship_status, ml_ship_substatus, print_regra, ml_logistic_type, etiqueta_impressa_em')
+          .neq('status_wms', 'cancelado')
+          .lte('ml_agendado_em', hojeAg)
+          .gte('ml_agendado_em', new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10))
+          .limit(600);
+        const liberadasHoje = (libLinhas || []).filter(p =>
+          p.ml_ship_status === 'ready_to_ship'
+          && p.ml_ship_substatus === 'ready_to_print'
+          && !p.etiqueta_impressa_em
+          && p.print_regra !== 'ML_FULL'
+          && p.ml_logistic_type !== 'fulfillment'
+        ).length;
+
+        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: corteHhmm(cfgDash), corte_em: corteHoje, agendados_ml: agendadosMl || 0, etiquetas_liberadas_hoje: liberadasHoje || 0, ultimo_sync: ultSync?.[0]?.visto_em || null });
       }
 
       if (acao === 'config') {
@@ -553,6 +576,8 @@ export default async function handler(req, res) {
           prod_ref_modo: c.prod_ref_modo === 'manual' ? 'manual' : 'auto',
           duracoes: { ...WMS_CONFIG_DEFAULT.duracoes, ...(c.duracoes || {}) },
           corte_lista: /^\d{2}:\d{2}$/.test(String(c.corte_lista || '')) ? String(c.corte_lista) : CORTE_LISTA,
+          lembrete_texto: String(c.lembrete_texto || '').slice(0, 200),
+          lembrete_em: String(c.lembrete_em || ''),
           _updated: new Date().toISOString(),
         };
         const { error } = await supabase.from('amicia_data')
