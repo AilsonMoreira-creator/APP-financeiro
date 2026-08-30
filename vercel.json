@@ -232,11 +232,7 @@
     },
     {
       "path": "/api/lojas-drive-cron",
-      "schedule": "0 8 * * 1-5"
-    },
-    {
-      "path": "/api/lojas-drive-cron",
-      "schedule": "0 16 * * 1-5"
+      "schedule": "0 8,16 * * 1-5"
     },
     {
       "path": "/api/lojas-estoque-grade-cron",
@@ -344,11 +340,7 @@
     },
     {
       "path": "/api/lojas-whats-cron-selecionar",
-      "schedule": "0 12 * * 1-5"
-    },
-    {
-      "path": "/api/lojas-whats-cron-selecionar",
-      "schedule": "0 17 * * 1-5"
+      "schedule": "0 12,17 * * 1-5"
     },
     {
       "path": "/api/lojas-whats-processar",
