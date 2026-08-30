@@ -259,6 +259,23 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
   // caso guarda os arquivos e o botão vira "Toque pra enviar" (2º toque
   // compartilha na hora, sem gerar de novo).
   const [selecionados, setSelecionados] = useState(() => new Set());
+  // 30/08 (fluxo validado por ele): ponte Sala de Corte -> Oficinas.
+  // Seleciona concluida(s) da MESMA ref, soma as qtds lancadas e gera o
+  // corte no modulo Oficinas — identico a um criado a mao pelo Jean.
+  const [modalGerar, setModalGerar] = useState(null);   // { previa, ids }
+  const [carregandoPrevia, setCarregandoPrevia] = useState(false);
+  const abrirGerarOficina = async () => {
+    if (carregandoPrevia) return;
+    const ids = [...selecionados];
+    setCarregandoPrevia(true);
+    try {
+      const r = await fetch(`/api/ordens-corte-gerar-oficina?ids=${ids.join(',')}`);
+      const d = await r.json();
+      if (!d.ok) { alert(d.erro || 'não deu pra montar a prévia'); return; }
+      setModalGerar({ previa: d, ids });
+    } catch (e) { alert(String(e?.message || e)); }
+    finally { setCarregandoPrevia(false); }
+  };
   const [gerandoMassa, setGerandoMassa] = useState(false);
   const [filesProntos, setFilesProntos] = useState(null);
   const cardRefs = useRef(new Map());
@@ -386,6 +403,20 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
           boxShadow: '0 6px 22px rgba(0,0,0,0.3)', whiteSpace: 'nowrap',
         }}>
           <span style={{ fontSize: 13 }}>{selecionados.size} selecionada{selecionados.size > 1 ? 's' : ''}</span>
+          {(() => {
+            const sel = ordens.filter(o => selecionados.has(o.id));
+            const podeGerar = sel.length > 0 && sel.every(o => o.status === 'concluido' && !o.oficina_corte_num);
+            return podeGerar ? (
+              <button onClick={abrirGerarOficina} disabled={carregandoPrevia} style={{
+                background: '#1e8e4e', color: '#fff', border: 'none',
+                borderRadius: 18, padding: '8px 14px', fontSize: 13, fontWeight: 700,
+                cursor: carregandoPrevia ? 'wait' : 'pointer', fontFamily: SERIF,
+                opacity: carregandoPrevia ? 0.6 : 1,
+              }}>
+                {carregandoPrevia ? 'Conferindo…' : '✂️ Gerar corte oficina'}
+              </button>
+            ) : null;
+          })()}
           <button onClick={enviarMassa} disabled={gerandoMassa} style={{
             background: filesProntos ? '#e67e22' : '#25d366', color: '#fff', border: 'none',
             borderRadius: 18, padding: '8px 14px', fontSize: 13, fontWeight: 700,
@@ -426,6 +457,16 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
         />
       )}
 
+      {modalGerar && (
+        <ModalGerarOficina
+          previa={modalGerar.previa}
+          ids={modalGerar.ids}
+          usuario={usuario}
+          onClose={() => setModalGerar(null)}
+          onGerado={() => { setModalGerar(null); setSelecionados(new Set()); carregar(); }}
+        />
+      )}
+
       {excluindoId && ordemExcluindo && (
         <ModalExcluir
           ordem={ordemExcluindo}
@@ -444,6 +485,7 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
 
 function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAbrirMatrix, onDefinirSala, selecionado, onToggleSelecionado, registrarRef }) {
   const status = STATUS_PILL[ordem.status] || STATUS_PILL.aguardando;
+  const carimboOficina = ordem.oficina_corte_num ? `✂️ ${ordem.oficina_nome} · ${ordem.oficina_corte_num}` : null;
   const cores = ordem.cores || [];
   const isFinalizada = ordem.status === 'na_sala' || ordem.status === 'concluido' || ordem.status === 'cancelado';
 
@@ -515,6 +557,11 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
             <span style={{ background: status.bg, color: status.color, border: `1px solid ${status.border}`, padding: '3px 9px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
               {status.txt}
             </span>
+            {carimboOficina && (
+              <span title="Corte já gerado no módulo Oficinas" style={{ background: '#eaf6ee', color: '#1e8e4e', border: '1px solid #bfe3cc', padding: '3px 9px', borderRadius: 12, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                {carimboOficina}
+              </span>
+            )}
             <span style={{ fontSize: 14, fontWeight: 700, color: '#2c3e50' }}>
               REF {ordem.ref}{ordem.descricao ? ` · ${ordem.descricao}` : ''}
             </span>
@@ -606,6 +653,12 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
               <div>
                 <div style={{ fontSize: 10, color: '#8a9aa4', textTransform: 'uppercase', marginBottom: 2 }}>Concluída em</div>
                 <div style={{ fontWeight: 600 }}>{new Date(ordem.concluido_em).toLocaleString('pt-BR')}</div>
+              </div>
+            )}
+            {ordem.oficina_corte_num && (
+              <div>
+                <div style={{ fontSize: 10, color: '#8a9aa4', textTransform: 'uppercase', marginBottom: 2 }}>Corte oficina</div>
+                <div style={{ fontWeight: 700, color: '#1e8e4e' }}>✂️ {ordem.oficina_nome} · corte {ordem.oficina_corte_num}</div>
               </div>
             )}
             {ordem.motivo_exclusao && (
@@ -843,6 +896,79 @@ function MatrizEstimativa({ grade, cores, pcrolo, refStr }) {
           </tr>
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// 30/08 — modal da ponte Sala de Corte -> Oficinas. A previa ja veio validada
+// do backend (mesma ref, concluidas, qtds lancadas); aqui so se decide
+// oficina, numero e valor. A qtd e TRAVADA: a fonte e o que o Pedro lancou.
+function ModalGerarOficina({ previa, ids, usuario, onClose, onGerado }) {
+  const [oficina, setOficina] = useState('');
+  const [nCorte, setNCorte] = useState('');
+  const [valorUnit, setValorUnit] = useState(previa.valor_sugerido != null ? String(previa.valor_sugerido) : '');
+  const [dataCorte, setDataCorte] = useState(new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10));
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const gerar = async () => {
+    if (salvando) return;
+    setErro('');
+    if (!oficina.trim()) { setErro('escolha a oficina'); return; }
+    if (!nCorte.trim()) { setErro('informe o número do corte'); return; }
+    const v = parseFloat(String(valorUnit).replace(',', '.'));
+    if (!(v > 0)) { setErro('valor da peça inválido'); return; }
+    setSalvando(true);
+    try {
+      const r = await fetch('/api/ordens-corte-gerar-oficina', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User': usuario },
+        body: JSON.stringify({ ids, oficina: oficina.trim(), n_corte: nCorte.trim(), valor_unit: v, data: dataCorte, usuario }),
+      });
+      const d = await r.json();
+      if (!d.ok) { setErro(d.erro || 'falhou'); setSalvando(false); return; }
+      alert(`✂️ Corte ${d.n_corte} criado no módulo Oficinas — ${d.oficina}, ${d.qtd_total} pç (R$ ${Number(d.valor_total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`);
+      onGerado();
+    } catch (e) { setErro(String(e?.message || e)); setSalvando(false); }
+  };
+
+  const inp = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #e8e2da', fontFamily: SERIF, fontSize: 15, color: '#1C2533' };
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(20,25,35,0.55)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: '100%', maxWidth: 480, maxHeight: '92vh', overflow: 'auto', fontFamily: SERIF }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: '#1C2533', marginBottom: 4 }}>✂️ Gerar corte na oficina</div>
+        <div style={{ fontSize: 13, color: '#6b7a86', marginBottom: 12 }}>O corte nasce no módulo Oficinas igual a um criado à mão — matriz de cores fica liberada pra preencher lá.</div>
+
+        <div style={{ background: '#f7f4f0', border: '1px solid #e8e2da', borderRadius: 10, padding: '10px 13px', marginBottom: 13, fontSize: 13.5, color: '#2c3e50', lineHeight: 1.6 }}>
+          <b>REF {previa.ref}</b>{previa.descricao ? ` · ${previa.descricao}` : ''}<br />
+          {previa.grupos.map(g => `grupo ${g.grupo || '—'} (${g.qtd} pç)`).join(' + ')}<br />
+          <b style={{ fontSize: 16 }}>{previa.qtd_total} peças</b> · marca {previa.marca}
+        </div>
+
+        <label style={{ fontSize: 12, color: '#6b7a86' }}>Oficina<br />
+          <input list="oficinas-lista" value={oficina} onChange={e => setOficina(e.target.value)} placeholder="Escolha ou digite…" style={{ ...inp, marginTop: 3, marginBottom: 10 }} />
+          <datalist id="oficinas-lista">{previa.oficinas.map(o => <option key={o} value={o} />)}</datalist>
+        </label>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <label style={{ fontSize: 12, color: '#6b7a86', flex: 1 }}>Nº do corte<br />
+            <input value={nCorte} onChange={e => setNCorte(e.target.value)} placeholder="ex.: 9868" style={{ ...inp, marginTop: 3 }} />
+          </label>
+          <label style={{ fontSize: 12, color: '#6b7a86', flex: 1 }}>Valor da peça (R$)<br />
+            <input value={valorUnit} onChange={e => setValorUnit(e.target.value)} inputMode="decimal" style={{ ...inp, marginTop: 3 }} />
+          </label>
+        </div>
+        <label style={{ fontSize: 12, color: '#6b7a86', display: 'block', marginTop: 10 }}>Data<br />
+          <input type="date" value={dataCorte} onChange={e => setDataCorte(e.target.value)} style={{ ...inp, marginTop: 3 }} />
+        </label>
+
+        {erro && <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: '#c0392b' }}>⚠ {erro}</div>}
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #e8e2da', background: '#fff', color: '#2c3e50', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: SERIF }}>Cancelar</button>
+          <button onClick={gerar} disabled={salvando} style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: '#1e8e4e', color: '#fff', fontSize: 14, fontWeight: 800, cursor: salvando ? 'wait' : 'pointer', fontFamily: SERIF, opacity: salvando ? 0.6 : 1 }}>
+            {salvando ? 'Gerando…' : '✂️ Criar corte na oficina'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
