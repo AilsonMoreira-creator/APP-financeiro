@@ -1570,7 +1570,11 @@ As fotos saem SEMPRE do CATALOGO DISPONIVEL HOJE, nunca de memoria. No primeiro 
   // Avisa a IA sobre o que ja foi enviado. Distingue PDF (documento) de link Vesti.
   // Ailson 30/05 (PDF) + 06/06 (fallback Vesti->PDF).
   if (pdfCatalogoJaEnviado) {
-    systemBlocks.push({ type: 'text', text: `ATENCAO: o catalogo PDF JA FOI ENVIADO pra esse cliente nesta conversa. NAO reenvie. NUNCA use [ENVIAR_CATALOGO:...] de novo aqui, e NAO diga "te mando o catalogo". Se ele tiver duvida sobre uma peca, manda a FOTO dela ([ENVIAR_FOTO:REF]) ou responde direto.` });
+    // 31/08 (regra dele, print da cliente 28/08 09:47): "se o cliente pediu,
+    // temos que enviar" — a versao antiga mandava a cliente PROCURAR NAS
+    // MENSAGENS ANTERIORES, pessimo pra venda. E o catalogo atualiza TODA
+    // SEMANA, entao reenviar nunca e desperdicio: pode ter novidade.
+    systemBlocks.push({ type: 'text', text: `SOBRE O CATALOGO: o PDF ja foi enviado nesta conversa, entao NAO ofereca reenviar por conta propria, NAO fique dizendo "te mando o catalogo" do nada e NAO use [ENVIAR_CATALOGO:...] sem a cliente pedir. POREM, se a cliente PEDIR o catalogo de novo — "manda o catalogo", "pode enviar", "quero ver", "me envia pra eu olhar", "nao achei", "nao abriu" ou qualquer pedido nesse sentido — ENVIE SIM, imediatamente, com [ENVIAR_CATALOGO:nome_atual]. NUNCA responda mandando ela procurar nas mensagens anteriores — cliente pedindo catalogo e interesse de compra, nao se nega. Nosso catalogo e atualizado toda semana: ao reenviar, mencione de leve que esta mandando a versao mais atual ("te envio o catalogo atualizado 😊"). Fora do pedido explicito: duvida de peca especifica = manda a FOTO ([ENVIAR_FOTO:REF]) ou responde direto.` });
   } else if (catalogoJaEnviado) {
     // Modo Vesti: o LINK ja foi mandado, mas o PDF ainda nao.
     systemBlocks.push({ type: 'text', text: `ATENCAO: vc JA mandou o LINK do catalogo (Vesti) pra esse cliente. NAO fique remandando o link nem dizendo "te mando o catalogo" do nada. POREM: se o cliente disser que NAO conseguiu acessar / deu erro / nao abriu / nao carregou, OU se ele PEDIR o catalogo, ai vc PODE e DEVE mandar o catalogo PDF como alternativa, com [ENVIAR_CATALOGO:nome]. Nesse caso responda acolhendo, tipo "a gente continua por aqui, vou te enviar o catalogo".` });
