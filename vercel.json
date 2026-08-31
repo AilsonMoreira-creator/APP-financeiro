@@ -524,6 +524,14 @@
     },
     {
       "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "5,15,25,35,45,55 8 * * 1-5"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "45 10 * * 1-5"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
       "schedule": "5,15,25,35,45,55 9 * * 1-6"
     },
     {
