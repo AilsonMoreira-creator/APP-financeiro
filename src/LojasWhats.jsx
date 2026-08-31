@@ -4183,7 +4183,7 @@ function VendasTopo30d({ dados, fmtMoney }) {
   );
 }
 
-function OrigensInstagramCards({ funil, loadingFunil, kpis, fmtMoney }) {
+function OrigensInstagramCards({ funil, loadingFunil, kpis, fmtMoney , recorrentes}) {
   const [copiado, setCopiado] = useState(null);
   const [ajuda, setAjuda] = useState(null);        // qual card tem o "?" aberto
   const [expandido, setExpandido] = useState(false); // detalhe do card Carrinho
@@ -4344,6 +4344,39 @@ function OrigensInstagramCards({ funil, loadingFunil, kpis, fmtMoney }) {
           <FaixasFunil o={funil?.outros} loading={loadingFunil} cor={palette.inkSoft} />
         </div>
       )}
+
+      {/* 31/08 (regra dele): recompra de cliente que ja comprou antes sai dos
+          cards de origem (que medem venda NOVA) e vive aqui. Compra direta no
+          site sem conversa continua no card proprio do site. */}
+      <div style={{ ...cardBase, borderColor: '#cfe0d4' }}>
+        <Header id="recorrentes" titulo="🔁 Compras recorrentes" sub="Clientes que já compraram antes e voltaram"
+          icone={
+            <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: fz(17) }}>🔁</div>
+          } />
+        <Ajuda id="recorrentes">Vendas do período (via conversa) de clientes que <b>já tinham compra anterior</b> no Bling — casadas por documento ou telefone. Essas recompras <b>não contam</b> na linha "vendas" dos cards de origem (Stories/Linktree/Meta Ads/Carrinho), que passam a medir só a <b>primeira compra</b> do lead. Compra direta no site sem conversa continua no card do site (CONVERTR).</Ajuda>
+        {loadingFunil && !recorrentes ? (
+          <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: '6px 8px' }}>…</div>
+        ) : (
+          <div style={{ padding: '7px 9px', borderRadius: 6, background: palette.bg, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span style={{ fontSize: fz(17), fontWeight: 800, color: '#1e8e4e' }}>{Number(recorrentes?.qtd || 0)}</span>
+              <span style={{ fontSize: fz(10), color: palette.inkMuted }}>recompras</span>
+              <span style={{ fontSize: fz(11.5), fontWeight: 700, color: '#1e8e4e', marginLeft: 'auto' }}>{fmtMoney(Number(recorrentes?.valor || 0))}</span>
+            </div>
+            {(recorrentes?.itens || []).slice(0, 6).map((it, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: fz(10.5) }}>
+                <span style={{ color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {it.nome_cliente || 'cliente'} <span style={{ color: palette.inkMuted }}>· {Number(it.compras_antes) + 1}ª compra</span>
+                </span>
+                <span style={{ color: palette.ink, whiteSpace: 'nowrap' }}><b>{fmtMoney(Number(it.valor || 0))}</b></span>
+              </div>
+            ))}
+            {Number(recorrentes?.qtd || 0) > 6 && (
+              <div style={{ fontSize: fz(10), color: palette.inkMuted }}>+ {Number(recorrentes.qtd) - 6} outras no período</div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -4537,7 +4570,7 @@ function ConversaoTab({ refreshTick }) {
       {/* Origens Instagram — 2 cards com os links wa.me prontos pra colar.
           Ailson 28/05/2026: stories + linktree, rotina C da Sofia.
           05/07/2026: cards passam a mostrar o funil de engajamento. */}
-      <OrigensInstagramCards funil={funilCards} loadingFunil={loadingFunil} kpis={dados?.kpis} fmtMoney={fmtMoney} />
+      <OrigensInstagramCards funil={funilCards} loadingFunil={loadingFunil} kpis={dados?.kpis} fmtMoney={fmtMoney} recorrentes={dadosFunil?.recorrentes} />
 
       {loading ? (
         <div style={{ padding: 20, textAlign: 'center', color: palette.inkMuted }}>

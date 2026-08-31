@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     const fimExcl = new Date(new Date(dataFim + 'T00:00:00Z').getTime() + 86400000)
       .toISOString();
 
-    const [funilQ, vendsQ, vendas30Q, siteQ] = await Promise.all([
+    const [funilQ, vendsQ, vendas30Q, siteQ, recQ] = await Promise.all([
       supabase.rpc('fn_sofia_funil_leads', {
         p_ini: dataInicio + 'T00:00:00Z',
         p_fim: fimExcl,
@@ -66,6 +66,13 @@ export default async function handler(req, res) {
         .eq('vendedora_nome_raw', 'CONVERTR')
         .gte('data_venda', d30)
         .order('data_venda', { ascending: false }),
+      // 31/08 (regra dele): RECOMPRA de cliente que ja comprou antes NAO e
+      // conversao nova de origem — vai pro card "Compras recorrentes". Unica
+      // excecao: compra direta no site sem conversa, que segue no card do site.
+      supabase.rpc('fn_sofia_vendas_recorrentes', {
+        p_ini: dataInicio + 'T00:00:00Z',
+        p_fim: fimExcl,
+      }),
     ]);
 
     if (funilQ.error) {
@@ -73,13 +80,25 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: funilQ.error.message });
     }
 
+    // Recorrentes do periodo por origem (e itens pro card novo).
+    const recRows = (recQ?.data || []).filter(r => r.recorrente);
+    const recPorOrigem = {};
+    for (const r of recRows) {
+      const o = r.origem || 'desconhecida';
+      if (!recPorOrigem[o]) recPorOrigem[o] = { qtd: 0, valor: 0 };
+      recPorOrigem[o].qtd += 1;
+      recPorOrigem[o].valor += Number(r.vendeu_valor || 0);
+    }
+
     const origens = (funilQ.data || []).map(r => ({
       ...r,
       valor_vendas: Number(r.valor_vendas || 0),
       // Vendas do PERIODO por data da venda (qualquer safra, inclui manuais).
       // E o numero que a tela exibe desde 23/07/2026.
-      vendas_periodo: Number(r.vendas_periodo || 0),
-      valor_vendas_periodo: Number(r.valor_vendas_periodo || 0),
+      // vendas do periodo LIQUIDAS de recompra: o card da origem mede venda
+      // NOVA; a recompra vive no card "Compras recorrentes". Ailson 31/08.
+      vendas_periodo: Math.max(0, Number(r.vendas_periodo || 0) - (recPorOrigem[r.origem]?.qtd || 0)),
+      valor_vendas_periodo: Math.max(0, Number(r.valor_vendas_periodo || 0) - (recPorOrigem[r.origem]?.valor || 0)),
     }));
 
     const totais = origens.reduce((a, r) => ({
@@ -112,6 +131,25 @@ export default async function handler(req, res) {
       origens,
       totais,
       vendedoras: vendsQ.data || [],
+      // Card novo (Ailson 31/08): recompras do periodo — mesmo filtro de datas
+      // dos outros cards. Excecao ja garantida pela estrutura: compra direta no
+      // site sem conversa nao passa por aqui (vive em site_direto_30d).
+      recorrentes: {
+        qtd: recRows.length,
+        valor: recRows.reduce((a, r) => a + Number(r.vendeu_valor || 0), 0),
+        itens: recRows
+          .sort((a, b) => new Date(b.vendeu_em) - new Date(a.vendeu_em))
+          .slice(0, 60)
+          .map(r => ({
+            conversa_id: r.conversa_id,
+            nome_cliente: r.nome_cliente,
+            valor: Number(r.vendeu_valor || 0),
+            vendeu_em: r.vendeu_em,
+            origem: r.origem,
+            compras_antes: Number(r.compras_antes || 0),
+            primeira_compra: r.primeira_compra,
+          })),
+      },
       vendas_30d: {
         qtd: itens30.length,
         valor: itens30.reduce((a, x) => a + x.vendeu_valor, 0),
