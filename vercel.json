@@ -512,6 +512,10 @@
     },
     {
       "path": "/api/wms-preparar-lote?limite=120",
+      "schedule": "30,50 9 * * 1-5"
+    },
+    {
+      "path": "/api/wms-preparar-lote?limite=120",
       "schedule": "5,25,40,50 10 * * 1-6"
     },
     {
