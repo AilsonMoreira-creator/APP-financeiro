@@ -4127,7 +4127,7 @@ function VendasTopo30d({ dados, fmtMoney }) {
         <span style={{ fontSize: fz(18) }}>💰</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink }}>Vendas · últimos 30 dias</div>
-          <div style={{ fontSize: fz(10), color: palette.inkMuted }}>leads que fecharam pedido (etapa Vendeu)</div>
+          <div style={{ fontSize: fz(10), color: palette.inkMuted }}>leads que fecharam pedido (etapa Vendeu) + recompras de clientes Sofia</div>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: fz(17), fontWeight: 800, color: palette.ok, lineHeight: 1 }}>

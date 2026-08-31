@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     const fimExcl = new Date(new Date(dataFim + 'T00:00:00Z').getTime() + 86400000)
       .toISOString();
 
-    const [funilQ, vendsQ, vendas30Q, siteQ, recQ] = await Promise.all([
+    const [funilQ, vendsQ, vendas30Q, siteQ, recQ, rec30Q] = await Promise.all([
       supabase.rpc('fn_sofia_funil_leads', {
         p_ini: dataInicio + 'T00:00:00Z',
         p_fim: fimExcl,
@@ -73,6 +73,12 @@ export default async function handler(req, res) {
         p_ini: dataInicio,
         p_fim: fimExcl.slice(0, 10),
       }),
+      // 31/08 (pedido dele): as recompras tambem SOMAM no bloco fixo
+      // "Vendas · ultimos 30 dias" — janela propria, independente do filtro.
+      supabase.rpc('fn_sofia_recompras', {
+        p_ini: d30,
+        p_fim: new Date(hoje.getTime() + 86400000).toISOString().slice(0, 10),
+      }),
     ]);
 
     if (funilQ.error) {
@@ -84,7 +90,15 @@ export default async function handler(req, res) {
     // do Bling/Mire de cliente que ja comprou via Sofia, posterior a 1a compra
     // pelo app. Nao vem de conversa, entao NAO mexe nos cards de origem — eles
     // seguem medindo a 1a conversao normalmente.
-    const recRows = recQ?.data || [];
+    // filtro de vendedora vale tambem pras recompras: casa o uuid escolhido
+    // com o nome raw do Mire (FRAN <-> Fran) por maiusculas.
+    const nomeVendedoraFiltro = vendedoraId
+      ? String((vendsQ.data || []).find(v => v.id === vendedoraId)?.nome || '').toUpperCase()
+      : null;
+    const filtraVend = (rows) => (rows || []).filter(r =>
+      !nomeVendedoraFiltro || String(r.vendedora || '').toUpperCase() === nomeVendedoraFiltro);
+    const recRows = filtraVend(recQ?.data);
+    const rec30Rows = filtraVend(rec30Q?.data);
 
     const origens = (funilQ.data || []).map(r => ({
       ...r,
@@ -106,6 +120,10 @@ export default async function handler(req, res) {
       vendas_periodo: a.vendas_periodo + Number(r.vendas_periodo || 0),
       valor_vendas_periodo: a.valor_vendas_periodo + Number(r.valor_vendas_periodo || 0),
     }), { total: 0, sem_interacao: 0, leve: 0, media: 0, quente: 0, vendas: 0, valor_vendas: 0, vendas_periodo: 0, valor_vendas_periodo: 0 });
+    // 31/08 (pedido dele): o TOTAL de vendas do periodo inclui as recompras —
+    // so o total; os cards por origem seguem medindo a 1a conversao.
+    totais.vendas_periodo += recRows.length;
+    totais.valor_vendas_periodo += recRows.reduce((a, r) => a + Number(r.valor || 0), 0);
 
     const nomeV = new Map((vendsQ.data || []).map(v => [v.id, v.nome]));
     const itens30 = (vendas30Q.data || []).map(c => ({
@@ -141,11 +159,27 @@ export default async function handler(req, res) {
           primeira_via_sofia: r.primeira_via_sofia,
         })),
       },
-      vendas_30d: {
-        qtd: itens30.length,
-        valor: itens30.reduce((a, x) => a + x.vendeu_valor, 0),
-        itens: itens30,
-      },
+      vendas_30d: (() => {
+        const recItens = rec30Rows.map(r => ({
+          id: `rec-${r.numero_pedido}`,
+          nome_cliente: r.cliente,
+          telefone: null,
+          vendeu_valor: Number(r.valor || 0),
+          vendeu_em: r.data_venda,
+          vendeu_canal: '🔁 recompra',
+          origem_lead: r.origem_sofia,
+          qtd_pecas: null,
+          vendedora_nome: r.vendedora
+            ? r.vendedora.charAt(0) + r.vendedora.slice(1).toLowerCase() : null,
+        }));
+        const todos = [...itens30, ...recItens]
+          .sort((a, b) => new Date(b.vendeu_em) - new Date(a.vendeu_em));
+        return {
+          qtd: todos.length,
+          valor: todos.reduce((a, x) => a + Number(x.vendeu_valor || 0), 0),
+          itens: todos,
+        };
+      })(),
       // COMPRA DIRETA no site (Ailson 30/07/2026): pedidos CONVERTR SEM
       // carrinho/conversa antes. Quem teve carrinho e finalizou no site ja
       // aparece na aba Vendeu — dedup por documento OU telefone da conversa.
