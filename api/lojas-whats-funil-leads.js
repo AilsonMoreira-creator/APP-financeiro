@@ -69,9 +69,9 @@ export default async function handler(req, res) {
       // 31/08 (regra dele): RECOMPRA de cliente que ja comprou antes NAO e
       // conversao nova de origem — vai pro card "Compras recorrentes". Unica
       // excecao: compra direta no site sem conversa, que segue no card do site.
-      supabase.rpc('fn_sofia_vendas_recorrentes', {
-        p_ini: dataInicio + 'T00:00:00Z',
-        p_fim: fimExcl,
+      supabase.rpc('fn_sofia_recompras', {
+        p_ini: dataInicio,
+        p_fim: fimExcl.slice(0, 10),
       }),
     ]);
 
@@ -80,25 +80,19 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: funilQ.error.message });
     }
 
-    // Recorrentes do periodo por origem (e itens pro card novo).
-    const recRows = (recQ?.data || []).filter(r => r.recorrente);
-    const recPorOrigem = {};
-    for (const r of recRows) {
-      const o = r.origem || 'desconhecida';
-      if (!recPorOrigem[o]) recPorOrigem[o] = { qtd: 0, valor: 0 };
-      recPorOrigem[o].qtd += 1;
-      recPorOrigem[o].valor += Number(r.vendeu_valor || 0);
-    }
+    // 31/08 (regra validada com ele apos a auditoria): recompra = VENDA NOVA
+    // do Bling/Mire de cliente que ja comprou via Sofia, posterior a 1a compra
+    // pelo app. Nao vem de conversa, entao NAO mexe nos cards de origem — eles
+    // seguem medindo a 1a conversao normalmente.
+    const recRows = recQ?.data || [];
 
     const origens = (funilQ.data || []).map(r => ({
       ...r,
       valor_vendas: Number(r.valor_vendas || 0),
       // Vendas do PERIODO por data da venda (qualquer safra, inclui manuais).
       // E o numero que a tela exibe desde 23/07/2026.
-      // vendas do periodo LIQUIDAS de recompra: o card da origem mede venda
-      // NOVA; a recompra vive no card "Compras recorrentes". Ailson 31/08.
-      vendas_periodo: Math.max(0, Number(r.vendas_periodo || 0) - (recPorOrigem[r.origem]?.qtd || 0)),
-      valor_vendas_periodo: Math.max(0, Number(r.valor_vendas_periodo || 0) - (recPorOrigem[r.origem]?.valor || 0)),
+      vendas_periodo: Number(r.vendas_periodo || 0),
+      valor_vendas_periodo: Number(r.valor_vendas_periodo || 0),
     }));
 
     const totais = origens.reduce((a, r) => ({
@@ -136,19 +130,16 @@ export default async function handler(req, res) {
       // site sem conversa nao passa por aqui (vive em site_direto_30d).
       recorrentes: {
         qtd: recRows.length,
-        valor: recRows.reduce((a, r) => a + Number(r.vendeu_valor || 0), 0),
-        itens: recRows
-          .sort((a, b) => new Date(b.vendeu_em) - new Date(a.vendeu_em))
-          .slice(0, 60)
-          .map(r => ({
-            conversa_id: r.conversa_id,
-            nome_cliente: r.nome_cliente,
-            valor: Number(r.vendeu_valor || 0),
-            vendeu_em: r.vendeu_em,
-            origem: r.origem,
-            compras_antes: Number(r.compras_antes || 0),
-            primeira_compra: r.primeira_compra,
-          })),
+        valor: recRows.reduce((a, r) => a + Number(r.valor || 0), 0),
+        itens: recRows.slice(0, 60).map(r => ({
+          numero_pedido: r.numero_pedido,
+          nome_cliente: r.cliente,
+          valor: Number(r.valor || 0),
+          data_venda: r.data_venda,
+          vendedora: r.vendedora,
+          origem_sofia: r.origem_sofia,
+          primeira_via_sofia: r.primeira_via_sofia,
+        })),
       },
       vendas_30d: {
         qtd: itens30.length,

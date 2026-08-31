@@ -4353,7 +4353,7 @@ function OrigensInstagramCards({ funil, loadingFunil, kpis, fmtMoney , recorrent
           icone={
             <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: fz(17) }}>🔁</div>
           } />
-        <Ajuda id="recorrentes">Vendas do período (via conversa) de clientes que <b>já tinham compra anterior</b> no Bling — casadas por documento ou telefone. Essas recompras <b>não contam</b> na linha "vendas" dos cards de origem (Stories/Linktree/Meta Ads/Carrinho), que passam a medir só a <b>primeira compra</b> do lead. Compra direta no site sem conversa continua no card do site (CONVERTR).</Ajuda>
+        <Ajuda id="recorrentes">Vendas novas do Miré (planilha diária) de clientes que <b>já compraram alguma vez pelo app</b> (conversa Sofia com venda), <b>posteriores à primeira compra via Sofia</b>. São recompras que não geram conversa nova — sem este card, ficariam invisíveis na medição do CRM. Compra direta no site (CONVERTR) fica no card do site. Os cards de origem seguem medindo a primeira conversão normalmente.</Ajuda>
         {loadingFunil && !recorrentes ? (
           <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: '6px 8px' }}>…</div>
         ) : (
@@ -4366,7 +4366,7 @@ function OrigensInstagramCards({ funil, loadingFunil, kpis, fmtMoney , recorrent
             {(recorrentes?.itens || []).slice(0, 6).map((it, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: fz(10.5) }}>
                 <span style={{ color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {it.nome_cliente || 'cliente'} <span style={{ color: palette.inkMuted }}>· {Number(it.compras_antes) + 1}ª compra</span>
+                  {it.nome_cliente || 'cliente'} <span style={{ color: palette.inkMuted }}>· {it.vendedora || '—'} · 1ª via Sofia {it.primeira_via_sofia ? new Date(it.primeira_via_sofia + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '?'}</span>
                 </span>
                 <span style={{ color: palette.ink, whiteSpace: 'nowrap' }}><b>{fmtMoney(Number(it.valor || 0))}</b></span>
               </div>
