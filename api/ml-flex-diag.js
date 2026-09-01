@@ -7,6 +7,35 @@ const BRAND = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 const espera = (ms) => new Promise(r => setTimeout(r, ms));
 
 export default async function handler(req, res) {
+  // 01/09 (foto: flex saiu PDF invertido/miudo): ?testa_zpl=NUMERO_LOJA&conta=x
+  // pergunta ao ML, pro shipment daquele pedido, o que ele devolve em zpl2 e
+  // em pdf — pra saber se o ML esta NEGANDO zpl2 pro self_service.
+  if (req.query?.testa_zpl) {
+    try {
+      const conta = req.query.conta || 'exitus';
+      const token = await getValidToken(BRAND[conta]);
+      const h = { Authorization: `Bearer ${token}` };
+      const ro = await fetch(`https://api.mercadolibre.com/orders/${req.query.testa_zpl}`, { headers: h });
+      const jo = ro.ok ? await ro.json() : null;
+      const sid = jo?.shipping?.id;
+      if (!sid) return res.status(200).json({ ok: false, passo: 'order', status: ro.status });
+      const saidaT = { sid };
+      for (const fmt of ['zpl2', 'pdf']) {
+        const r2 = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${sid}&response_type=${fmt}&label_type=label`, { headers: h });
+        const buf = new Uint8Array(await r2.arrayBuffer());
+        let corpo = '';
+        try { corpo = Buffer.from(buf.slice(0, 300)).toString('utf8'); } catch { /* binario */ }
+        saidaT[fmt] = {
+          status: r2.status,
+          content_type: r2.headers.get('content-type'),
+          bytes: buf.length,
+          zip: buf[0] === 0x50 && buf[1] === 0x4b,
+          inicio: corpo.replace(/[^\x20-\x7e]/g, '.').slice(0, 160),
+        };
+      }
+      return res.status(200).json(saidaT);
+    } catch (e) { return res.status(200).json({ ok: false, erro: String(e?.message || e) }); }
+  }
   const inicio = Date.now();
   const saida = {};
   for (const conta of ['exitus', 'lumia', 'muniam']) {
