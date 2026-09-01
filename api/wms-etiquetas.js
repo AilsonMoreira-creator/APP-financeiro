@@ -58,7 +58,7 @@ async function pedidosFiltrados(q) {
   // mais de 3 dias e caso resolvido por fora (ex: etiqueta impressa direto no
   // Seller Center da Shopee, que nao deixa sinal) — sai da fila de impressao
   const desde3 = new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10); // data pura BRT — o dia-limite (3 dias atras) ainda entra
-  const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
+  const COLS = 'conta, pedido_id, numero, numero_loja, cliente_nome, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
 
   // 24/08 (caso dele: chip 3 × previa 2 persistente): o limit(500) numa janela
   // de 7 dias com ~2.500 pedidos-com-NF CORTAVA a fila em silencio — pendencia
@@ -309,6 +309,43 @@ async function linksEtiqueta(peds, tokenPorConta, motivo = 'impressao') {
   return mapa;
 }
 
+
+// 01/09 (pedido dele): a etiqueta logistica do Flex nao mostra O QUE vai
+// dentro. Esta e a CASADA DO PRODUTO — sai na termica logo antes da
+// logistica de cada pedido flex, com cliente, numeros (Bling e ML), data e
+// os itens no detalhe da nota (ref, cor, tamanho) + LOCALIZACAO e total de
+// pecas (os dois extras que ajudam separacao e conferencia).
+function zplProdutoFlex(p) {
+  const limpa = (t) => String(t || '').replace(/[\^~]/g, '').trim();
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const totalPc = itens.reduce((a, i) => a + (Number(i.quantidade) || 0), 0) || itens.length;
+  const dataP = p.data_pedido ? new Date(p.data_pedido).toLocaleDateString('pt-BR') : '';
+  const linhas = [];
+  let y = 30;
+  linhas.push(`^FO0,${y}^FB812,1,0,C^A0N,44,44^FD>> FLEX · CONFERENCIA DO PRODUTO <<^FS`); y += 62;
+  linhas.push(`^FO0,${y}^FB812,1,0,C^A0N,38,38^FD${limpa(p.conta).toUpperCase()} · pedido ${dataP}^FS`); y += 66;
+  linhas.push(`^FO24,${y}^FB764,2,0,L^A0N,48,48^FD${limpa(p.cliente_nome).slice(0, 60)}^FS`); y += 74;
+  linhas.push(`^FO24,${y}^A0N,74,74^FDBling ${limpa(p.numero)}^FS`); y += 86;
+  linhas.push(`^FO24,${y}^A0N,44,44^FDML ${limpa(p.numero_loja)}^FS`); y += 64;
+  linhas.push(`^FO24,${y}^GB764,6,6^FS`); y += 28;
+  const mostrar = itens.slice(0, 6);
+  for (const it of mostrar) {
+    const qtd = Number(it.quantidade) || 1;
+    const cab = `${qtd}x REF ${limpa(it.ref)} · ${limpa(it.tamanho) || '-'} · ${limpa(it.cor) || '-'}`;
+    const loc = limpa(it.estoque || it.localizacao);
+    linhas.push(`^FO24,${y}^A0N,52,52^FD${cab.slice(0, 30)}^FS`);
+    if (loc) linhas.push(`^FO620,${y}^FB170,1,0,R^A0N,52,52^FDLOC ${loc.slice(0, 4)}^FS`);
+    y += 60;
+    linhas.push(`^FO24,${y}^FB764,1,0,L^A0N,36,36^FD${limpa(it.descLimpa || it.descricao).slice(0, 44)}^FS`);
+    y += 56;
+  }
+  if (itens.length > 6) {
+    linhas.push(`^FO24,${y}^A0N,40,40^FD+ ${itens.length - 6} item(ns) — confira na nota^FS`); y += 56;
+  }
+  linhas.push(`^FO24,1064^GB764,6,6^FS`);
+  linhas.push(`^FO0,1096^FB812,1,0,C^A0N,86,86^FDTOTAL ${totalPc} PC^FS`);
+  return `^XA^CI28^PW812^LL1218^LH0,0\n${linhas.join('\n')}\n^XZ`;
+}
 
 // 24/08 (caso dos 6 flex "fantasma"): o ML marca substatus=printed quando a
 // etiqueta e BAIXADA — e o NOSSO preparo antecipado baixa pro cache. Printed
@@ -1339,6 +1376,9 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
             else if (dRes?.conteudo) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: dRes.conteudo });
             else { semDanfe.push(p.numero); continue; }   // sem nota, etiqueta não sai sozinha
           }
+          // 01/09 (pedido dele): no lote FLEX, cada logistica sai CASADA com a
+          // etiqueta do produto — a logistica nao diz o que vai dentro.
+          if (q.tipo === 'flex') blocos.push({ tipo: 'produto_flex', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplProdutoFlex(p) });
           if (ehPdf) {
             // o QZ Tray imprime PDF direto na térmica (type pixel) — sem conversão
             blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: pdf64 });
