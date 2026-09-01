@@ -17,8 +17,18 @@ export default async function handler(req, res) {
       const h = { Authorization: `Bearer ${token}` };
       const ro = await fetch(`https://api.mercadolibre.com/orders/${req.query.testa_zpl}`, { headers: h });
       const jo = ro.ok ? await ro.json() : null;
-      const sid = jo?.shipping?.id;
-      if (!sid) return res.status(200).json({ ok: false, passo: 'order', status: ro.status });
+      let sid = jo?.shipping?.id;
+      if (!sid) {  // carrinho: numero_loja e PACK id (mesmo fallback do _wms-ml-etiquetas)
+        const rp = await fetch(`https://api.mercadolibre.com/packs/${req.query.testa_zpl}`, { headers: h });
+        const jp = rp.ok ? await rp.json() : null;
+        const ordId = jp?.orders?.[0]?.id;
+        if (ordId) {
+          const ro2 = await fetch(`https://api.mercadolibre.com/orders/${ordId}`, { headers: h });
+          if (ro2.ok) sid = (await ro2.json())?.shipping?.id || null;
+        }
+        if (!sid) sid = jp?.shipment?.id || null;
+      }
+      if (!sid) return res.status(200).json({ ok: false, passo: 'order+pack', status: ro.status });
       const saidaT = { sid };
       for (const fmt of ['zpl2', 'pdf']) {
         const r2 = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${sid}&response_type=${fmt}&label_type=label`, { headers: h });
