@@ -7745,14 +7745,14 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   const [modalPonte,setModalPonte]=useState(null);   // { previa, ids }
   const [carregandoPonte,setCarregandoPonte]=useState(false);
   useEffect(()=>{let vivo=true;(async()=>{try{
-    const ids=concluidos.map(c=>String(c.id));
+    // via API (service key): ordens_corte tem RLS sem policy e o select
+    // direto do front voltava vazio em silencio. Mais novos primeiro.
+    const ids=[...concluidos].sort((a,b)=>Number(b.id)-Number(a.id)).map(c=>String(c.id)).slice(0,80);
     if(!ids.length){if(vivo)setOrdemDoCorte({});return;}
-    const {data}=await supabase.from('ordens_corte')
-      .select('id,grupo,corte_id,oficina_nome,oficina_corte_num')
-      .in('corte_id',ids.slice(0,80));
+    const r=await fetch(`/api/ordens-corte-gerar-oficina?vinculos=${ids.join(',')}`);
+    const d=await r.json();
     if(!vivo)return;
-    const m={};(data||[]).forEach(o=>{if(o.corte_id!=null)m[String(o.corte_id)]=o;});
-    setOrdemDoCorte(m);
+    setOrdemDoCorte(d?.mapa||{});
   }catch(e){console.error('ponte oficinas:',e);}})();return()=>{vivo=false};},[cortesSala.length,concluidos.map(c=>c.id).join(',')]);
   const abrirPonte=async()=>{
     if(carregandoPonte||!selPonte.size)return;
@@ -8080,10 +8080,10 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
             <ModalGerarOficina previa={modalPonte.previa} ids={modalPonte.ids} usuario={usuario}
               onClose={()=>setModalPonte(null)}
               onGerado={()=>{setModalPonte(null);setSelPonte(new Set());
-                // recarrega o vinculo pra estampar o carimbo sem F5
-                supabase.from('ordens_corte').select('id,grupo,corte_id,oficina_nome,oficina_corte_num')
-                  .in('corte_id',concluidos.map(c=>String(c.id)).slice(0,80))
-                  .then(({data})=>{const m={};(data||[]).forEach(o=>{if(o.corte_id!=null)m[String(o.corte_id)]=o;});setOrdemDoCorte(m);});
+                // recarrega o vinculo pra estampar o carimbo sem F5 (via API)
+                const ids=[...concluidos].sort((a,b)=>Number(b.id)-Number(a.id)).map(c=>String(c.id)).slice(0,80);
+                fetch(`/api/ordens-corte-gerar-oficina?vinculos=${ids.join(',')}`)
+                  .then(r=>r.json()).then(d=>setOrdemDoCorte(d?.mapa||{})).catch(()=>{});
               }}/>
           )}
 

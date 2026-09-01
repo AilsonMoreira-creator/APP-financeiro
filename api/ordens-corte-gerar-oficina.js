@@ -90,6 +90,22 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   try {
+    // ── GET ?vinculos=corteId,corteId → mapa corte_id -> ordem (grupo e
+    // carimbo) pros cards da lista da sala. Existe porque ordens_corte tem RLS
+    // sem policy: o select direto do front (anon) voltava VAZIO em silencio —
+    // por isso nem checkbox nem grupo apareciam (31/08).
+    if (req.method === 'GET' && req.query?.vinculos) {
+      const corteIds = String(req.query.vinculos).split(',').map(s => s.trim()).filter(Boolean).slice(0, 120);
+      if (!corteIds.length) return res.status(200).json({ ok: true, mapa: {} });
+      const { data, error } = await supabase.from('ordens_corte')
+        .select('id, grupo, corte_id, oficina_nome, oficina_corte_num')
+        .in('corte_id', corteIds);
+      if (error) return res.status(500).json({ ok: false, erro: error.message });
+      const mapa = {};
+      for (const o of (data || [])) if (o.corte_id != null) mapa[String(o.corte_id)] = o;
+      return res.status(200).json({ ok: true, mapa });
+    }
+
     // ── GET: prévia validada pro modal ──
     if (req.method === 'GET') {
       const ids = String(req.query?.ids || '').split(',').map(s => s.trim()).filter(Boolean);
