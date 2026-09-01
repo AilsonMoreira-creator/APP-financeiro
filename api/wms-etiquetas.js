@@ -1195,17 +1195,19 @@ export default async function handler(req, res) {
       // Baixar aqui marca "printed" no painel do ML — ok: é o momento real da
       // impressão e etiqueta_impressa_em é gravada segundos depois.
       const doMlZpl = {};
-      // 01/09 (foto: 5 flex pos-preparo sairam PDF invertido do Bling): o lote
-      // FLEX tambem busca o ZPL2 do ML na hora da impressao — antes so o
-      // NF+transporte buscava, e flex sem preparo caia no linksEtiqueta (PDF
-      // do Bling, o padrao antigo). Quem ja tem ZPL guardado nao re-baixa.
-      if (comDanfeLote || q.tipo === 'flex') {
+      // 01/09 (foto: 5 flex pos-preparo sairam PDF invertido do Bling): FLEX
+      // e ETIQUETAS LIBERADAS tambem buscam o ZPL2 do ML na hora da impressao
+      // — antes so o NF+transporte buscava, e quem nao passou pelo preparo
+      // (pedido/liberacao pos-06:50) caia no linksEtiqueta (PDF do Bling, o
+      // padrao antigo torto). Quem ja tem ZPL guardado nao re-baixa.
+      const tipoBuscaMl = comDanfeLote || q.tipo === 'flex' || q.tipo === 'etiqueta_liberada';
+      if (tipoBuscaMl) {
         const mlPorConta = {};
         // 20/08 v2 (foto do teste): pedido ML com casada em CACHE nunca tentava
         // o ZPL2 — e o corte cego da casada fatia na fronteira errada. Agora
         // TODO ML do lote tenta o ZPL2 original primeiro; o cache é fallback.
         for (const p of candidatosLote) {
-          if (q.tipo === 'flex' && guardados[String(p.pedido_id)]?.formato === 'ZPL') continue;
+          if ((q.tipo === 'flex' || q.tipo === 'etiqueta_liberada') && guardados[String(p.pedido_id)]?.formato === 'ZPL') continue;
           if (String(p.canal_geral || '') === 'Mercado Livre' && p.ml_logistic_type !== 'fulfillment' && p.numero_loja) {
             (mlPorConta[p.conta] = mlPorConta[p.conta] || []).push(p);
           }
