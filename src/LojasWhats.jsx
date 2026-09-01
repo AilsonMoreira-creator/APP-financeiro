@@ -531,9 +531,9 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
     { id: 'conversao',   label: 'Conversão',   icon: TrendingUp },
     { id: 'aprendizado', label: 'Aprendizado', icon: Brain },
     { id: 'midias',      label: 'Mídias',      icon: Paperclip },
-    { id: 'pesquisa',    label: 'Pesquisa',    icon: FileText },
-    { id: 'marketing',   label: 'Marketing',   icon: TrendingUp },
     { id: 'clientes',    label: 'Clientes',    icon: Users, badge: clientesAbertos },
+    { id: 'marketing',   label: 'Marketing',   icon: TrendingUp },
+    { id: 'pesquisa',    label: 'Pesquisa',    icon: FileText },
     { id: 'config',      label: 'Config',      icon: Settings },
     { id: 'produtos',    label: 'Produtos',    icon: Package },
   ];
