@@ -536,12 +536,34 @@ function diasNaPassadoria(reg) {
 function fmtData(x) { try { return new Date(x).toLocaleDateString('pt-BR'); } catch { return '—'; } }
 
 const inputPass = { padding: '11px 12px', fontSize: 15, border: '1px solid #d8e2ea', borderRadius: 8, fontFamily: 'Georgia,serif', color: '#2c3e50', outline: 'none', background: '#fff', colorScheme: 'light', WebkitAppearance: 'none', appearance: 'none' };
+// 31/08 (pedido dele): cada passadoria tem uma cor — tom SUAVE, vale desktop
+// e celular. Identidade visual rapida: badge do card e chip do filtro.
+const CORES_PASSADORIA = {
+  'eliana':      { bg: '#e9f7ec', border: '#bfe3c8', text: '#1e7a45' },  // verde claro
+  'guilherme':   { bg: '#f3ecfa', border: '#d9c3ee', text: '#6b3aa0' },  // lilas
+  'perla':       { bg: '#fdf6dc', border: '#eeda92', text: '#8a6d1a' },  // amarelo
+  'bom retiro':  { bg: '#e8f1fa', border: '#b8d4ee', text: '#2a6496' },  // azul
+  'silva teles': { bg: '#fdefe0', border: '#f3cf9d', text: '#a05c1a' },  // laranja
+};
+const COR_PASSADORIA_PADRAO = { bg: '#e8f6f5', border: '#c2e4e2', text: '#1f6f6b' };
+export function corPassadoria(nome) {
+  return CORES_PASSADORIA[String(nome || '').trim().toLowerCase()] || COR_PASSADORIA_PADRAO;
+}
+
 function chipStyle(active) {
   return { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 20, cursor: 'pointer', border: `1px solid ${active ? '#4a7fa5' : '#d8e2ea'}`, background: active ? '#4a7fa5' : '#fff', color: active ? '#fff' : '#5a6470', whiteSpace: 'nowrap', lineHeight: 1.2 };
 }
 
 // ── Tela Passadoria (aba ao lado de Caseado no módulo Oficinas) ──────────────
 export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
+  // 31/08 (pedido dele): card reorganizado no celular — o wrap solto deixava
+  // dias/entrega/pagamento caindo em posicoes confusas.
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  useEffect(() => {
+    const f = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', f);
+    return () => window.removeEventListener('resize', f);
+  }, []);
   const [busca, setBusca] = useState('');
   const [nomeFiltro, setNomeFiltro] = useState('todos');
   const [statusFiltro, setStatusFiltro] = useState('todos'); // todos | aberto | entregue
@@ -587,7 +609,10 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
         <button onClick={() => setNomeFiltro('todos')} style={chipStyle(nomeFiltro === 'todos')}>Todas ({registros.length})</button>
         {nomes.map(n => (
-          <button key={n} onClick={() => setNomeFiltro(n)} style={chipStyle(nomeFiltro === n)}><PassadoriaTabIcon size={13} />{n} ({contaPorNome(n)})</button>
+          <button key={n} onClick={() => setNomeFiltro(n)} style={(() => {
+            const c = corPassadoria(n); const ativo = nomeFiltro === n;
+            return { ...chipStyle(ativo), background: ativo ? c.text : c.bg, border: `1px solid ${ativo ? c.text : c.border}`, color: ativo ? '#fff' : c.text };
+          })()}><PassadoriaTabIcon size={13} />{n} ({contaPorNome(n)})</button>
         ))}
         <button onClick={() => setModalLog(true)} title="Histórico de ações da passadoria" style={{ marginLeft: 'auto', padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d8e2ea', background: '#fff', color: '#5a6470', cursor: 'pointer', whiteSpace: 'nowrap' }}>🕘 Log</button>
         <button onClick={() => setGerenciar(true)} title="Cadastrar / remover passadorias" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d8e2ea', background: '#fff', color: '#5a6470', cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ Gerenciar</button>
@@ -626,6 +651,55 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
             const ent = !!reg.entregue;
             const pago = !!reg.pago;
             const selecionavel = ent && !pago && reg.valor_unit != null && reg.qtd_pagar != null;
+            const badges = (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                <span style={{ background: ent ? '#eafbf0' : '#fff8ea', color: ent ? '#27ae60' : '#b7791f', border: `1px solid ${ent ? '#c6e9cf' : '#f0dca8'}`, padding: '3px 9px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {ent ? '✓ Entregue' : 'Na passadoria'}
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: corPassadoria(reg.nome).text, background: corPassadoria(reg.nome).bg, border: `1px solid ${corPassadoria(reg.nome).border}`, borderRadius: 10, padding: '3px 9px' }}><PassadoriaTabIcon size={13} />{reg.nome}</span>
+                {pago && <span style={{ fontSize: 11, fontWeight: 700, color: '#1e7a45', background: '#dff3e4', border: '1px solid #b9e0c4', borderRadius: 10, padding: '3px 9px' }}>💰 Pago {reg.pago_em ? fmtData(reg.pago_em) : ''}</span>}
+                {!pago && (
+                  <button onClick={() => setTrocando(reg)} title="Trocar a passadoria (colocou por engano?)"
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: '#8a9aa4', padding: 2 }}>✏️</button>
+                )}
+              </div>
+            );
+            if (isMobile) return (
+              <div key={reg.id} style={{ background: pago ? '#f8fbf6' : '#fff', border: `1px solid ${pago ? '#cfe6c4' : ent ? '#d4edc4' : '#e8e2da'}`, borderRadius: 10, padding: 12, opacity: pago ? 0.9 : 1 }}>
+                {badges}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 6 }}>
+                  <FotoPassadoria refProd={reg.ref} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#2c3e50', lineHeight: 1.3 }}>REF {reg.ref}{reg.descricao ? ` · ${reg.descricao}` : ''}</div>
+                    <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 3, lineHeight: 1.5 }}>
+                      🧵 {reg.oficina || '—'}{reg.caseado_nome ? ` · caseado: ${reg.caseado_nome}` : ''}<br />
+                      {reg.qtd != null ? `${reg.qtd} pç` : '—'} · chegou {fmtData(reg.definido_em)}{ent && reg.entregue_em ? ` · entregue ${fmtData(reg.entregue_em)}` : ''}
+                    </div>
+                  </div>
+                </div>
+                <LinhaPagamento reg={reg} api={api} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10, paddingTop: 9, borderTop: '1px solid #f0ece6' }}>
+                  {ent && !pago && (
+                    <div onClick={() => selecionavel && toggleSel(reg.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: selecionavel ? 'pointer' : 'default', opacity: selecionavel ? 1 : 0.5 }}>
+                      <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${selecao.has(reg.id) ? '#27ae60' : selecionavel ? '#9fc3b4' : '#dde5ea'}`, background: selecao.has(reg.id) ? '#27ae60' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {selecao.has(reg.id) && <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>✓</span>}
+                      </div>
+                      <span style={{ fontSize: 10, color: '#8a9aa4', textTransform: 'uppercase' }}>Pagar</span>
+                    </div>
+                  )}
+                  <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                    <span style={{ fontSize: 19, fontWeight: 700, fontFamily: FN, color: (dias >= 7 && !ent) ? '#c0392b' : '#2c3e50' }}>{dias}</span>
+                    <span style={{ fontSize: 9.5, color: '#8a9aa4', textTransform: 'uppercase' }}>dias</span>
+                  </div>
+                  <div onClick={() => api.toggleEntregue(reg)} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 7, background: ent ? '#27ae60' : '#fff', border: ent ? 'none' : '2px solid #c0d0dc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {ent && <span style={{ color: '#fff', fontSize: 17, fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: 10, color: '#8a9aa4', textTransform: 'uppercase' }}>Entrega</span>
+                  </div>
+                </div>
+              </div>
+            );
             return (
               <div key={reg.id} style={{ background: pago ? '#f8fbf6' : '#fff', border: `1px solid ${pago ? '#cfe6c4' : ent ? '#d4edc4' : '#e8e2da'}`, borderRadius: 10, padding: 12, opacity: ent && !pago ? 0.97 : pago ? 0.9 : 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -642,7 +716,7 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
                       <span style={{ background: ent ? '#eafbf0' : '#fff8ea', color: ent ? '#27ae60' : '#b7791f', border: `1px solid ${ent ? '#c6e9cf' : '#f0dca8'}`, padding: '3px 9px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {ent ? '✓ Entregue' : 'Na passadoria'}
                       </span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: '#1f6f6b', background: '#e8f6f5', border: '1px solid #c2e4e2', borderRadius: 10, padding: '3px 9px' }}><PassadoriaTabIcon size={13} />{reg.nome}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: corPassadoria(reg.nome).text, background: corPassadoria(reg.nome).bg, border: `1px solid ${corPassadoria(reg.nome).border}`, borderRadius: 10, padding: '3px 9px' }}><PassadoriaTabIcon size={13} />{reg.nome}</span>
                       {pago && <span style={{ fontSize: 11, fontWeight: 700, color: '#1e7a45', background: '#dff3e4', border: '1px solid #b9e0c4', borderRadius: 10, padding: '3px 9px' }}>💰 Pago {reg.pago_em ? fmtData(reg.pago_em) : ''}</span>}
                       {!pago && (
                         <button onClick={() => setTrocando(reg)} title="Trocar a passadoria (colocou por engano?)"
