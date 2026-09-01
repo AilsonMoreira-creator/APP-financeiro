@@ -859,6 +859,11 @@ export default async function handler(req, res) {
           // 22/08 (pedido dele): envio PROGRAMADO — a data de despacho na
           // ULTIMA linha, centralizada, um pouco maior que a descricao e em
           // negrito (ZPL nao tem bold: duas passadas com 1 dot de offset)
+          + (info.pedidoCanal ? (() => {
+            const tPc = String(info.pedidoCanal).replace(/[\^~]/g, ' ').slice(0, 40);
+            return '^FO30,1136^FB752,1,0,C^A0N,30,30^FD' + tPc + '^FS'
+                 + '^FO31,1137^FB752,1,0,C^A0N,30,30^FD' + tPc + '^FS';
+          })() : '')
           + (info.agendadoEm ? (() => {
             const dAg = String(info.agendadoEm).slice(0, 10).split('-').reverse().join('/');
             const tAg = 'ENVIAR ' + dAg;
@@ -901,6 +906,11 @@ export default async function handler(req, res) {
                     protocolo: xmlCampo(prot, 'nProt'),
                     itens: xmlItens(xml),
                     agendadoEm: p.ml_agendado_em || null,
+                    // 01/09 (pedido dele): a logistica Shein identifica o
+                    // pacote pelo "Pedido: GSH..." — a mesma referencia entra
+                    // na DANFE pra conferencia do par na bancada.
+                    pedidoCanal: String(p.canal_geral || '').toLowerCase().includes('shein') && p.numero_loja
+                      ? 'PEDIDO SHEIN ' + String(p.numero_loja) : null,
                   });
                   await supabase.from('wms_documentos').upsert({
                     pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'ZPL',
@@ -1312,7 +1322,14 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
               try {
                 const { PDFDocument } = await import('pdf-lib');
                 const docC = await PDFDocument.load(Buffer.from(norm.pdf, 'base64'));
-                if (docC.getPageCount() === 2) {
+                // 01/09 (vazamento visto na bancada): pedido Shein de 3 itens
+                // veio com casado de 3 paginas [etiqueta, danfe nativa, lista]
+                // — o ===2 degradava pro INTEIRO com a rica na frente e a
+                // danfe padrao antigo saia de brinde, deslocando os pares
+                // seguintes. Com a rica em maos, QUALQUER casado Shein vira
+                // [rica + pg1(etiqueta)]. Multivolume Shein nunca observado;
+                // se um dia existir, a 2a etiqueta sai pela reimpressao.
+                if (docC.getPageCount() >= 2) {
                   const dResS = await buscarDanfe(p, danfeGuardada);
                   if (dResS?.formato === 'ZPL') {
                     const soEtq = await PDFDocument.create();
