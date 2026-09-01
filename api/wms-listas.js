@@ -108,7 +108,7 @@ export default async function handler(req, res) {
         const corteFlexMs = new Date(corteDeHoje('12:30')).getTime();
         const porConta = {};
         const porCanal = {};
-        const tot = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, em_separacao_flex: 0, em_separacao_meluni: 0, em_separacao_com_nf_prevista: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0, flex_abertos: 0 };
+        const tot = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, em_separacao_flex: 0, em_separacao_meluni: 0, em_separacao_com_nf_prevista: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0, flex_abertos: 0, abertos_flex: 0, abertos_sem_nf: 0 };
         // NF gerada = a situacao no Bling ja saiu de "em aberto" (hoje vira
         // atendido; no fluxo definitivo vira em andamento). Ailson 07/08/2026.
         const temNf = (nome) => { const n = normSitLocal(nome); return !!n && !n.includes('em aberto') && !n.includes('aberto'); };
@@ -148,7 +148,15 @@ export default async function handler(req, res) {
             // (k.pendentes) — o aviso e sobre a onda de hoje, ate o corte.
             if ((r.data_pedido || hoje) < limiteVelho) { /* velho demais: fora do contador */ }
             else if (r.criado_em && new Date(r.criado_em).getTime() >= corteMs) { c.pra_amanha++; tot.pra_amanha++; }
-            else { k.pendentes++; c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; }
+            else {
+              k.pendentes++; c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0;
+              // 01/09 (pedido dele): o card "Pedidos abertos" se explica — o
+              // numero e a fila toda; o subtitulo abre a composicao pra bater
+              // com as auditorias (Flex sai no painel ML; sem NF e o fluxo
+              // manual do dia). Nao era defasagem: eram reguas diferentes.
+              if (ehFlex(r)) tot.abertos_flex++;
+              else if (!r.nf_id) tot.abertos_sem_nf++;
+            }
           }
           else if (r.status_wms === 'em_separacao') {
             c.em_separacao++; tot.em_separacao++; k.pendentes++;

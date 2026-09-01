@@ -131,7 +131,14 @@ export default async function handler(req, res) {
   function pintar(d){
     var t = d.total || {};
     document.getElementById('abertos').textContent = n(t.abertos);
-    document.getElementById('pecas').textContent = n(t.pra_amanha) ? (n(t.pra_amanha) + ' pra amanhã') : '\u00a0';
+    // 01/09 (pedido dele): subtitulo abre a composicao do numero grande —
+    // Flex (painel ML) e sem NF (fluxo manual do dia) — pra TV e as
+    // auditorias falarem a mesma lingua.
+    var subAb = [];
+    if (n(t.pra_amanha)) subAb.push(n(t.pra_amanha) + ' pra amanhã');
+    if (n(t.abertos_flex)) subAb.push('⚡ ' + n(t.abertos_flex) + ' Flex');
+    if (n(t.abertos_sem_nf)) subAb.push('📄 ' + n(t.abertos_sem_nf) + ' sem NF');
+    document.getElementById('pecas').textContent = subAb.length ? subAb.join(' · ') : '\u00a0';
     var prev = n(t.em_separacao_com_nf_prevista), comNf = n(t.em_separacao_nf);
     document.getElementById('fin').textContent = n(t.finalizados_hoje);
 
