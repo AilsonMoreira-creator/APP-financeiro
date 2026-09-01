@@ -98,7 +98,13 @@ export async function etiquetasDoMl(lista, conta) {
   for (let i = 0; i < sids.length; i += 40) {
     const fatia = sids.slice(i, i + 40);
     try {
-      const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=zpl2&label_type=label`, { headers: h });
+      let r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=zpl2&label_type=label`, { headers: h });
+      if (!r.ok) {
+        // 01/09 (5 flex cairam pro PDF por um soluço momentaneo): UMA nova
+        // tentativa antes de degradar — a individual e a reserva continuam.
+        await espera(1200);
+        r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=zpl2&label_type=label`, { headers: h });
+      }
       if (!r.ok) continue;
       // o ML entrega o ZPL DENTRO DE UM ZIP (um arquivo por etiqueta)
       const bytes = new Uint8Array(await r.arrayBuffer());

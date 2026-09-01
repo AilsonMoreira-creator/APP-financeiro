@@ -322,12 +322,22 @@ async function ajustarPdfFlex(b64) {
     for (const pg0 of src.getPages()) {
       const cb = pg0.getCropBox();
       const emb = await out.embedPage(pg0, cb);
-      const sc = Math.min(W / emb.width, H / emb.height);
       const pg = out.addPage([W, H]);
-      pg.drawPage(emb, {
-        x: (W - emb.width * sc) / 2, y: (H - emb.height * sc) / 2,
-        xScale: sc, yScale: sc,
-      });
+      if (emb.width > emb.height) {
+        // paisagem: gira 90 pra ocupar a 10x15 em pe (a "invertida" da foto)
+        const { degrees } = await import('pdf-lib');
+        const sc = Math.min(W / emb.height, H / emb.width);
+        pg.drawPage(emb, {
+          x: (W + emb.height * sc) / 2, y: (H - emb.width * sc) / 2,
+          xScale: sc, yScale: sc, rotate: degrees(90),
+        });
+      } else {
+        const sc = Math.min(W / emb.width, H / emb.height);
+        pg.drawPage(emb, {
+          x: (W - emb.width * sc) / 2, y: (H - emb.height * sc) / 2,
+          xScale: sc, yScale: sc,
+        });
+      }
     }
     return Buffer.from(await out.save()).toString('base64');
   } catch { return b64; }
@@ -1185,12 +1195,17 @@ export default async function handler(req, res) {
       // Baixar aqui marca "printed" no painel do ML — ok: é o momento real da
       // impressão e etiqueta_impressa_em é gravada segundos depois.
       const doMlZpl = {};
-      if (comDanfeLote) {
+      // 01/09 (foto: 5 flex pos-preparo sairam PDF invertido do Bling): o lote
+      // FLEX tambem busca o ZPL2 do ML na hora da impressao — antes so o
+      // NF+transporte buscava, e flex sem preparo caia no linksEtiqueta (PDF
+      // do Bling, o padrao antigo). Quem ja tem ZPL guardado nao re-baixa.
+      if (comDanfeLote || q.tipo === 'flex') {
         const mlPorConta = {};
         // 20/08 v2 (foto do teste): pedido ML com casada em CACHE nunca tentava
         // o ZPL2 — e o corte cego da casada fatia na fronteira errada. Agora
         // TODO ML do lote tenta o ZPL2 original primeiro; o cache é fallback.
         for (const p of candidatosLote) {
+          if (q.tipo === 'flex' && guardados[String(p.pedido_id)]?.formato === 'ZPL') continue;
           if (String(p.canal_geral || '') === 'Mercado Livre' && p.ml_logistic_type !== 'fulfillment' && p.numero_loja) {
             (mlPorConta[p.conta] = mlPorConta[p.conta] || []).push(p);
           }
