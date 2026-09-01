@@ -157,7 +157,7 @@ export function usePassadoria() {
   }, [carregarRegistros]);
 
   // pagamento em lote: carimba os cortes selecionados como pagos
-  const registrarPagamento = useCallback(async (regs) => {
+  const registrarPagamento = useCallback(async (regs, ajuste) => {
     const pagamentoId = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
     const agora = new Date().toISOString();
     for (const r of regs) {
@@ -167,6 +167,11 @@ export function usePassadoria() {
       if (error) { console.error('[passadoria] pagar:', error.message); return { ok: false, erro: error.message }; }
       const tot = (r.qtd_pagar ?? 0) * (r.valor_unit ?? 0);
       logAcao(r.corte_id, r.ref, 'marcou pago', `${r.nome} · ${r.qtd_pagar} pç × ${r.valor_unit} = R$ ${tot.toFixed(2)}`);
+    }
+    if (ajuste?.valor && regs.length) {
+      // fica na auditoria: quem pagou com acrescimo/desconto e por que
+      logAcao(regs[0].corte_id, regs[0].ref, ajuste.valor > 0 ? 'acrescimo no pagamento' : 'desconto no pagamento',
+        `${regs[0].nome} · R$ ${ajuste.valor.toFixed(2)}${ajuste.motivo ? ` (${ajuste.motivo})` : ''}`);
     }
     await carregarRegistros();
     return { ok: true, pagamentoId };
@@ -553,20 +558,27 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
   const termo = busca.trim().toLowerCase();
   let lista = registros.filter(r => {
     if (statusFiltro === 'aberto' && r.entregue) return false;
-    if (statusFiltro === 'entregue' && !r.entregue) return false;
+    // 31/08 (pedido dele): "Entregues" vira entregue SEM pagamento e nasce o
+    // chip proprio de Pagos — espelha os 3 grupos da ordenacao.
+    if (statusFiltro === 'entregue' && (!r.entregue || r.pago)) return false;
+    if (statusFiltro === 'pago' && !r.pago) return false;
     if (nomeFiltro !== 'todos' && r.nome !== nomeFiltro) return false;
     if (marcaFiltro !== 'todas' && String(r.marca || '') !== marcaFiltro) return false;
     if (termo) { const hay = (String(r.ref || '') + ' ' + String(r.descricao || '')).toLowerCase(); if (!hay.includes(termo)) return false; }
     return true;
   });
   lista = [...lista].sort((a, b) => {
-    if (!!a.entregue !== !!b.entregue) return a.entregue ? 1 : -1;
+    // 31/08 (ordem dele): abertos -> entregues nao pagos -> pagos;
+    // dentro de cada grupo, mais recente primeiro.
+    const grupo = (r) => (r.pago ? 2 : r.entregue ? 1 : 0);
+    if (grupo(a) !== grupo(b)) return grupo(a) - grupo(b);
     const ta = new Date(a.entregue && a.entregue_em ? a.entregue_em : a.definido_em).getTime();
     const tb = new Date(b.entregue && b.entregue_em ? b.entregue_em : b.definido_em).getTime();
     return tb - ta;
   });
   const nAbertos = registros.filter(r => !r.entregue).length;
-  const nEntregues = registros.filter(r => r.entregue).length;
+  const nEntregues = registros.filter(r => r.entregue && !r.pago).length;
+  const nPagos = registros.filter(r => !!r.pago).length;
   const contaPorNome = (n) => registros.filter(r => r.nome === n).length;
 
   return (
@@ -586,12 +598,13 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
         <button onClick={() => setStatusFiltro('todos')} style={chipStyle(statusFiltro === 'todos')}>Todos</button>
         <button onClick={() => setStatusFiltro('aberto')} style={chipStyle(statusFiltro === 'aberto')}>Em aberto</button>
-        <button onClick={() => setStatusFiltro('entregue')} style={chipStyle(statusFiltro === 'entregue')}>Entregues</button>
+        <button onClick={() => setStatusFiltro('entregue')} style={chipStyle(statusFiltro === 'entregue')}>Entregue s/ pgto</button>
+        <button onClick={() => setStatusFiltro('pago')} style={chipStyle(statusFiltro === 'pago')}>💰 Pagos</button>
         <span style={{ width: 1, height: 20, background: '#d8e2ea', margin: '0 2px' }} />
         <button onClick={() => setMarcaFiltro('todas')} style={chipStyle(marcaFiltro === 'todas')}>Todas as marcas</button>
         <button onClick={() => setMarcaFiltro('Meluni')} style={chipStyle(marcaFiltro === 'Meluni')}>Meluni ({registros.filter(r => r.marca === 'Meluni').length})</button>
         <button onClick={() => setMarcaFiltro('Amícia')} style={chipStyle(marcaFiltro === 'Amícia')}>Amícia ({registros.filter(r => r.marca === 'Amícia').length})</button>
-        <span style={{ fontSize: 12, color: '#8a9aa4', marginLeft: 'auto' }}>{nAbertos} aberto(s) · {nEntregues} entregue(s)</span>
+        <span style={{ fontSize: 12, color: '#8a9aa4', marginLeft: 'auto' }}>{nAbertos} aberto(s) · {nEntregues} entregue(s) s/ pgto · {nPagos} pago(s)</span>
       </div>
 
       {selecao.size > 0 && (
@@ -671,16 +684,23 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
         <ModalPagamentoPassadoria
           regs={registros.filter(r => selecao.has(r.id))}
           isAdmin={isAdmin}
-          onGravar={async (regsPagar) => {
-            const r = await api.registrarPagamento(regsPagar);
+          onGravar={async (regsPagar, ajuste) => {
+            const r = await api.registrarPagamento(regsPagar, ajuste);
             if (r?.ok) {
-              // 1 lançamento por passadoria no financeiro (Despesas → Passadoria)
+              // 1 lançamento por passadoria no financeiro (Despesas → Passadoria).
+              // 31/08 (pedido dele): o AJUSTE (transporte etc.) soma no valor
+              // lançado — cortes 4.239 + transporte 500 = despesa 4.739. O
+              // modal só habilita ajuste com UMA passadoria no lote.
               if (onLancarDespesa) {
                 const porNome = {};
                 regsPagar.forEach(g => {
                   const t = (g.qtd_pagar ?? 0) * (g.valor_unit ?? 0);
                   porNome[g.nome] = (porNome[g.nome] || 0) + t;
                 });
+                if (ajuste?.valor) {
+                  const unico = Object.keys(porNome)[0];
+                  if (unico) porNome[unico] += ajuste.valor;
+                }
                 Object.entries(porNome).forEach(([nome, total]) => {
                   onLancarDespesa({ passadoria: nome, total: Math.round(total * 100) / 100, pagamentoId: r.pagamentoId, qtdCortes: regsPagar.filter(g => g.nome === nome).length });
                 });
@@ -698,10 +718,19 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
 // ── Modal de pagamento (lote selecionado) ────────────────────────────────────
 function ModalPagamentoPassadoria({ regs, isAdmin, onGravar, onClose }) {
   const [status, setStatus] = useState('idle'); // idle | gravando | ok | erro
+  // 31/08 (pedido dele): ACRESCIMO ou DESCONTO sobre a soma dos cortes — ex.
+  // acordo de ajudar no transporte: cortes 4.239 + transporte 500 = despesa
+  // 4.739 na planilha. Negativo = desconto. So com UMA passadoria no lote,
+  // senao nao da pra saber de quem e o ajuste.
+  const [ajusteValor, setAjusteValor] = useState('');
+  const [ajusteMotivo, setAjusteMotivo] = useState('');
   const fmtBRL = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const linhas = regs.map(r => ({ ...r, total: (r.qtd_pagar ?? 0) * (r.valor_unit ?? 0) }));
   const somaGeral = linhas.reduce((s, l) => s + l.total, 0);
   const nomes = [...new Set(linhas.map(l => l.nome))];
+  const ajusteHabilitado = nomes.length === 1;
+  const nAjuste = ajusteHabilitado ? (parseFloat(String(ajusteValor).replace('.', '').replace(',', '.')) || 0) : 0;
+  const totalFinal = somaGeral + nAjuste;
 
   const gerarPdf = () => {
     const hoje = new Date().toLocaleDateString('pt-BR');
@@ -735,7 +764,8 @@ ${porNome.map(g => `
     </tr>`).join('')}
     <tr class="subtotal"><td colspan="6">Subtotal ${g.nome}</td><td class="n">${g.ls.reduce((s, l) => s + l.total, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td></tr>
   </table>`).join('')}
-<div class="total">TOTAL A PAGAR: ${somaGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+${nAjuste !== 0 ? `<div style="text-align:right;font-size:13px;margin-top:14px;">Soma dos cortes: R$ ${somaGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}<br/>${nAjuste > 0 ? 'Acr&eacute;scimo' : 'Desconto'}${ajusteMotivo ? ` (${ajusteMotivo})` : ''}: R$ ${nAjuste.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>` : ''}
+<div class="total">TOTAL A PAGAR: ${totalFinal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
 <div class="rodape">Demonstrativo gerado pelo APP Financeiro Grupo Am&iacute;cia para envio junto ao comprovante Pix.</div>
 <script>window.onload=function(){window.print();};</script>
 </body></html>`;
@@ -747,7 +777,7 @@ ${porNome.map(g => `
     if (!isAdmin) { alert('⚠️ Apenas admin pode gravar pagamento. Avisa o Ailson.'); return; }
     if (status !== 'idle') return;
     setStatus('gravando');
-    const r = await onGravar(regs);
+    const r = await onGravar(regs, nAjuste !== 0 ? { valor: nAjuste, motivo: ajusteMotivo.trim() } : null);
     if (r?.ok) { setStatus('ok'); setTimeout(onClose, 1200); }
     else setStatus('erro');
   };
@@ -782,8 +812,28 @@ ${porNome.map(g => `
             </tbody>
           </table>
         </div>
+        <div style={{ marginTop: 14, padding: '10px 12px', background: '#f7f9fb', border: '1px solid #e2e8ee', borderRadius: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#2c3e50', marginBottom: 6 }}>Acréscimo ou desconto {!ajusteHabilitado && <span style={{ fontWeight: 400, color: '#8a9aa4' }}>· disponível pagando uma passadoria por vez</span>}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input value={ajusteValor} disabled={!ajusteHabilitado}
+              onChange={e => setAjusteValor(e.target.value.replace(/[^0-9,.-]/g, ''))}
+              placeholder="+500 ou -200"
+              inputMode="decimal"
+              style={{ width: 110, padding: '9px 10px', borderRadius: 8, border: '1.5px solid #e2e8ee', fontSize: 14, fontFamily: FN, color: '#2c3e50', background: ajusteHabilitado ? '#fff' : '#f0f2f4' }} />
+            <input value={ajusteMotivo} disabled={!ajusteHabilitado}
+              onChange={e => setAjusteMotivo(e.target.value)}
+              maxLength={60}
+              placeholder="Motivo (ex.: transporte)"
+              style={{ flex: 1, minWidth: 160, padding: '9px 10px', borderRadius: 8, border: '1.5px solid #e2e8ee', fontSize: 13, fontFamily: 'Georgia,serif', color: '#2c3e50', background: ajusteHabilitado ? '#fff' : '#f0f2f4' }} />
+          </div>
+          {nAjuste !== 0 && (
+            <div style={{ fontSize: 12, color: nAjuste > 0 ? '#1f6f6b' : '#b7791f', marginTop: 6, fontFamily: FN }}>
+              {fmtBRL(somaGeral)} {nAjuste > 0 ? '+' : '−'} {fmtBRL(Math.abs(nAjuste))}{ajusteMotivo ? ` (${ajusteMotivo})` : ''}
+            </div>
+          )}
+        </div>
         <div style={{ textAlign: 'right', fontSize: 16, fontWeight: 700, color: '#1f6f6b', marginTop: 12, fontFamily: FN }}>
-          Total a pagar: {fmtBRL(somaGeral)}
+          Total a pagar: {fmtBRL(totalFinal)}
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
           <button type="button" onClick={gerarPdf} style={{ flex: 1, minWidth: 180, padding: '12px', fontSize: 14, fontWeight: 700, color: '#2c3e50', background: '#fff', border: '2px solid #4a7fa5', borderRadius: 8, cursor: 'pointer', fontFamily: 'Georgia,serif' }}>🖨 Gerar PDF (demonstrativo)</button>
