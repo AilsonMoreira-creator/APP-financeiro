@@ -310,6 +310,29 @@ async function linksEtiqueta(peds, tokenPorConta, motivo = 'impressao') {
 }
 
 
+// 01/09 (foto dele: logistica flex saindo miuda num canto da folha): o PDF
+// do ML vem com pagina maior que a area util. Recorta pelo CropBox e amplia
+// pra preencher a 10x15 (288x432pt), centrado. Qualquer falha = original.
+async function ajustarPdfFlex(b64) {
+  try {
+    const { PDFDocument } = await import('pdf-lib');
+    const src = await PDFDocument.load(Buffer.from(b64, 'base64'));
+    const out = await PDFDocument.create();
+    const W = 288, H = 432;
+    for (const pg0 of src.getPages()) {
+      const cb = pg0.getCropBox();
+      const emb = await out.embedPage(pg0, cb);
+      const sc = Math.min(W / emb.width, H / emb.height);
+      const pg = out.addPage([W, H]);
+      pg.drawPage(emb, {
+        x: (W - emb.width * sc) / 2, y: (H - emb.height * sc) / 2,
+        xScale: sc, yScale: sc,
+      });
+    }
+    return Buffer.from(await out.save()).toString('base64');
+  } catch { return b64; }
+}
+
 // 01/09 (pedido dele): a etiqueta logistica do Flex nao mostra O QUE vai
 // dentro. Esta e a CASADA DO PRODUTO — sai na termica logo antes da
 // logistica de cada pedido flex, com cliente, numeros (Bling e ML), data e
@@ -321,12 +344,14 @@ function zplProdutoFlex(p) {
   const totalPc = itens.reduce((a, i) => a + (Number(i.quantidade) || 0), 0) || itens.length;
   const dataP = p.data_pedido ? new Date(p.data_pedido).toLocaleDateString('pt-BR') : '';
   const linhas = [];
+  // 01/09 (ajuste dele apos o teste): cabecalho so FLEX; Bling na MESMA fonte
+  // do ML; respiro depois do cliente e antes dos produtos.
   let y = 30;
-  linhas.push(`^FO0,${y}^FB812,1,0,C^A0N,44,44^FD>> FLEX · CONFERENCIA DO PRODUTO <<^FS`); y += 62;
-  linhas.push(`^FO0,${y}^FB812,1,0,C^A0N,38,38^FD${limpa(p.conta).toUpperCase()} · pedido ${dataP}^FS`); y += 66;
-  linhas.push(`^FO24,${y}^FB764,2,0,L^A0N,48,48^FD${limpa(p.cliente_nome).slice(0, 60)}^FS`); y += 74;
-  linhas.push(`^FO24,${y}^A0N,74,74^FDBling ${limpa(p.numero)}^FS`); y += 86;
-  linhas.push(`^FO24,${y}^A0N,44,44^FDML ${limpa(p.numero_loja)}^FS`); y += 64;
+  linhas.push(`^FO0,${y}^FB812,1,0,C^A0N,54,54^FDFLEX^FS`); y += 68;
+  linhas.push(`^FO0,${y}^FB812,1,0,C^A0N,38,38^FD${limpa(p.conta).toUpperCase()} · pedido ${dataP}^FS`); y += 70;
+  linhas.push(`^FO24,${y}^FB764,2,0,L^A0N,48,48^FD${limpa(p.cliente_nome).slice(0, 60)}^FS`); y += 118;
+  linhas.push(`^FO24,${y}^A0N,44,44^FDBling ${limpa(p.numero)}^FS`); y += 58;
+  linhas.push(`^FO24,${y}^A0N,44,44^FDML ${limpa(p.numero_loja)}^FS`); y += 104;
   linhas.push(`^FO24,${y}^GB764,6,6^FS`); y += 28;
   const mostrar = itens.slice(0, 6);
   for (const it of mostrar) {
@@ -1216,6 +1241,7 @@ export default async function handler(req, res) {
       }
 
       const blocos = []; const idsOk = []; const refsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo]; const programados = [];
+      const porCanalConta = {};  // 01/09 (pedido dele): folha de informacoes do lote
       for (const p of alvo.slice(0, 120)) {
         // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
         let zplDoPedido = null, ehPdf = false, pdf64 = null, zipDanfe64 = null;
@@ -1396,6 +1422,7 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
           // 01/09 (pedido dele): no lote FLEX, cada logistica sai CASADA com a
           // etiqueta do produto — a logistica nao diz o que vai dentro.
           if (q.tipo === 'flex') blocos.push({ tipo: 'produto_flex', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplProdutoFlex(p) });
+          if (ehPdf && q.tipo === 'flex') pdf64 = await ajustarPdfFlex(pdf64);
           if (ehPdf) {
             // o QZ Tray imprime PDF direto na térmica (type pixel) — sem conversão
             blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: pdf64 });
@@ -1406,6 +1433,10 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
         }
         idsOk.push(p.pedido_id);
         refsOk.push(String(p.ref || ''));
+        {
+          const kCC = `${p.canal_geral || 'Outros'} ${String(p.conta || '').charAt(0).toUpperCase() + String(p.conta || '').slice(1)}`;
+          porCanalConta[kCC] = (porCanalConta[kCC] || 0) + 1;
+        }
         // 18/08: a pausa só faz sentido quando BAIXOU da rede — com o
         // documento já preparado eram 14s parados num lote de 120
         if (!jaTem) await new Promise(r2 => setTimeout(r2, 120));
@@ -1416,6 +1447,29 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
       // a tela pelo caminho do PDF, que já sabe buscar no ML (17/08).
       if (!idsOk.length && (q.tipo === 'flex' || candidatos.some(p => p.ml_logistic_type === 'self_service'))) {
         return res.status(200).json({ total: 0, blocos: [], ids: [], em_pdf: ['flex'], so_pdf: true });
+      }
+      // 01/09 (pedido dele): primeira folha do lote = INFORMACOES do que vai
+      // sair, por canal e conta — a bancada sabe o tamanho da leva antes do
+      // primeiro separador. Padrao LIGADO; a caixinha da tela manda ?info=0.
+      if (q.info !== '0' && idsOk.length) {
+        const agora = new Date(Date.now() - 3 * 3600000);
+        const cab = `${agora.toISOString().slice(8, 10)}/${agora.toISOString().slice(5, 7)}/${agora.toISOString().slice(0, 4)} ${agora.toISOString().slice(11, 16)}`;
+        const nomeTipo = { nf_transporte: 'NF + TRANSPORTE', flex: 'FLEX', meluni: 'MELUNI', nf_agendada: 'NF AGENDADAS', etiqueta_liberada: 'ETIQUETAS LIBERADAS' }[q.tipo] || String(q.tipo || '').toUpperCase();
+        const chaves = Object.keys(porCanalConta).sort();
+        let yI = 300;
+        const linhasI = chaves.map(k => {
+          const l = `^FO50,${yI}^A0N,40,40^FD${k.replace(/[\^~]/g, '')}^FS^FO600,${yI}^FB170,1,0,R^A0N,40,40^FD${porCanalConta[k]}^FS`;
+          yI += 62; return l;
+        }).join('\n');
+        blocos.unshift({ tipo: 'info_lote', zpl:
+          `^XA^CI28^PW812^LL1218^LH0,0
+^FO0,60^FB812,1,0,C^A0N,60,60^FDINFORMACOES^FS
+^FO0,140^FB812,1,0,C^A0N,40,40^FD${nomeTipo} · ${cab}^FS
+^FO40,220^GB730,6,6^FS
+${linhasI}
+^FO40,${yI + 20}^GB730,6,6^FS
+^FO0,${yI + 60}^FB812,1,0,C^A0N,54,54^FDTOTAL ${idsOk.length} PEDIDO(S)^FS
+^XZ` });
       }
       // 26/08: modo seco — monta a rodada inteira e devolve so o RESUMO dos
       // blocos, sem imprimir, sem marcar, sem log. Auditoria de montagem.

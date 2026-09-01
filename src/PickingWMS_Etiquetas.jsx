@@ -62,6 +62,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   // de auditoria do lote (cada REF ganha o check quando termina)
   const [selRefs, setSelRefs] = useState([]);
   const [comSep, setComSep] = useState(true);   // 25/08 (ordem dele): separadora de REF, ligada por padrao
+  const [comInfo, setComInfo] = useState(true); // 01/09 (pedido dele): folha de informacoes do lote, ligada por padrao
   // 29/08: aba Cancelados — lista propria, nao entra em nenhuma impressao
   const [cancelados, setCancelados] = useState([]);
   const [cancCarregando, setCancCarregando] = useState(false);
@@ -268,8 +269,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     //   Imprimir   = so as PENDENTES (nao impressas nem no App nem no Bling)
     //   Reimprimir = TUDO dos grupos marcados (inclui App + Bling)
     const extraSel = reimp
-      ? { refs: selRefs.join(','), reimprimir: '1', sep: comSep ? '1' : '0' }
-      : { ...(selRefs.length ? { refs: selRefs.join(',') } : {}), sep: comSep ? '1' : '0' };
+      ? { refs: selRefs.join(','), reimprimir: '1', sep: comSep ? '1' : '0', info: comInfo ? '1' : '0' }
+      : { ...(selRefs.length ? { refs: selRefs.join(',') } : {}), sep: comSep ? '1' : '0', info: comInfo ? '1' : '0' };
     const qtdPrevista = reimp ? selProntas + selImpressas : (selRefs.length ? selProntas : vaiSair);
     const msgConfirma = reimp
       ? `REIMPRIMIR ${selRefs.length} grupo(s) (REF ${selRefs.join(', ')}) — ${qtdPrevista} etiqueta(s)?\n\nSai TUDO dos grupos de novo (inclusive as já impressas no App e no Bling): DANFE + etiqueta.`
@@ -628,6 +629,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           <label style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontFamily:"Georgia,serif",color:"#2c3e50",border:"1px solid #d8d2c8",borderRadius:10,padding:"7px 12px",cursor:"pointer",background:comSep?"#eef3f8":"#fff",marginRight:8}}>
             <input type="checkbox" checked={comSep} onChange={e => setComSep(e.target.checked)} style={{accentColor:"#4a7fa5"}} />
             Imprimir com separador
+          </label>
+          <label style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontFamily:"Georgia,serif",color:"#2c3e50",border:"1px solid #d8d2c8",borderRadius:10,padding:"7px 12px",cursor:"pointer",background:comInfo?"#eef3f8":"#fff",marginRight:8}}
+            title="Primeira folha do lote com o resumo do que vai sair: quantos pedidos por canal e conta.">
+            <input type="checkbox" checked={comInfo} onChange={e => setComInfo(e.target.checked)} style={{accentColor:"#4a7fa5"}} />
+            Imprimir informações
           </label>
           <input value={fRef} onChange={e => setFRef(e.target.value)} placeholder="REF específica"
             style={{ padding: '9px 12px', borderRadius: 10, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13.5, width: 130, color: palette.ink }} />
