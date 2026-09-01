@@ -18,7 +18,7 @@
  * lista de cortes), TelaPassadoria (aba) e PassadoriaTabIcon (ícone da aba).
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from './supabase.js';
 
@@ -536,6 +536,80 @@ function diasNaPassadoria(reg) {
 function fmtData(x) { try { return new Date(x).toLocaleDateString('pt-BR'); } catch { return '—'; } }
 
 const inputPass = { padding: '11px 12px', fontSize: 15, border: '1px solid #d8e2ea', borderRadius: 8, fontFamily: 'Georgia,serif', color: '#2c3e50', outline: 'none', background: '#fff', colorScheme: 'light', WebkitAppearance: 'none', appearance: 'none' };
+// 01/09 (pedido dele): mesma matriz cor × tamanho da lista de cortes e do
+// Bling Estoque, aqui SOMENTE LEITURA — identificar o corte sem sair da tela.
+// Icone identico ao desses caminhos (SvgMatrixDet do App.tsx).
+const SvgMatrixDet = ({ color = '#4a7fa5', size = 13 }) => (
+  <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
+    <rect x="1" y="1" width="4" height="4" fill="none" stroke={color} strokeWidth="1"/>
+    <rect x="6" y="1" width="4" height="4" fill={color}/>
+    <rect x="1" y="6" width="4" height="4" fill={color}/>
+    <rect x="6" y="6" width="4" height="4" fill="none" stroke={color} strokeWidth="1"/>
+  </svg>
+);
+const _ncM = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+// mesma conta do matrizDoCorte (EtiquetaTemplate): celula custom vence folhas×grade
+const _celulaM = (celulas, cor, tam, folhas, grade) => {
+  const ov = celulas?.[`${cor}|${tam}`];
+  return (ov == null || ov === '') ? ((parseInt(folhas) || 0) * (parseInt(grade) || 0)) : (parseInt(ov) || 0);
+};
+export const temMatriz = (c) => !!(c?.detalhes?.cores?.length && c?.detalhes?.tamanhos?.length);
+
+function ModalMatrizVer({ corte, onClose }) {
+  const det = corte?.detalhes || {};
+  const cores = det.cores || [];
+  const tams = det.tamanhos || [];
+  const linha = (co) => tams.map(tm => _celulaM(det.celulas, co.nome, tm.tam, co.folhas, tm.grade));
+  const totCol = tams.map((tm, j) => cores.reduce((a, co) => a + linha(co)[j], 0));
+  const totGeral = totCol.reduce((a, b) => a + b, 0);
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(30,40,50,.45)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, width: 'min(560px, 96vw)', maxHeight: '86vh', overflow: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.22)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <SvgMatrixDet size={15} />
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#2c3e50', fontFamily: FN }}>REF {corte?.ref} · corte {corte?.nCorte || '—'}</div>
+          <button onClick={onClose} style={{ marginLeft: 'auto', border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#8a9aa4' }}>×</button>
+        </div>
+        <div style={{ fontSize: 12, color: '#8a9aa4', marginBottom: 12, fontFamily: 'Georgia,serif' }}>
+          {corte?.descricao || ''}{corte?.oficina ? ` · ${corte.oficina}` : ''}
+        </div>
+        {!temMatriz(corte) ? (
+          <div style={{ padding: 20, textAlign: 'center', color: '#b7791f', background: '#fdf6dd', borderRadius: 8, fontSize: 13 }}>Matriz não cadastrada pra este corte.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', fontFamily: FN }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '6px 8px', fontSize: 11, color: '#8a9aa4', textAlign: 'left', borderBottom: '2px solid #dde5ea' }}>COR</th>
+                  {tams.map((tm, j) => <th key={j} style={{ padding: '6px 8px', fontSize: 11.5, color: '#4a7fa5', borderBottom: '2px solid #dde5ea' }}>{tm.tam}</th>)}
+                  <th style={{ padding: '6px 8px', fontSize: 11, color: '#8a9aa4', borderBottom: '2px solid #dde5ea' }}>TOTAL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cores.map((co, i) => {
+                  const l = linha(co); const tot = l.reduce((a, b) => a + b, 0);
+                  return (
+                    <tr key={i} style={{ background: i % 2 ? '#f7f9fb' : '#fff' }}>
+                      <td style={{ padding: '6px 8px', fontSize: 12.5, color: '#2c3e50', fontWeight: 600 }}>{co.nome}</td>
+                      {l.map((q, j) => <td key={j} style={{ padding: '6px 8px', fontSize: 12.5, textAlign: 'center', color: q ? '#2c3e50' : '#c8d0d6' }}>{q || '·'}</td>)}
+                      <td style={{ padding: '6px 8px', fontSize: 12.5, textAlign: 'center', fontWeight: 700, color: '#1f6f6b' }}>{tot}</td>
+                    </tr>
+                  );
+                })}
+                <tr style={{ borderTop: '2px solid #dde5ea' }}>
+                  <td style={{ padding: '6px 8px', fontSize: 11.5, color: '#8a9aa4', fontWeight: 600 }}>TOTAL</td>
+                  {totCol.map((q, j) => <td key={j} style={{ padding: '6px 8px', fontSize: 12.5, textAlign: 'center', fontWeight: 700, color: '#4a7fa5' }}>{q || '·'}</td>)}
+                  <td style={{ padding: '6px 8px', fontSize: 13.5, textAlign: 'center', fontWeight: 800, color: '#1f6f6b' }}>{totGeral}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // 31/08 (pedido dele): cada passadoria tem uma cor — tom SUAVE, vale desktop
 // e celular. Identidade visual rapida: badge do card e chip do filtro.
 const CORES_PASSADORIA = {
@@ -555,7 +629,7 @@ function chipStyle(active) {
 }
 
 // ── Tela Passadoria (aba ao lado de Caseado no módulo Oficinas) ──────────────
-export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
+export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa, cortes = [] }) {
   // 31/08 (pedido dele): card reorganizado no celular — o wrap solto deixava
   // dias/entrega/pagamento caindo em posicoes confusas.
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
@@ -564,6 +638,24 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
     window.addEventListener('resize', f);
     return () => window.removeEventListener('resize', f);
   }, []);
+  // 01/09 (pedido dele): cortes das oficinas em memoria pra abrir a matriz
+  const cortePorId = useMemo(() => {
+    const m = {};
+    for (const c of cortes) m[String(c.id)] = c;
+    return m;
+  }, [cortes]);
+  const [matrizVer, setMatrizVer] = useState(null);
+  const BotaoMatriz = ({ reg }) => {
+    const c = cortePorId[String(reg.corte_id)];
+    if (!c) return null;
+    return (
+      <button onClick={(e) => { e.stopPropagation(); setMatrizVer(c); }} title="Ver matriz cor × tamanho"
+        style={{ position: 'relative', width: 22, height: 22, borderRadius: 5, background: '#fff', border: '1px solid #c8d8e4', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', verticalAlign: 'middle', marginLeft: 6, flexShrink: 0 }}>
+        <SvgMatrixDet color="#4a7fa5" />
+        {!temMatriz(c) && <span title="Sem matriz" style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#f0b429', border: '1.5px solid #fff' }} />}
+      </button>
+    );
+  };
   const [busca, setBusca] = useState('');
   const [nomeFiltro, setNomeFiltro] = useState('todos');
   const [statusFiltro, setStatusFiltro] = useState('todos'); // todos | aberto | entregue
@@ -672,7 +764,7 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 700, color: '#2c3e50', lineHeight: 1.3 }}>REF {reg.ref}{reg.descricao ? ` · ${reg.descricao}` : ''}</div>
                     <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 3, lineHeight: 1.5 }}>
-                      🧵 {reg.oficina || '—'}{reg.caseado_nome ? ` · caseado: ${reg.caseado_nome}` : ''}<br />
+                      🧵 {reg.oficina || '—'}<BotaoMatriz reg={reg} />{reg.caseado_nome ? ` · caseado: ${reg.caseado_nome}` : ''}<br />
                       {reg.qtd != null ? `${reg.qtd} pç` : '—'} · chegou {fmtData(reg.definido_em)}{ent && reg.entregue_em ? ` · entregue ${fmtData(reg.entregue_em)}` : ''}
                     </div>
                   </div>
@@ -725,7 +817,7 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
                     </div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#2c3e50' }}>REF {reg.ref}{reg.descricao ? ` · ${reg.descricao}` : ''}</div>
                     <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 2 }}>
-                      🧵 {reg.oficina || '—'}{reg.caseado_nome ? ` · caseado: ${reg.caseado_nome}` : ''} · {reg.qtd != null ? `${reg.qtd} pç` : '—'} · chegou {fmtData(reg.definido_em)}{ent && reg.entregue_em ? ` · entregue ${fmtData(reg.entregue_em)}` : ''}
+                      🧵 {reg.oficina || '—'}<BotaoMatriz reg={reg} />{reg.caseado_nome ? ` · caseado: ${reg.caseado_nome}` : ''} · {reg.qtd != null ? `${reg.qtd} pç` : '—'} · chegou {fmtData(reg.definido_em)}{ent && reg.entregue_em ? ` · entregue ${fmtData(reg.entregue_em)}` : ''}
                     </div>
                     <LinhaPagamento reg={reg} api={api} />
                   </div>
@@ -754,6 +846,7 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
           api={api} registroAtual={trocando} caseadoNome={trocando.caseado_nome}
           onClose={() => setTrocando(null)} />
       )}
+      {matrizVer && <ModalMatrizVer corte={matrizVer} onClose={() => setMatrizVer(null)} />}
       {modalPag && (
         <ModalPagamentoPassadoria
           regs={registros.filter(r => selecao.has(r.id))}

@@ -4286,7 +4286,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
 
       {logCortesOpen&&<LogCortesOficinas onClose={()=>setLogCortesOpen(false)} oficinas={[...new Set(cortes.map(c=>c.oficina).filter(Boolean))].sort()}/>}
       {aba==="caseado"&&<TelaCaseado api={caseadoApi}/>}
-      {aba==="passadoria"&&<TelaPassadoria api={passadoriaApi} isAdmin={isAdmin}
+      {aba==="passadoria"&&<TelaPassadoria api={passadoriaApi} isAdmin={isAdmin} cortes={cortes}
         onLancarDespesa={({passadoria,total,pagamentoId,qtdCortes})=>{
           // lançamento em Despesas → Passadoria (padrão do togglePago dos cortes;
           // idempotente por pagamento_id — realtime/re-render não duplica)
