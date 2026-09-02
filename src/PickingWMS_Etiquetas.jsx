@@ -860,16 +860,22 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
               </div>
               <div style={{ fontSize: 11.5, color: palette.inkMuted }}>{(g.canais || []).join(', ')}{g.contas?.length ? ` · ${g.contas.map(c => NOME_CONTA[c] || c).join(', ')}` : ''}</div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              {tudoImpresso
-                ? <div style={{ fontSize: 12, fontWeight: 800, color: palette.ok, background: palette.okSoft, borderRadius: 999, padding: '4px 10px', whiteSpace: 'nowrap' }}>✓ {g.impressas} impressa{g.impressas === 1 ? '' : 's'}</div>
-                : <>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: g.prontas ? palette.ok : palette.inkMuted }}>{ehMeluni ? (g.prontas || 0) : `${g.prontas || 0}/${g.pedidos}`}</div>
-                  <div style={{ fontSize: 10.5, color: palette.inkMuted }}>
-                    {ehMeluni ? 'em aberto no Bling' : (g.impressas ? `${g.impressas} impressa${g.impressas === 1 ? '' : 's'} (App+Bling)` : 'prontas')}
-                  </div>
-                </>}
-            </div>
+            {/* 02/09 (pedido dele): sem fracao "1/4" — dois selos diretos:
+                verde = impressas, amarelo = pendentes (ainda nao impressas) */}
+            {(() => {
+              const imp = Number(g.impressas || 0);
+              const pend = ehMeluni ? Number(g.prontas || 0) : Math.max(0, Number(g.pedidos || 0) - imp);
+              const selo = (txt, cor, fundo) => (
+                <div style={{ fontSize: 12, fontWeight: 800, color: cor, background: fundo, borderRadius: 999, padding: '4px 10px', whiteSpace: 'nowrap' }}>{txt}</div>
+              );
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                  {imp > 0 && selo(`✓ ${imp} impressa${imp === 1 ? '' : 's'}`, palette.ok, palette.okSoft)}
+                  {pend > 0 && selo(`${pend} pendente${pend === 1 ? '' : 's'}`, '#8a6d1a', '#fdf6dd')}
+                  {imp === 0 && pend === 0 && selo('—', palette.inkMuted, 'transparent')}
+                </div>
+              );
+            })()}
           </div>
         );})}
 
