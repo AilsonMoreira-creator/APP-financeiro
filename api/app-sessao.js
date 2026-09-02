@@ -46,7 +46,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET' && req.query?.listar) {
       const { data, error } = await supabase.from('app_sessoes')
-        .select('id, usuario, device_id, aparelho, tela, ip, primeiro_em, ultimo_em, pings, revogado_em')
+        .select('id, usuario, device_id, aparelho, tela, ip, primeiro_em, ultimo_em, pings, revogado_em, encerrado_em, encerrado_motivo')
         .order('ultimo_em', { ascending: false }).limit(500);
       if (error) return res.status(500).json({ ok: false, erro: error.message });
       const porUsuario = {};
@@ -72,16 +72,45 @@ export default async function handler(req, res) {
     const ip = String(req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || '').split(',')[0].trim() || null;
     const ua = String(b.ua || req.headers['user-agent'] || '').slice(0, 400);
 
+    // 01/09 (pedido dele): SESSAO UNICA — pedro (fixo) ou usuario com
+    // sessaoUnica marcado na tela Usuarios. "Ativo" = deu sinal nos ultimos
+    // 45 min (o ping roda a cada 30 min de uso). Outro aparelho ativo =>
+    // este login e RECUSADO com alerta. Se o outro esta parado, entra aqui
+    // e o antigo e encerrado (cai pro login no proximo sinal dele).
+    const sessaoUnica = usuario === 'pedro' || b.sessao_unica === true;
+    if (b.evento === 'logout') {
+      await supabase.from('app_sessoes').update({ encerrado_em: new Date().toISOString(), encerrado_motivo: 'logout' })
+        .eq('usuario', usuario).eq('device_id', device_id);
+      return res.status(200).json({ ok: true });
+    }
+    if (b.evento === 'login' && sessaoUnica) {
+      const limite = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+      const { data: outras } = await supabase.from('app_sessoes')
+        .select('id, aparelho, ultimo_em').eq('usuario', usuario).neq('device_id', device_id)
+        .is('encerrado_em', null).is('revogado_em', null).gt('ultimo_em', limite)
+        .order('ultimo_em', { ascending: false }).limit(1);
+      if (outras && outras.length) {
+        return res.status(200).json({ ok: false, bloqueado: true, aparelho: outras[0].aparelho, ultimo_em: outras[0].ultimo_em });
+      }
+      await supabase.from('app_sessoes').update({ encerrado_em: new Date().toISOString(), encerrado_motivo: 'entrou em outro aparelho' })
+        .eq('usuario', usuario).neq('device_id', device_id).is('encerrado_em', null);
+    }
+
     const { data: ex } = await supabase.from('app_sessoes')
-      .select('id, pings, revogado_em').eq('usuario', usuario).eq('device_id', device_id).maybeSingle();
+      .select('id, pings, revogado_em, encerrado_em').eq('usuario', usuario).eq('device_id', device_id).maybeSingle();
 
     if (ex) {
+      // ping numa sessao encerrada (substituida/logout) => o app derruba pro login
+      if (b.evento === 'ping' && ex.encerrado_em) {
+        return res.status(200).json({ ok: true, revogado: !!ex.revogado_em, encerrado: true });
+      }
       await supabase.from('app_sessoes').update({
         ultimo_em: new Date().toISOString(), ip, user_agent: ua, aparelho: resumoAparelho(ua),
         tela: b.tela || null, pings: (ex.pings || 0) + 1,
-        // login novo num aparelho revogado continua revogado ate o admin liberar
+        // re-login no mesmo aparelho reativa a sessao; revogado continua ate o admin liberar
+        ...(b.evento === 'login' ? { encerrado_em: null, encerrado_motivo: null } : {}),
       }).eq('id', ex.id);
-      return res.status(200).json({ ok: true, revogado: !!ex.revogado_em });
+      return res.status(200).json({ ok: true, revogado: !!ex.revogado_em, encerrado: false });
     }
     const { error } = await supabase.from('app_sessoes').insert({
       usuario, device_id, aparelho: resumoAparelho(ua), user_agent: ua, tela: b.tela || null, ip,

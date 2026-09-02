@@ -3665,10 +3665,10 @@ function amicaDeviceId(){
     return d;
   }catch{return "sem-storage";}
 }
-async function amicaRegistrarSessao(usuario,evento){
+async function amicaRegistrarSessao(usuario,evento,extras){
   try{
     const r=await fetch('/api/app-sessao',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({usuario,device_id:amicaDeviceId(),ua:navigator.userAgent,tela:`${window.screen?.width||0}x${window.screen?.height||0}`,evento})});
+      body:JSON.stringify({usuario,device_id:amicaDeviceId(),ua:navigator.userAgent,tela:`${window.screen?.width||0}x${window.screen?.height||0}`,evento,...(extras||{})})});
     const d=await r.json().catch(()=>({}));
     return d;
   }catch{return {};}
@@ -4733,6 +4733,7 @@ const USUARIOS_INICIAL=[
 const LoginScreen=({usuarios,onLogin})=>{
   const [user,setUser]=useState("");
   const [senha,setSenha]=useState("");
+  const [bloqueio,setBloqueio]=useState("");
   const [erro,setErro]=useState(false);
   const [mostraSenha,setMostraSenha]=useState(false);
   const tentar=()=>{
@@ -4740,8 +4741,23 @@ const LoginScreen=({usuarios,onLogin})=>{
     const s=senha.replace(/\s/g,"");
     if(!u||!s){setErro(true);return;}
     const found=(usuarios||[]).find(x=>x.usuario.toLowerCase()===u&&x.senha===s);
-    if(found){amicaRegistrarSessao(found.usuario,'login');onLogin(found);setErro(false);}
-    else{setErro(true);}
+    if(!found){setErro(true);return;}
+    // 01/09 (pedido dele): pedro (ou usuario com "sessao unica") so entra se
+    // nao houver OUTRO aparelho ativo — o servidor decide.
+    const unica=found.usuario==='pedro'||found.sessaoUnica===true;
+    if(unica){
+      setBloqueio("Verificando…");
+      amicaRegistrarSessao(found.usuario,'login',{sessao_unica:true}).then(d=>{
+        if(d?.bloqueado){
+          const h=d.ultimo_em?new Date(d.ultimo_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+          setBloqueio(`⚠ Este usuário já está conectado em outro aparelho${d.aparelho?` (${d.aparelho}`:''}${h?` · ativo às ${h}`:''}${d.aparelho?')':''}. Só um aparelho por vez — saia do outro ou aguarde.`);
+          return;
+        }
+        setBloqueio("");onLogin(found);setErro(false);
+      });
+      return;
+    }
+    amicaRegistrarSessao(found.usuario,'login');onLogin(found);setErro(false);
   };
   return(
     <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f7f4f0",fontFamily:"Georgia,serif"}}>
@@ -4763,6 +4779,7 @@ const LoginScreen=({usuarios,onLogin})=>{
           </div>
         </div>
         {erro&&<div style={{fontSize:12,color:"#c0392b",textAlign:"center",marginBottom:14}}>{(!user.trim()||!senha.trim())?"Preencha usuário e senha":"Usuário ou senha incorretos"}</div>}
+        {bloqueio&&<div style={{fontSize:12,color:bloqueio.startsWith("⚠")?"#c0392b":"#8a9aa4",textAlign:"center",marginBottom:14,lineHeight:1.5,background:bloqueio.startsWith("⚠")?"#fdeaea":"transparent",border:bloqueio.startsWith("⚠")?"1px solid #f4b8b8":"none",borderRadius:8,padding:bloqueio.startsWith("⚠")?"8px 10px":0}}>{bloqueio}</div>}
         <button onClick={tentar} style={{width:"100%",background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"11px",fontSize:14,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>Entrar</button>
       </div>
     </div>
@@ -4824,7 +4841,7 @@ const AparelhosPorLogin=()=>{
 };
 
 const UsuariosContent=({usuarios,setUsuarios,onDeletarUsuario,saveStatus})=>{
-  const [form,setForm]=useState({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});
+  const [form,setForm]=useState({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home",sessaoUnica:false});
   const [editId,setEditId]=useState(null);
   const [erro,setErro]=useState("");
   const toggleMod=(mod)=>setForm(p=>({...p,modulos:p.modulos.includes(mod)?p.modulos.filter(m=>m!==mod):[...p.modulos,mod]}));
@@ -4884,6 +4901,15 @@ const UsuariosContent=({usuarios,setUsuarios,onDeletarUsuario,saveStatus})=>{
           </div>
           <span style={{fontSize:13,color:form.admin?"#2c3e50":"#a89f94",fontWeight:form.admin?600:400}}>{form.admin?"Administrador (acesso total)":"Usuário limitado"}</span>
         </div>
+        {/* 01/09 (pedido dele): sessao unica — um aparelho por vez (pedro e fixo) */}
+        {!form.admin&&(
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+            <div onClick={()=>setForm(p=>({...p,sessaoUnica:!p.sessaoUnica}))} style={{width:40,height:22,borderRadius:11,background:(form.sessaoUnica||form.usuario==='pedro')?"#c0392b":"#e0d8d0",cursor:form.usuario==='pedro'?"default":"pointer",position:"relative",transition:"background 0.2s",opacity:form.usuario==='pedro'?0.7:1}}>
+              <div style={{position:"absolute",top:3,left:(form.sessaoUnica||form.usuario==='pedro')?20:3,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+            </div>
+            <span style={{fontSize:13,color:(form.sessaoUnica||form.usuario==='pedro')?"#2c3e50":"#a89f94"}}>📵 Sessão única — um aparelho por vez{form.usuario==='pedro'?" (fixo pro pedro)":""}</span>
+          </div>
+        )}
         {!form.admin&&(
           <div style={{marginBottom:14}}>
             <div style={{fontSize:11,color:"#a89f94",marginBottom:8}}>Módulos com acesso</div>
@@ -12065,8 +12091,11 @@ export default function App(){
         try{
           const sess=JSON.parse(localStorage.getItem("amica_session")||"null");
           if(sess?.usuario)amicaRegistrarSessao(sess.usuario,'ping').then(d=>{
-            if(d?.revogado){
-              try{localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");}catch{}
+            if(d?.revogado||d?.encerrado){
+              try{
+                localStorage.setItem("amica_expira_motivo",d?.revogado?"Este aparelho foi desconectado pelo administrador.":"Sua conta entrou em outro aparelho. Só um aparelho por vez.");
+                localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");
+              }catch{}
               setSessaoExpirada(true);
             }
           });
@@ -12277,16 +12306,17 @@ export default function App(){
     // Detecta motivo: se versão local !== APP_VERSION → atualização. Senão → inatividade (session foi limpa).
     const ehAtualizacao=localStorage.getItem("amica_app_version")!==APP_VERSION;
     const ehInatividade=!ehAtualizacao&&!localStorage.getItem("amica_session");
+    const motivoExtra=(()=>{try{return localStorage.getItem("amica_expira_motivo")||"";}catch{return "";}})();
     return(
       <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",background:"#f7f4f0"}}>
         <div style={{background:"#fff",borderRadius:16,padding:"40px 32px",textAlign:"center",maxWidth:360,boxShadow:"0 4px 24px rgba(0,0,0,0.1)",border:"1px solid #e8e2da"}}>
-          <div style={{fontSize:40,marginBottom:16}}>{ehInatividade?"🔒":"🔄"}</div>
+          <div style={{fontSize:40,marginBottom:16}}>{ehInatividade?(motivoExtra?"📵":"🔒"):"🔄"}</div>
           <div style={{fontSize:18,fontWeight:700,color:"#2c3e50",marginBottom:8}}>{ehInatividade?"Sessão expirada":"Atualização necessária"}</div>
           <div style={{fontSize:13,color:"#6b7c8a",marginBottom:24,lineHeight:1.6}}>
             {ehAtualizacao
               ?"Uma nova versão do app está disponível. Recarregue para atualizar."
               :ehInatividade
-                ?"Sua sessão expirou por inatividade (6h). Por segurança, faça login novamente."
+                ?(motivoExtra||"Sua sessão expirou por inatividade (6h). Por segurança, faça login novamente.")
                 :"A sessão expirou após longo período. Recarregue para continuar com dados atualizados."}
           </div>
           <button onClick={()=>{localStorage.setItem("amica_app_version",APP_VERSION);window.location.reload();}}
@@ -12363,7 +12393,7 @@ export default function App(){
                 <div style={{fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Conectado como</div>
                 <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:2}}>{usuarioLogado.usuario}</div>
               </div>
-              <div onClick={()=>{setUsuarioLogado(null);setActive("dashboard");setMenuUser(false);try{localStorage.removeItem("amica_session");}catch{}}}
+              <div onClick={()=>{try{if(usuarioLogado?.usuario)amicaRegistrarSessao(usuarioLogado.usuario,'logout');}catch{}setUsuarioLogado(null);setActive("dashboard");setMenuUser(false);try{localStorage.removeItem("amica_session");}catch{}}}
                 style={{padding:"10px 14px",cursor:"pointer",fontSize:13,color:"#c0392b",display:"flex",alignItems:"center",gap:8}}
                 onMouseEnter={e=>e.currentTarget.style.background="#fdeaea"}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
