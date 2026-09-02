@@ -73,6 +73,8 @@ export async function lerWmsConfig() {
       // 30/08 (2a ordem dele): termino opcional — o lembrete pode persistir
       // varios dias. Sem termino, vale a regra antiga (fim do dia do inicio).
       lembrete_fim: String(p.lembrete_fim || ''),
+      // 02/09 (pedido dele): alertas sonoros da TV
+      alertas: Array.isArray(p.alertas) ? p.alertas : [],
     };
   } catch { return { ...WMS_CONFIG_DEFAULT }; }
 }
@@ -591,6 +593,15 @@ export default async function handler(req, res) {
           lembrete_texto: String(c.lembrete_texto || '').slice(0, 200),
           lembrete_em: String(c.lembrete_em || ''),
           lembrete_fim: String(c.lembrete_fim || ''),
+          alertas: (Array.isArray(c.alertas) ? c.alertas : []).slice(0, 30).map(a => ({
+            id: String(a.id || Date.now()),
+            nome: String(a.nome || '').slice(0, 60),
+            hora: /^\d{2}:\d{2}$/.test(String(a.hora || '')) ? String(a.hora) : '',
+            duracao: Math.max(1, Math.min(60, Number(a.duracao) || 5)),
+            dias: (Array.isArray(a.dias) ? a.dias : []).map(Number).filter(d => d >= 0 && d <= 6),
+            data: /^\d{4}-\d{2}-\d{2}$/.test(String(a.data || '')) ? String(a.data) : '',
+            ativo: a.ativo !== false,
+          })).filter(a => a.nome && a.hora),
           _updated: new Date().toISOString(),
         };
         const { error } = await supabase.from('amicia_data')

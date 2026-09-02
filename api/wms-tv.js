@@ -28,6 +28,7 @@ export default async function handler(req, res) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Expedição · Amícia</title>
 <style>
+  @keyframes pisca { 0%,100%{background:rgba(0,0,0,.35)} 50%{background:rgba(192,57,43,.75)} }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Segoe UI', Calibri, sans-serif;
@@ -102,6 +103,16 @@ export default async function handler(req, res) {
       <div id="pendencias"></div>
     </div>
   </div>
+
+  <!-- 02/09 (pedido dele): ALERTA SONORO — overlay em tela cheia + campainha
+       pelo som da TV. O Chrome so toca audio depois de UM clique na pagina:
+       o botao 🔔 libera o som pra sessao inteira (fica verde). -->
+  <div id="alerta" style="display:none;position:fixed;inset:0;z-index:99;background:rgba(160,40,20,.93);align-items:center;justify-content:center;flex-direction:column;color:#fff;text-align:center">
+    <div style="font-size:14vh;line-height:1">🔔</div>
+    <div id="alertaNome" style="font-size:9vh;font-weight:900;letter-spacing:.02em;margin-top:2vh;padding:0 4vw"></div>
+    <div id="alertaHora" style="font-size:4vh;opacity:.85;margin-top:1.5vh"></div>
+  </div>
+  <button id="somBtn" title="Liberar o som da TV pros alertas" style="position:fixed;top:1.2vh;right:1.2vw;z-index:50;border:1px solid rgba(255,255,255,.4);background:rgba(0,0,0,.35);color:#fff;border-radius:999px;padding:.6vh 1.2vw;font-size:1.8vh;cursor:pointer;font-family:inherit">🔕 som desligado — clique pra liberar</button>
 
   <div id="lembrete" style="display:none;margin-bottom:1.2vh;padding:1.6vh 1.6vw;border:1px solid rgba(255,255,255,.3);border-radius:14px;color:#fff;font-size:3vh;font-weight:700;line-height:1.35"></div>
 
@@ -205,6 +216,7 @@ export default async function handler(req, res) {
     // 30/08 (pedido dele): LEMBRETE em letras brancas no final da tela.
     // Aparece a partir da data/hora marcada na Config e some sozinho as
     // 23:59 BRT do dia marcado. textContent = sem risco de HTML no texto.
+    try{ cfgAlertas = (d.config && Array.isArray(d.config.alertas)) ? d.config.alertas : []; }catch(e){}
     var lemEl = document.getElementById('lembrete');
     if (lemEl) {
       var cfgL = d.config || {};
@@ -269,6 +281,64 @@ export default async function handler(req, res) {
       .catch(function(){ /* calendário é complemento: falha não derruba a TV */ });
   }
 
+  // ── alertas sonoros ──
+  var audioCtx = null, somLiberado = false, cfgAlertas = [];
+  function liberarSom(){
+    try{
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume().then(function(){
+        somLiberado = true;
+        var b = document.getElementById('somBtn');
+        b.textContent = '🔔 som ligado'; b.style.background = 'rgba(30,142,78,.55)';
+        bip(880, 0.12);
+      });
+    }catch(e){}
+  }
+  document.getElementById('somBtn').addEventListener('click', liberarSom);
+  function bip(freq, dur){
+    if(!audioCtx) return;
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.6, audioCtx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + dur + 0.02);
+  }
+  function campainha(segundos){
+    // "din-don" a cada meio segundo pela duracao configurada
+    var fim = Date.now() + segundos * 1000, n = 0;
+    var t = setInterval(function(){
+      if(Date.now() >= fim){ clearInterval(t); return; }
+      bip(n % 2 ? 660 : 990, 0.35); n++;
+    }, 500);
+  }
+  function dispararAlerta(a){
+    var hh = new Date(Date.now() - 3*3600000).toISOString().slice(11,16);
+    document.getElementById('alertaNome').textContent = a.nome;
+    document.getElementById('alertaHora').textContent = hh + (somLiberado ? '' : '  ·  (som da TV não liberado)');
+    var el = document.getElementById('alerta'); el.style.display = 'flex';
+    var dur = Math.max(1, Math.min(60, Number(a.duracao) || 5));
+    if(somLiberado) campainha(dur);
+    setTimeout(function(){ el.style.display = 'none'; }, Math.max(dur, 5) * 1000);
+  }
+  function checarAlertas(){
+    if(!cfgAlertas.length) return;
+    var agora = new Date(Date.now() - 3*3600000);           // BRT
+    var hhmm = agora.toISOString().slice(11,16);
+    var dia = agora.toISOString().slice(0,10);
+    var dow = agora.getUTCDay();
+    cfgAlertas.forEach(function(a){
+      if(a.ativo === false || a.hora !== hhmm) return;
+      var bate = a.data ? (a.data === dia) : ((a.dias || []).indexOf(dow) >= 0);
+      if(!bate) return;
+      var chave = 'wms_alerta_' + a.id + '_' + dia;
+      try{ if(localStorage.getItem(chave)) return; localStorage.setItem(chave, '1'); }catch(e){}
+      dispararAlerta(a);
+    });
+  }
+  setInterval(checarAlertas, 5000);
+
   function carregar(){
     fetch(API + '?acao=dashboard')
       .then(function(r){ return r.json(); })
@@ -278,7 +348,25 @@ export default async function handler(req, res) {
   carregar(); carregarCal();
   setInterval(carregar, 60000);
   setInterval(carregarCal, 600000);
-  setInterval(function(){ location.reload(); }, 3600000); // recarrega de hora em hora
+  // 02/09: o reload de hora em hora zerava a liberacao de som do Chrome (cada
+  // pagina nova exige um clique). Agora so recarrega quando o HTML da TV
+  // mudou (deploy novo) — comparando o ETag a cada 10 min.
+  var etagTv = null;
+  function checarVersao(){
+    fetch(location.href, { method: 'HEAD', cache: 'no-store' }).then(function(r){
+      var e = r.headers.get('etag');
+      if(!e) return;
+      if(etagTv && e !== etagTv){ location.reload(); }
+      etagTv = e;
+    }).catch(function(){});
+  }
+  checarVersao(); setInterval(checarVersao, 600000);
+  // tenta liberar o som sozinho (funciona quando o Chrome da TV e aberto com
+  // --autoplay-policy=no-user-gesture-required); senao, o botao fica piscando
+  setTimeout(function(){
+    liberarSom();
+    setTimeout(function(){ if(!somLiberado){ var b=document.getElementById('somBtn'); b.style.animation='pisca 1.2s infinite'; } }, 1500);
+  }, 800);
 </script>
 </body>
 </html>`;

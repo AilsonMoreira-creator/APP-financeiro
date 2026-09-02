@@ -169,6 +169,14 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
   // 30/08 (pedido dele): lembrete da TV — texto + data/hora a partir da qual
   // exibe. Some sozinho as 23:59 do dia marcado.
   const [lemTexto, setLemTexto] = useState(config.lembrete_texto || '');
+  // 02/09 (pedido dele): ALERTAS SONOROS da TV — no horario, aviso na tela
+  // + campainha pelo som da TV. Nome, hora, duracao, dias que repete (ou
+  // data unica), ligado/desligado.
+  const [alertas, setAlertas] = useState(() => Array.isArray(config.alertas) ? config.alertas : []);
+  const DIAS_SEM = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+  const novoAlerta = () => setAlertas(a => [...a, { id: String(Date.now()), nome: '', hora: '11:30', duracao: 5, dias: [1, 2, 3, 4, 5], data: '', ativo: true }]);
+  const mudaAlerta = (id, campo, valor) => setAlertas(a => a.map(x => x.id === id ? { ...x, [campo]: valor } : x));
+  const removeAlerta = (id) => setAlertas(a => a.filter(x => x.id !== id));
   const [lemEm, setLemEm] = useState(() => {
     const v = String(config.lembrete_em || '');
     if (!v) return '';
@@ -224,6 +232,7 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
     lembrete_texto: lemTexto,
     lembrete_em: lemEm ? new Date(lemEm + ':00-03:00').toISOString() : '',
     lembrete_fim: lemFim ? new Date(lemFim + ':00-03:00').toISOString() : '',
+    alertas: alertas.filter(a => a.nome && a.hora).map(a => ({ ...a, duracao: Math.max(1, Math.min(60, Number(a.duracao) || 5)) })),
   });
   const BotaoSalvar = ({ mb }) => (
     <button onClick={salvarTudo} disabled={salvando} style={{ width: '100%', padding: '14px', borderRadius: 13, border: 'none', background: '#1e8e4e', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, opacity: salvando ? 0.6 : 1, marginBottom: mb || 0 }}>
@@ -279,6 +288,43 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
           </label>
         </div>
         <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 6 }}>Sem término, o lembrete some sozinho às 23:59 do dia de início.</div>
+      </div>
+
+      {/* 02/09: alertas sonoros da TV */}
+      <div style={{ background: '#fff', border: `1.5px solid ${palette.beige}`, borderRadius: 13, padding: 14, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink }}>🔔 Alertas sonoros da TV</div>
+          <button onClick={novoAlerta} style={{ marginLeft: 'auto', border: '1px solid #c8d8e4', background: '#fff', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#4a7fa5', cursor: 'pointer', fontFamily: FONT }}>+ Novo alerta</button>
+        </div>
+        <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 10 }}>
+          No horário, a TV mostra o aviso em tela cheia e toca a campainha pelo som dela. Marque os dias em que repete, ou informe uma data pra tocar uma vez só. A TV precisa do som liberado uma vez (botão 🔔 no canto dela).
+        </div>
+        {alertas.length === 0 && <div style={{ fontSize: 12, color: palette.inkMuted, padding: '6px 0' }}>Nenhum alerta. Ex.: "MAGALU" às 11:30, seg a sex, 5 segundos.</div>}
+        {alertas.map(a => (
+          <div key={a.id} style={{ border: '1px solid #e8e2da', borderRadius: 10, padding: 10, marginBottom: 8, background: a.ativo ? '#fff' : '#f7f7f7', opacity: a.ativo ? 1 : 0.7 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input value={a.nome} onChange={e => mudaAlerta(a.id, 'nome', e.target.value)} placeholder="Nome do alerta (ex.: MAGALU)" maxLength={60}
+                style={{ flex: '1 1 180px', padding: '8px 10px', borderRadius: 8, border: '1.5px solid #e2e8ee', fontSize: 13, fontFamily: FONT }} />
+              <label style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 4 }}>Hora
+                <input type="time" value={a.hora} onChange={e => mudaAlerta(a.id, 'hora', e.target.value)} style={{ padding: '7px 8px', borderRadius: 8, border: '1.5px solid #e2e8ee', fontSize: 13, fontFamily: FONT }} /></label>
+              <label style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 4 }}>Campainha
+                <input type="number" min={1} max={60} value={a.duracao} onChange={e => mudaAlerta(a.id, 'duracao', e.target.value)} style={{ width: 56, padding: '7px 8px', borderRadius: 8, border: '1.5px solid #e2e8ee', fontSize: 13, fontFamily: FONT }} /> s</label>
+              <label style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!a.ativo} onChange={e => mudaAlerta(a.id, 'ativo', e.target.checked)} style={{ accentColor: '#1e8e4e' }} /> ligado</label>
+              <button onClick={() => removeAlerta(a.id)} title="Remover" style={{ border: 'none', background: 'none', color: '#c0392b', fontSize: 16, cursor: 'pointer' }}>×</button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+              <span style={{ fontSize: 11.5, color: palette.inkMuted }}>Repete:</span>
+              {DIAS_SEM.map((d, i) => {
+                const on = (a.dias || []).includes(i);
+                return <button key={i} onClick={() => mudaAlerta(a.id, 'dias', on ? (a.dias || []).filter(x => x !== i) : [...(a.dias || []), i].sort())}
+                  style={{ width: 28, height: 28, borderRadius: '50%', border: `1.5px solid ${on ? '#4a7fa5' : '#d8e2ea'}`, background: on ? '#4a7fa5' : '#fff', color: on ? '#fff' : '#8a9aa4', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>{d}</button>;
+              })}
+              <label style={{ fontSize: 11.5, color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8 }}>ou data única
+                <input type="date" value={a.data || ''} onChange={e => mudaAlerta(a.id, 'data', e.target.value)} style={{ padding: '6px 8px', borderRadius: 8, border: '1.5px solid #e2e8ee', fontSize: 12, fontFamily: FONT }} /></label>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* situações do funil */}
