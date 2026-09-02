@@ -334,7 +334,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       let sepCont = ''; // emenda da separadora: grupo cortado entre rodadas nao repete a folha
       while (rodadas < 40) {
         rodadas++;
-        const rL = await fetch(`${API}/wms-etiquetas?${qs(jobId ? { zpl: '1', job: String(jobId), sep_cont: sepCont, ...extraSel } : { zpl: '1', sep_cont: sepCont, ...extraSel })}`);
+        // 02/09 (foto dele: saiu 1 folha por rodada): a folha de informacoes
+        // e UMA por lote — so a primeira rodada pede; as demais mandam info=0.
+        const extraRod = { ...extraSel, info: (rodadas === 1 && extraSel.info !== '0') ? '1' : '0' };
+        const rL = await fetch(`${API}/wms-etiquetas?${qs(jobId ? { zpl: '1', job: String(jobId), sep_cont: sepCont, ...extraRod } : { zpl: '1', sep_cont: sepCont, ...extraRod })}`);
         const bruto = await rL.text();
         let jL;
         try { jL = JSON.parse(bruto); }

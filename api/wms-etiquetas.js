@@ -1468,24 +1468,40 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
       // 01/09 (pedido dele): primeira folha do lote = INFORMACOES do que vai
       // sair, por canal e conta — a bancada sabe o tamanho da leva antes do
       // primeiro separador. Padrao LIGADO; a caixinha da tela manda ?info=0.
-      if (q.info !== '0' && idsOk.length) {
+      // 02/09 (ajuste dele): UMA folha por lote (front so pede na 1a rodada),
+      // resumo do LOTE TODO (todas as refs/rodadas), uma linha por canal com
+      // as contas ao lado, fonte menor — 10 canais x 3 contas cabem.
+      if (q.info === '1' && candidatos.length) {
         const agora = new Date(Date.now() - 3 * 3600000);
         const cab = `${agora.toISOString().slice(8, 10)}/${agora.toISOString().slice(5, 7)}/${agora.toISOString().slice(0, 4)} ${agora.toISOString().slice(11, 16)}`;
         const nomeTipo = { nf_transporte: 'NF + TRANSPORTE', flex: 'FLEX', meluni: 'MELUNI', nf_agendada: 'NF AGENDADAS', etiqueta_liberada: 'ETIQUETAS LIBERADAS' }[q.tipo] || String(q.tipo || '').toUpperCase();
-        const chaves = Object.keys(porCanalConta).sort();
-        let yI = 300;
-        const linhasI = chaves.map(k => {
-          const l = `^FO50,${yI}^A0N,40,40^FD${k.replace(/[\^~]/g, '')}^FS^FO600,${yI}^FB170,1,0,R^A0N,40,40^FD${porCanalConta[k]}^FS`;
-          yI += 62; return l;
+        const cap = (t) => String(t || '').charAt(0).toUpperCase() + String(t || '').slice(1);
+        const porCanal = {};
+        for (const p of candidatos) {
+          const c = p.canal_geral || 'Outros';
+          (porCanal[c] = porCanal[c] || {})[cap(p.conta)] = ((porCanal[c] || {})[cap(p.conta)] || 0) + 1;
+        }
+        const canais = Object.keys(porCanal).sort((a, b) => {
+          const ta = Object.values(porCanal[a]).reduce((x, y) => x + y, 0), tb = Object.values(porCanal[b]).reduce((x, y) => x + y, 0);
+          return tb - ta || a.localeCompare(b);
+        });
+        let yI = 200;
+        const linhasI = canais.map(c => {
+          const contas = Object.entries(porCanal[c]).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ');
+          const tot = Object.values(porCanal[c]).reduce((x, y) => x + y, 0);
+          const l = `^FO40,${yI}^A0N,30,30^FD${c.replace(/[\^~]/g, '')}^FS`
+            + `^FO40,${yI + 34}^A0N,24,24^FD${contas.replace(/[\^~]/g, '')}^FS`
+            + `^FO640,${yI + 4}^FB130,1,0,R^A0N,34,34^FD${tot}^FS`;
+          yI += 72; return l;
         }).join('\n');
         blocos.unshift({ tipo: 'info_lote', zpl:
           `^XA^CI28^PW812^LL1218^LH0,0
-^FO0,60^FB812,1,0,C^A0N,60,60^FDINFORMACOES^FS
-^FO0,140^FB812,1,0,C^A0N,40,40^FD${nomeTipo} · ${cab}^FS
-^FO40,220^GB730,6,6^FS
+^FO0,40^FB812,1,0,C^A0N,40,40^FDINFORMACOES DO LOTE^FS
+^FO0,92^FB812,1,0,C^A0N,26,26^FD${nomeTipo} · ${cab}^FS
+^FO40,150^GB730,4,4^FS
 ${linhasI}
-^FO40,${yI + 20}^GB730,6,6^FS
-^FO0,${yI + 60}^FB812,1,0,C^A0N,54,54^FDTOTAL ${idsOk.length} PEDIDO(S)^FS
+^FO40,${yI + 10}^GB730,4,4^FS
+^FO0,${yI + 40}^FB812,1,0,C^A0N,40,40^FDTOTAL ${candidatos.length} PEDIDO(S)^FS
 ^XZ` });
       }
       // 26/08: modo seco — monta a rodada inteira e devolve so o RESUMO dos

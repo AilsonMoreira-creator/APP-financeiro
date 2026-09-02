@@ -51,8 +51,19 @@ export default async function handler(req, res) {
         .order('data_pedido', { ascending: true }).limit(80);
       const { data: recentes } = await base()
         .order('data_pedido', { ascending: false }).limit(limite);
+      // 02/09 (Sthefany: contador de liberadas bem menor que o painel): os
+      // agendados de ontem/anteontem que liberam HOJE ja sairam da janela dos
+      // 150 mais recentes e ficavam pending/buffered no espelho pra sempre
+      // (57 hoje, sync parado nas 07:43). Prioridade fixa: agendado cujo dia
+      // chegou ou e amanha, ainda nao impresso pelo app e nao despachado.
+      const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10) + 'T23:59:59Z';
+      const { data: doDia } = await base()
+        .not('ml_agendado_em', 'is', null).lte('ml_agendado_em', amanha)
+        .is('etiqueta_impressa_em', null)
+        .not('ml_ship_status', 'in', '("shipped","delivered","cancelled","not_delivered")')
+        .order('ml_agendado_em', { ascending: true }).limit(120);
       const vistos = new Set();
-      const peds = [...(pendentes || []), ...(recentes || [])].filter(p => {
+      const peds = [...(pendentes || []), ...(doDia || []), ...(recentes || [])].filter(p => {
         if (vistos.has(p.pedido_id)) return false;
         vistos.add(p.pedido_id); return true;
       });
