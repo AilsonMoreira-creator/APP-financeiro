@@ -71,6 +71,7 @@ export default async function handler(req, res) {
         .in('ml_ship_status', ['pending', 'handling'])
         .gte('data_pedido', new Date(Date.now() - 7 * 86400000).toISOString())
         .order('data_pedido', { ascending: true }).limit(100);
+      r.selecao = { pendentes: (pendentes || []).length, doDia: (doDia || []).length, doDiaErro: errDia?.message || null, semData: (semData || []).length, recentes: (recentes || []).length };
       const vistos = new Set();
       const peds = [...(pendentes || []), ...(doDia || []), ...(semData || []), ...(recentes || [])].filter(p => {
         if (vistos.has(p.pedido_id)) return false;
