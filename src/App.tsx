@@ -10872,7 +10872,7 @@ export default function App(){
         // MERGE por id + _mod — garante que nenhum usuário se perde
         const remoteMap=new Map(remoteUsers.map(u=>[u.id,u]));
         const localMap=new Map(localUsers.map(u=>[u.id,u]));
-        const mergedUsers=[];
+        let mergedUsers=[];
         const allIds=new Set([...remoteMap.keys(),...localMap.keys()]);
         for(const id of allIds){
           const ru=remoteMap.get(id);
@@ -10884,6 +10884,21 @@ export default function App(){
             // Só existe em um lado → preserva (nunca perde)
             mergedUsers.push(ru||lu);
           }
+        }
+        // 01/09 (duplicatas eternas: sthefany 3x, cris/ingrid 2x — versoes
+        // velhas SEM wms voltavam pelo merge por id, pois cada duplicata tem
+        // id proprio): converge pra 1 por NOME de usuario — vence _mod mais
+        // recente e, no empate, o perfil com MAIS modulos (a versao completa).
+        {
+          const porNome=new Map();
+          for(const u of mergedUsers){
+            const k=String(u.usuario||'').toLowerCase();
+            const atual=porNome.get(k);
+            if(!atual){porNome.set(k,u);continue;}
+            const mU=u._mod||0,mA=atual._mod||0;
+            if(mU>mA||(mU===mA&&(u.modulos?.length||0)>(atual.modulos?.length||0)))porNome.set(k,u);
+          }
+          mergedUsers=[...porNome.values()];
         }
 
         const mudou=mergedUsers.length!==remoteUsers.length||
