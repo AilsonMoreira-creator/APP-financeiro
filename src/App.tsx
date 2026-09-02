@@ -3654,6 +3654,26 @@ const aplicarRegrasDivergencia=(c)=>{
   return c;  // sem mudanças
 };
 // SVG do ícone matrix (mesmo do preview)
+// 01/09 (pergunta dele: "como saber se o Pedro passou o login pra outros?"):
+// cada navegador ganha um device_id proprio; no login e a cada ~30 min o app
+// registra usuario+aparelho+ip em app_sessoes (tela Usuarios lista e
+// desconecta). Silencioso: nunca trava nada.
+function amicaDeviceId(){
+  try{
+    let d=localStorage.getItem("amica_device");
+    if(!d){d=(crypto?.randomUUID?crypto.randomUUID():String(Date.now())+"-"+Math.random().toString(36).slice(2));localStorage.setItem("amica_device",d);}
+    return d;
+  }catch{return "sem-storage";}
+}
+async function amicaRegistrarSessao(usuario,evento){
+  try{
+    const r=await fetch('/api/app-sessao',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({usuario,device_id:amicaDeviceId(),ua:navigator.userAgent,tela:`${window.screen?.width||0}x${window.screen?.height||0}`,evento})});
+    const d=await r.json().catch(()=>({}));
+    return d;
+  }catch{return {};}
+}
+
 const SvgMatrixDet=({color="#4a7fa5",size=13})=>(
   <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
     <rect x="1" y="1" width="4" height="4" fill="none" stroke={color} strokeWidth="1"/>
@@ -4720,7 +4740,7 @@ const LoginScreen=({usuarios,onLogin})=>{
     const s=senha.replace(/\s/g,"");
     if(!u||!s){setErro(true);return;}
     const found=(usuarios||[]).find(x=>x.usuario.toLowerCase()===u&&x.senha===s);
-    if(found){onLogin(found);setErro(false);}
+    if(found){amicaRegistrarSessao(found.usuario,'login');onLogin(found);setErro(false);}
     else{setErro(true);}
   };
   return(
@@ -4745,6 +4765,60 @@ const LoginScreen=({usuarios,onLogin})=>{
         {erro&&<div style={{fontSize:12,color:"#c0392b",textAlign:"center",marginBottom:14}}>{(!user.trim()||!senha.trim())?"Preencha usuário e senha":"Usuário ou senha incorretos"}</div>}
         <button onClick={tentar} style={{width:"100%",background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"11px",fontSize:14,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>Entrar</button>
       </div>
+    </div>
+  );
+};
+
+// 01/09 (pergunta dele): aparelhos conectados por login — responde "o Pedro
+// passou o login pra alguem?" com dado, nao com palpite. Cada linha e um
+// navegador/aparelho distinto que ja entrou com aquele usuario.
+const AparelhosPorLogin=()=>{
+  const [dados,setDados]=useState(null);
+  const [erro,setErro]=useState("");
+  const carregar=async()=>{
+    try{const r=await fetch('/api/app-sessao?listar=1',{cache:'no-store'});const d=await r.json();if(d.ok)setDados(d.por_usuario);else setErro(d.erro||'erro');}
+    catch(e){setErro(String(e?.message||e));}
+  };
+  useEffect(()=>{carregar();},[]);
+  const acao=async(campo,id)=>{
+    try{await fetch('/api/app-sessao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[campo]:id})});}catch{}
+    carregar();
+  };
+  const fmt=(d)=>{try{return new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch{return '';}};
+  const meuDevice=amicaDeviceId();
+  const nomes=dados?Object.keys(dados).sort():[];
+  return(
+    <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:12,padding:16,marginBottom:16}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+        <div style={{fontSize:14,fontWeight:700,color:"#2c3e50"}}>📱 Aparelhos conectados por login</div>
+        <button onClick={carregar} style={{marginLeft:"auto",background:"none",border:"1px solid #c8d8e4",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",color:"#4a7fa5",fontFamily:"Georgia,serif"}}>Atualizar</button>
+      </div>
+      <div style={{fontSize:11.5,color:"#8a9aa4",marginBottom:12,lineHeight:1.5}}>Cada linha é um navegador/aparelho diferente que entrou com aquele usuário (registrado no login e a cada 30 min de uso). Mais de um aparelho no mesmo login = a senha foi compartilhada. <b>Desconectar</b> derruba aquele aparelho pro login em até 30 min e ele não entra de novo até você liberar.</div>
+      {erro&&<div style={{fontSize:12,color:"#c0392b"}}>{erro}</div>}
+      {dados&&nomes.length===0&&<div style={{fontSize:12,color:"#8a9aa4"}}>Nenhum registro ainda — começa a preencher a partir dos próximos logins e pings.</div>}
+      {nomes.map(nome=>{
+        const lista=dados[nome]||[];
+        const ativos=lista.filter(a=>!a.revogado_em).length;
+        return(
+          <div key={nome} style={{borderTop:"1px solid #f0ece6",padding:"10px 0"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>{nome}</span>
+              <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:10,background:ativos>1?"#fdeaea":"#eafbf0",color:ativos>1?"#c0392b":"#27ae60",border:`1px solid ${ativos>1?"#f4b8b8":"#c6e9cf"}`}}>{ativos} aparelho{ativos===1?"":"s"}{ativos>1?" ⚠":""}</span>
+            </div>
+            {lista.map(a=>(
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",fontSize:12,color:a.revogado_em?"#b0b8c0":"#2c3e50",padding:"5px 0 5px 12px",borderLeft:`3px solid ${a.revogado_em?"#e0e0e0":a.device_id===meuDevice?"#4a7fa5":"#c6e9cf"}`,marginBottom:4}}>
+                <span style={{fontWeight:600,minWidth:150}}>{a.aparelho||'?'}{a.device_id===meuDevice?" (este aparelho)":""}</span>
+                <span style={{color:"#8a9aa4"}}>tela {a.tela||'?'}</span>
+                <span style={{color:"#8a9aa4"}}>IP {a.ip||'?'}</span>
+                <span style={{color:"#8a9aa4"}}>1º {fmt(a.primeiro_em)} · último {fmt(a.ultimo_em)} · {a.pings}×</span>
+                {a.revogado_em
+                  ?<button onClick={()=>acao('liberar',a.id)} style={{marginLeft:"auto",background:"#fff",border:"1px solid #c8d8e4",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",color:"#4a7fa5",fontFamily:"Georgia,serif"}}>Liberar</button>
+                  :<button onClick={()=>{if(window.confirm(`Desconectar este aparelho do login "${nome}"?`))acao('revogar',a.id);}} style={{marginLeft:"auto",background:"#fff",border:"1px solid #f4b8b8",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",color:"#c0392b",fontFamily:"Georgia,serif"}}>Desconectar</button>}
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -4787,6 +4861,7 @@ const UsuariosContent=({usuarios,setUsuarios,onDeletarUsuario,saveStatus})=>{
                   :null;
   return(
     <div>
+      <AparelhosPorLogin/>
       {statusBadge&&(
         <div style={{
           padding:'10px 16px',borderRadius:8,marginBottom:12,
@@ -11974,12 +12049,28 @@ export default function App(){
     eventos.forEach(ev=>window.addEventListener(ev,onActivity,{passive:true}));
 
     // 3. POLL DE INATIVIDADE: checa elapsed a cada 1 min, independente de visibilitychange
+    let ultimoPingSessao=0;
     const checkInatividade=()=>{
       const elapsed=Date.now()-ultimaAtividadeRef.current;
       if(elapsed>TIMEOUT_MS){
         console.log("Sessão expirada por inatividade após",Math.round(elapsed/3600000),"h");
         try{localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");}catch{}
         setSessaoExpirada(true);
+        return;
+      }
+      // 01/09: registro do aparelho a cada 30 min de uso; se o admin
+      // desconectou este aparelho na tela Usuarios, derruba pro login.
+      if(elapsed<POLL_MS*2&&Date.now()-ultimoPingSessao>30*60*1000){
+        ultimoPingSessao=Date.now();
+        try{
+          const sess=JSON.parse(localStorage.getItem("amica_session")||"null");
+          if(sess?.usuario)amicaRegistrarSessao(sess.usuario,'ping').then(d=>{
+            if(d?.revogado){
+              try{localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");}catch{}
+              setSessaoExpirada(true);
+            }
+          });
+        }catch{}
       }
     };
     const inativPoll=setInterval(checkInatividade,POLL_MS);
