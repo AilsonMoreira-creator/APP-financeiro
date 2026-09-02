@@ -57,13 +57,22 @@ export default async function handler(req, res) {
       // (57 hoje, sync parado nas 07:43). Prioridade fixa: agendado cujo dia
       // chegou ou e amanha, ainda nao impresso pelo app e nao despachado.
       const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10) + 'T23:59:59Z';
-      const { data: doDia } = await base()
+      const { data: doDia, error: errDia } = await base()
         .not('ml_agendado_em', 'is', null).lte('ml_agendado_em', amanha)
         .is('etiqueta_impressa_em', null)
-        .not('ml_ship_status', 'in', '("shipped","delivered","cancelled","not_delivered")')
+        .in('ml_ship_status', ['pending', 'handling', 'ready_to_ship'])
         .order('ml_agendado_em', { ascending: true }).limit(120);
+      if (errDia) console.error('[agenda-sync] doDia:', errDia.message);
+      // 02/09 (caso 157835/157848): pedido recente que o ML ainda nem agendou
+      // (buffered SEM data) tambem sai da janela dos recentes e ficava cego —
+      // o app o tratava como NORMAL e mandava pro NF+transporte sem etiqueta.
+      const { data: semData } = await base()
+        .is('ml_agendado_em', null).is('etiqueta_impressa_em', null)
+        .in('ml_ship_status', ['pending', 'handling'])
+        .gte('data_pedido', new Date(Date.now() - 7 * 86400000).toISOString())
+        .order('data_pedido', { ascending: true }).limit(100);
       const vistos = new Set();
-      const peds = [...(pendentes || []), ...(doDia || []), ...(recentes || [])].filter(p => {
+      const peds = [...(pendentes || []), ...(doDia || []), ...(semData || []), ...(recentes || [])].filter(p => {
         if (vistos.has(p.pedido_id)) return false;
         vistos.add(p.pedido_id); return true;
       });
