@@ -10278,12 +10278,16 @@ function LogCortesOficinas({onClose,oficinas}){
 export default function App(){
   const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");if(!s)return null;const u=JSON.parse(s);const ehAdmin=(u.id===1||u.usuario==='admin');if(ehAdmin){u.admin=true;/* Admin sempre recebe TODOS os modulos atualizados (inclui modulos novos como osamicia) */u.modulos=[...TODOS_MODULOS,"usuarios"];try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}return u;}catch{return null;}});
   const [active,setActive]=useState(()=>{
-    // Deep-linking: ?sac=1 ou ?modulo=X (vem do click em push notification)
+    // Deep-linking: ?sac=1 ou ?modulo=X (vem do click em push notification).
+    // 01/09 (blindagem do link do Pedro): o deep link so vale se o usuario
+    // logado PODE ver o modulo — antes, ?modulo=lancamentos furava o perfil.
     try{
       const params=new URLSearchParams(window.location.search);
-      if(params.get('sac')==='1')return'sac';
+      const sess=(()=>{try{const x=localStorage.getItem("amica_session");return x?JSON.parse(x):null;}catch{return null;}})();
+      const pode=(m)=>!!sess&&(sess.admin===true||sess.id===1||sess.usuario==='admin'||m==='home'||(Array.isArray(sess.modulos)&&sess.modulos.includes(m)));
+      if(params.get('sac')==='1'&&pode('sac'))return'sac';
       const mod=params.get('modulo');
-      if(mod)return mod;
+      if(mod&&pode(mod))return mod;
     }catch{}
     // Restaura o modulo onde o usuario ESTAVA (Ailson 06/07/2026): o auto-update
     // do SW recarrega a pagina a cada deploy e derrubava todo mundo pra home no
@@ -10295,6 +10299,19 @@ export default function App(){
     }catch{}
     try{const s=localStorage.getItem("amica_session");if(s){const u=JSON.parse(s);const mod=u.moduloPadrao||"home";if(u.admin||mod==="home"||u.modulos?.includes(mod))return mod;return u.modulos?.[0]||"home";}}catch{}return"lancamentos";
   });
+  // 01/09 (blindagem): guarda central — se por QUALQUER caminho o modulo ativo
+  // sair da lista do usuario (deep link, estado restaurado, atalho interno),
+  // volta pro padrao dele. Admin passa livre.
+  useEffect(()=>{
+    if(!usuarioLogado||active==='home')return;
+    const ehAdm=usuarioLogado.admin===true||usuarioLogado.id===1||usuarioLogado.usuario==='admin';
+    if(ehAdm)return;
+    const mods=Array.isArray(usuarioLogado.modulos)?usuarioLogado.modulos:[];
+    if(!mods.includes(active)){
+      const alvo=(usuarioLogado.moduloPadrao&&(usuarioLogado.moduloPadrao==='home'||mods.includes(usuarioLogado.moduloPadrao)))?usuarioLogado.moduloPadrao:(mods[0]||'home');
+      setActive(alvo);
+    }
+  },[active,usuarioLogado]);
   // Persiste o modulo ativo pra sobreviver ao reload do auto-update
   useEffect(()=>{try{localStorage.setItem("amica_active_module",active);}catch{}},[active]);
 
