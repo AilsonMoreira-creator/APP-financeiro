@@ -96,6 +96,15 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       return;
     }
     setPreparo({ rodando: true, msg: auto ? 'conferindo se falta preparar alguma etiqueta…' : 'buscando as notas novas no Bling…' });
+    // 02/09 (pedido dele: "preparar procura as lacunas"): o clique manual
+    // tambem dispara, em segundo plano, a checagem dos agendados no ML —
+    // agendado do dia ainda nao liberado e pedido recente sem data vao
+    // primeiro na varredura. Nao segura o preparo; os chips recarregam no
+    // proximo carregar (o sync leva 1-2 min).
+    if (!auto) {
+      fetch(`${API}/wms-ml-agenda-sync?contas=exitus,lumia,muniam&limite=10`, { keepalive: true })
+        .then(() => { try { carregar(); } catch { /* callback antigo */ } }).catch(() => {});
+    }
     // 18/08: nota gerada à mão no Bling não aparecia até o cron de 10 min
     // rodar. Agora o preparo puxa a cadeia inteira: situação das notas →
     // classificação → busca das etiquetas.
@@ -331,6 +340,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         jobId = (await rJ.json())?.job_id || null;
       } catch { /* job é auditoria, não trava a impressão */ }
       let totalGeral = 0; let semDanfeTotal = []; let rodadas = 0;
+      let semEtiquetaIdsTotal = []; // 02/09: pra perguntar ao ML no fim do lote
       let sepCont = ''; // emenda da separadora: grupo cortado entre rodadas nao repete a folha
       while (rodadas < 40) {
         rodadas++;
@@ -433,12 +443,28 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           return { ...lt, grupos: gs, enviadas: lt.enviadas + jL.refs.length };
         });
         semDanfeTotal = semDanfeTotal.concat(jL.sem_danfe || []);
+        semEtiquetaIdsTotal = semEtiquetaIdsTotal.concat(jL.sem_etiqueta_ids || []);
         if (!jL.restantes) break;
         setImprimindo(`Imprimindo em ${impressora}… ${totalGeral} enviadas, faltam ${jL.restantes}`);
       }
 
       if (jobId) fetch(`${API}/wms-etiquetas?job_fechar=${jobId}&total=${totalGeral}&sem_danfe=${semDanfeTotal.length}`).catch(() => {});
       const rotJob = jobId ? ` · pacote #${jobId}` : '';
+      // 02/09 (caso 157835/157848 — o combinado de 29/08 so rodava quando NADA
+      // saia): lote impresso mas com pedidos sem etiqueta tambem pergunta ao
+      // ML na hora — eram agendados que o espelho ainda nao conhecia.
+      const idsSemEtq = [...new Set(semEtiquetaIdsTotal)];
+      if (idsSemEtq.length) {
+        setLote(prev => prev ? { ...prev, consultandoMl: idsSemEtq.length } : prev);
+        try {
+          const rc = await fetch(`${API}/wms-ml-checar-pedidos`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: idsSemEtq }),
+          });
+          const jc = await rc.json();
+          setLote(prev => prev ? { ...prev, consultandoMl: 0, checagemMl: jc?.ok ? jc : prev.checagemMl } : prev);
+        } catch { setLote(prev => prev ? { ...prev, consultandoMl: 0 } : prev); }
+      }
       if (semDanfeTotal.length) {
         setImprimindo(`✅ ${totalGeral} enviadas${rotJob}. ⚠ Sem DANFE: ${semDanfeTotal.join(', ')} (etiqueta saiu, nota não)`);
       } else {

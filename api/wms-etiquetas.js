@@ -478,22 +478,24 @@ export default async function handler(req, res) {
         // 29/08: regua unica (ehAgendadaPendente) — o chip contava so o
         // agendamento estritamente futuro enquanto o lote montava tambem o
         // "agendado pra hoje", entao o numero nunca batia com o papel.
+        // LIBERADAS primeiro (02/09, ele apontou: sit 6 sumia do chip mas
+        // ficava na TV): pedido finalizado pela NF impressa no Bling nao e
+        // reclassificado, a print_regra trava em MELI_AGENDADO e o `continue`
+        // abaixo descartava a liberada antes de conta-la. A regua da liberada
+        // nao depende de print_regra — igual a TV.
+        // 17/08: "liberada" = o ML está ESPERANDO A IMPRESSÃO (ready_to_print).
+        // 18/08 (regra dele): e tem que ser pedido AGENDADO cujo dia chegou.
+        // 19/08: finalizado NAO exclui — a NF antecipada finaliza o pedido no
+        // Bling dias antes da etiqueta liberar; ready_to_print = falta imprimir
+        const agendadoChegou = p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) <= hoje;
+        if (agendadoChegou
+          && p.ml_ship_status === 'ready_to_ship'
+          && p.ml_ship_substatus === 'ready_to_print'
+          && !p.etiqueta_impressa_em) { c.etiqueta_liberada++; continue; }
         if (ehAgendadaPendente(p, hoje)) { c.nf_agendada++; continue; }
         if (p.print_regra === 'MELI_AGENDADO' || agendado || p.ml_ship_substatus === 'buffered') {
           continue;
         }
-        // LIBERADAS: só as que ainda não saíram. Etiqueta impressa (nossa ou
-        // pelo painel) e pedido já finalizado não contam mais.
-        // 17/08: "liberada" = o ML está ESPERANDO A IMPRESSÃO (ready_to_print).
-        // 18/08 (regra dele): e tem que ser pedido AGENDADO cujo dia chegou —
-        // pedido normal em ready_to_print é do NF + transporte, contava em dobro.
-        const agendadoChegou = p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) <= hoje;
-        // 19/08: finalizado NAO exclui — a NF antecipada finaliza o pedido no
-        // Bling dias antes da etiqueta liberar; ready_to_print = falta imprimir
-        if (agendadoChegou
-          && p.ml_ship_status === 'ready_to_ship'
-          && p.ml_ship_substatus === 'ready_to_print'
-          && !p.etiqueta_impressa_em) c.etiqueta_liberada++;
         // 22/08: MELUNI segue o Bling e nada mais — em aberto conta, atendido
         // zera (as meninas nao geram NF; logistica sai pela Frenet)
         if (p.print_regra === 'MELUNI' || p.canal_geral === 'Meluni') { if (p.situacao_bling !== 9) c.meluni++; continue; }
