@@ -198,11 +198,13 @@ export default async function handler(req, res) {
           && p.ml_logistic_type !== 'fulfillment'
         ).length;
 
-        // 30/08 (pedido dele): ETIQUETAS MELI LIBERADAS HOJE — mesma regua do
-        // chip "Etiquetas liberadas" da tela de impressao (Lei 3: os numeros
-        // tem que bater entre TV e tela): agendado cujo dia chegou, ML em
-        // ready_to_ship/ready_to_print, ainda sem o carimbo nosso. Vira o
-        // proximo dia sozinho porque a data anda.
+        // 02/09 (ele corrigiu a regua): a TV mostra quantas etiquetas o ML
+        // LIBEROU HOJE, INDEPENDENTE de ja terem sido impressas — numero do
+        // dia, nao cai conforme imprimem. Quem so lista o que falta imprimir
+        // e o botao da tela de impressao (ready_to_print, sem carimbo).
+        // "Liberada" = agendado do dia (ou atrasado ainda parado) que o ML ja
+        // colocou em ready_to_ship (qualquer substatus: a imprimir, impressa,
+        // na lista de coleta) — e o agendado de HOJE que ja foi despachado.
         const { data: libLinhas } = await supabase.from('wms_pedidos')
           .select('pedido_id, ml_agendado_em, ml_ship_status, ml_ship_substatus, print_regra, ml_logistic_type, etiqueta_impressa_em')
           .neq('status_wms', 'cancelado')
@@ -210,11 +212,10 @@ export default async function handler(req, res) {
           .gte('ml_agendado_em', new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10))
           .limit(600);
         const liberadasHoje = (libLinhas || []).filter(p =>
-          p.ml_ship_status === 'ready_to_ship'
-          && p.ml_ship_substatus === 'ready_to_print'
-          && !p.etiqueta_impressa_em
-          && p.print_regra !== 'ML_FULL'
+          p.print_regra !== 'ML_FULL'
           && p.ml_logistic_type !== 'fulfillment'
+          && (p.ml_ship_status === 'ready_to_ship'
+            || (String(p.ml_agendado_em).slice(0, 10) === hojeAg && ['shipped', 'delivered'].includes(p.ml_ship_status)))
         ).length;
 
         return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: corteHhmm(cfgDash), corte_em: corteHoje, agendados_ml: agendadosMl || 0, etiquetas_liberadas_hoje: liberadasHoje || 0, ultimo_sync: ultSync?.[0]?.visto_em || null });
