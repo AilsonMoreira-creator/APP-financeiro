@@ -1066,8 +1066,10 @@ export default async function handler(req, res) {
       // 29/08: o banco ja filtra, mas a regua unica manda — assim o lote nunca
       // monta um pedido que o chip nao contou (era o caso do agendado pra HOJE,
       // que entrava aqui pelo `gte` e ficava de fora do contador).
-      const alvoAg = (pedsAg || [])
-        .filter(p => ehAgendadaPendente(p, hojeAg))
+      // 03/09: pedido BUSCADO entra direto (mesmo com NF ja impressa no Bling
+      // ou pelo app) — reimpressao da DANFE agendada dele.
+      const alvoAg = (q._pedidoBusca ? [q._pedidoBusca] : (pedsAg || []))
+        .filter(p => q._pedidoBusca ? !!p.nf_id : ehAgendadaPendente(p, hojeAg))
         .map(p => ({ ...p, ref: (p.itens?.[0]?.ref || p.itens?.[0]?.codigo || ''), loc: '' }));
       const blocos = []; const idsOk = []; const refsOk = []; const semDanfeAg = [];
       let pos = 0;
