@@ -152,6 +152,16 @@ export default async function handler(req, res) {
         if (!nfId) {
           resumo.erros++;
           await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'gerar', http: gerR.status, resultado: 'erro', mensagem: JSON.stringify(ger).slice(0, 500) });
+          // 03/09 (auditoria: 157932 tentado 3x): o Bling respondeu "pedido
+          // cancelado" (campo 74) — carimba o espelho na hora e nao insiste
+          // nas rodadas seguintes; o sync confirmaria so mais tarde.
+          try {
+            const campos = ger?.error?.fields || [];
+            if (campos.some(f => Number(f.code) === 74 || /cancelad/i.test(String(f.msg || '')))) {
+              await supabase.from('wms_pedidos').update({ status_wms: 'cancelado', situacao_bling: 12 }).eq('pedido_id', p.pedido_id);
+              resumo.cancelados_detectados = (resumo.cancelados_detectados || 0) + 1;
+            }
+          } catch { /* melhor esforco */ }
           continue;
         }
         resumo.gerados++;
