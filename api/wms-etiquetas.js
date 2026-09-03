@@ -178,22 +178,26 @@ async function pedidosFiltrados(q) {
       && p.ml_ship_status === 'ready_to_ship'
       && p.ml_ship_substatus === 'ready_to_print'
       && !p.etiqueta_impressa_em;
-    if (tipo === 'nf_agendada') {
+    // 03/09: pedido BUSCADO passa direto pelos filtros de tipo — o tipo ja foi
+    // inferido dele mesmo e a intencao e imprimir/reimprimir mesmo que tenha
+    // saido pelo Bling ou pelo painel.
+    const buscado = !!q._pedidoBusca;
+    if (tipo === 'nf_agendada' && !buscado) {
       // 29/08: regua unica (ver ehAgendadaPendente) — o chip, esta lista e o
       // ZPL agora concordam. `reimprimir=1` ignora so o carimbo proprio.
       if (!ehAgendadaPendente(p, hojeBRT)
         && !(q.reimprimir === '1' && p.nf_agendada_impressa_em
           && (p.ml_agendado_em > hojeBRT || p.ml_ship_substatus === 'buffered' || p.print_regra === 'MELI_AGENDADO'))) continue;
     }
-    if (tipo === 'etiqueta_liberada' && !etiquetaLiberada) continue;
+    if (tipo === 'etiqueta_liberada' && !etiquetaLiberada && !buscado) continue;
     // nos demais tipos, o pedido agendado NÃO entra (a etiqueta nem existe)
     // 27/08 (relato dele: agendada vazando pro NF+transporte): programado
     // recem-chegado ainda sem data gravada tambem fica de fora — o sinal
     // oficial do ML (buffered) e a regra MELI_AGENDADO valem sozinhos.
-    if (['nf_transporte', 'flex'].includes(tipo)
+    if (['nf_transporte', 'flex'].includes(tipo) && !buscado
       && (agendadoFuturo || p.ml_ship_substatus === 'buffered' || p.print_regra === 'MELI_AGENDADO')) continue;
-    if (loja !== 'todas' && canal !== loja) continue;
-    if (limiteCorte && new Date(p.data_pedido).getTime() > limiteCorte) continue;
+    if (!buscado && loja !== 'todas' && canal !== loja) continue;
+    if (!buscado && limiteCorte && new Date(p.data_pedido).getTime() > limiteCorte) continue;
     const it0 = (p.itens || [])[0] || {};
     const r = String(it0.ref || '?').replace(/^0+/, '');
     if (ref && r !== ref) continue;
