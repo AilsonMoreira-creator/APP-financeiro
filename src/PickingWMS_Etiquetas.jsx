@@ -63,6 +63,20 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const [selRefs, setSelRefs] = useState([]);
   const [comSep, setComSep] = useState(true);   // 25/08 (ordem dele): separadora de REF, ligada por padrao
   const [comInfo, setComInfo] = useState(true); // 01/09 (pedido dele): folha de informacoes do lote, ligada por padrao
+  // 03/09 (pedido dele): busca de pedido (nº Bling ou nº marketplace)
+  const [buscaPed, setBuscaPed] = useState('');
+  const [buscados, setBuscados] = useState(null);   // null = sem busca; [] = nada achado
+  const [buscando, setBuscando] = useState(false);
+  const [selBuscado, setSelBuscado] = useState(null); // pedido_id marcado
+  const buscarPedido = async () => {
+    const t = buscaPed.trim(); if (!t) { setBuscados(null); return; }
+    setBuscando(true); setSelBuscado(null);
+    try {
+      const r = await fetch(`${API}/wms-etiquetas?buscar=${encodeURIComponent(t)}&contas=${encodeURIComponent(fConta)}`);
+      const d = await r.json(); setBuscados(d?.ok ? (d.pedidos || []) : []);
+    } catch { setBuscados([]); }
+    setBuscando(false);
+  };
   // 29/08: aba Cancelados — lista propria, nao entra em nenhuma impressao
   const [cancelados, setCancelados] = useState([]);
   const [cancCarregando, setCancCarregando] = useState(false);
@@ -264,10 +278,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       : `⚠ QZ ${versao} conectado (${id}), mas nenhuma impressora apareceu. Confira em Dispositivos e Impressoras do Windows.`);
   };
 
-  const imprimirTermica = async (reimp = false) => {
+  const imprimirTermica = async (reimp = false, pedidoBusca = null) => {
     // 27/08 (pedido dele): contador zerado = nada a imprimir. O botao avisa em
     // vez de abrir o modal de "lote interrompido".
-    if (!reimp && !selRefs.length && contadores?.[fTipo] === 0) {
+    if (!pedidoBusca && !reimp && !selRefs.length && contadores?.[fTipo] === 0) {
       setImprimindo(fTipo === 'nf_agendada'
         ? '✓ Nenhuma nota agendada pendente agora — as dos programados já foram emitidas. A etiqueta sai no dia, em "Etiquetas liberadas".'
         : '✓ Nenhuma etiqueta pendente nesses filtros agora.');
@@ -277,22 +291,32 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     // 22/08 (desenho dele): o card tem DUPLA funcao —
     //   Imprimir   = so as PENDENTES (nao impressas nem no App nem no Bling)
     //   Reimprimir = TUDO dos grupos marcados (inclui App + Bling)
-    const extraSel = reimp
-      ? { refs: selRefs.join(','), reimprimir: '1', sep: comSep ? '1' : '0', info: comInfo ? '1' : '0' }
-      : { ...(selRefs.length ? { refs: selRefs.join(',') } : {}), sep: comSep ? '1' : '0', info: comInfo ? '1' : '0' };
-    const qtdPrevista = reimp ? selProntas + selImpressas : (selRefs.length ? selProntas : vaiSair);
-    const msgConfirma = reimp
-      ? `REIMPRIMIR ${selRefs.length} grupo(s) (REF ${selRefs.join(', ')}) — ${qtdPrevista} etiqueta(s)?\n\nSai TUDO dos grupos de novo (inclusive as já impressas no App e no Bling): DANFE + etiqueta.`
-      : selRefs.length
-        ? `Imprimir as ${qtdPrevista} pendente(s) dos ${selRefs.length} grupo(s) selecionado(s)?\n\nSó saem as que ainda NÃO foram impressas (nem no App, nem no Bling).`
-        : `Imprimir ${vaiSair} etiqueta(s)?\n\nAo confirmar, elas são puxadas do Bling e os pedidos passam a constar como "aguardando coleta" nos marketplaces.`;
+    // 03/09 (pedido dele): impressao de UM pedido buscado — o endpoint
+    // descobre a regra dele (flex/agendado/liberada/normal) e imprime so ele,
+    // como reimpressao, sem separadora nem folha de informacoes.
+    const TIPO_LABEL = { flex: 'Flex', meluni: 'Meluni', nf_agendada: 'NF agendada', etiqueta_liberada: 'Etiqueta liberada', nf_transporte: 'NF + transporte' };
+    const extraSel = pedidoBusca
+      ? { pedido: String(pedidoBusca.numero), pedido_id: String(pedidoBusca.pedido_id), conta: pedidoBusca.conta, sep: '0', info: '0' }
+      : reimp
+        ? { refs: selRefs.join(','), reimprimir: '1', sep: comSep ? '1' : '0', info: comInfo ? '1' : '0' }
+        : { ...(selRefs.length ? { refs: selRefs.join(',') } : {}), sep: comSep ? '1' : '0', info: comInfo ? '1' : '0' };
+    const qtdPrevista = pedidoBusca ? 1 : reimp ? selProntas + selImpressas : (selRefs.length ? selProntas : vaiSair);
+    const msgConfirma = pedidoBusca
+      ? `Imprimir SÓ o pedido ${pedidoBusca.numero} (${pedidoBusca.canal_geral} · ${pedidoBusca.conta}) no padrão "${TIPO_LABEL[pedidoBusca.tipo] || pedidoBusca.tipo}"?\n\nSai de novo mesmo que já tenha sido impresso.`
+      : reimp
+        ? `REIMPRIMIR ${selRefs.length} grupo(s) (REF ${selRefs.join(', ')}) — ${qtdPrevista} etiqueta(s)?\n\nSai TUDO dos grupos de novo (inclusive as já impressas no App e no Bling): DANFE + etiqueta.`
+        : selRefs.length
+          ? `Imprimir as ${qtdPrevista} pendente(s) dos ${selRefs.length} grupo(s) selecionado(s)?\n\nSó saem as que ainda NÃO foram impressas (nem no App, nem no Bling).`
+          : `Imprimir ${vaiSair} etiqueta(s)?\n\nAo confirmar, elas são puxadas do Bling e os pedidos passam a constar como "aguardando coleta" nos marketplaces.`;
     // a etiqueta muda o status no marketplace — confirma antes (13/08)
     if (!window.confirm(msgConfirma)) return;
     // 22/08 (auditoria dele): MODAL DO LOTE — mostra cada REF e a quantidade
     // que vai sair; conforme as rodadas voltam, a REF concluida ganha o check
-    const gruposLote = (selRefs.length ? gruposSel : grupos.filter(g => (g.prontas || 0) > 0))
-      .map(g => ({ key: `${g.loc}·${g.ref}`, loc: g.loc, ref: String(g.ref), qtd: reimp ? (g.prontas || 0) + (g.impressas || 0) : (g.prontas || 0), feitas: 0 }))
-      .filter(g => g.qtd > 0);
+    const gruposLote = pedidoBusca
+      ? [{ key: `pedido·${pedidoBusca.numero}`, loc: '', ref: String(pedidoBusca.ref || pedidoBusca.numero), qtd: 1, feitas: 0 }]
+      : (selRefs.length ? gruposSel : grupos.filter(g => (g.prontas || 0) > 0))
+        .map(g => ({ key: `${g.loc}·${g.ref}`, loc: g.loc, ref: String(g.ref), qtd: reimp ? (g.prontas || 0) + (g.impressas || 0) : (g.prontas || 0), feitas: 0 }))
+        .filter(g => g.qtd > 0);
     if (gruposLote.length) setLote({ grupos: gruposLote, enviadas: 0, rodando: true });
     let jobId = null;
     try {
@@ -754,6 +778,46 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       {/* grupos na ordem de impressão */}
       <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 13, padding: 14 }}>
         <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 3 }}>Ordem de impressão</div>
+        {/* 03/09: busca de pedido especifico */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0 10px', flexWrap: 'wrap' }}>
+          <input value={buscaPed} onChange={e => setBuscaPed(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') buscarPedido(); }}
+            placeholder="🔎 Buscar pedido — nº Bling ou nº do marketplace" inputMode="numeric"
+            style={{ flex: '1 1 260px', maxWidth: 420, padding: '8px 12px', borderRadius: 9, border: `1.5px solid ${palette.beige}`, fontSize: 13, fontFamily: FONT, color: palette.ink, background: '#fff' }} />
+          <button onClick={buscarPedido} disabled={buscando} style={{ border: `1px solid ${palette.beige}`, background: '#fff', borderRadius: 9, padding: '8px 14px', fontSize: 12.5, fontWeight: 700, color: palette.accent, cursor: 'pointer', fontFamily: FONT }}>{buscando ? '…' : 'Buscar'}</button>
+          {buscados !== null && <button onClick={() => { setBuscados(null); setBuscaPed(''); setSelBuscado(null); }} style={{ border: 'none', background: 'none', fontSize: 12, color: palette.inkMuted, cursor: 'pointer', fontFamily: FONT }}>limpar</button>}
+        </div>
+        {buscados !== null && (
+          <div style={{ marginBottom: 12 }}>
+            {buscados.length === 0 && <div style={{ fontSize: 12, color: palette.inkMuted, padding: '6px 2px' }}>Nenhum pedido com esse número (procura nº Bling e nº do marketplace; Empresa em "Todas" busca nas 3 contas).</div>}
+            {buscados.map(p => {
+              const TIPO_LABEL = { flex: '⚡ Flex', meluni: 'Meluni', nf_agendada: '🗓 NF agendada', etiqueta_liberada: '🏷 Etiqueta liberada', nf_transporte: 'NF + transporte' };
+              const marcado = selBuscado === String(p.pedido_id);
+              const jaSaiu = p.etiqueta_impressa_em || p.nf_situacao === 6 || p.print_estado === 'IMPRESSO';
+              return (
+                <div key={p.pedido_id} onClick={() => !p.cancelado && setSelBuscado(marcado ? null : String(p.pedido_id))}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${marcado ? palette.accent : palette.beige}`, background: marcado ? palette.accentSoft : '#fff', cursor: p.cancelado ? 'not-allowed' : 'pointer', opacity: p.cancelado ? 0.55 : 1, marginBottom: 6 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${marcado ? palette.accent : '#c0d0dc'}`, background: marcado ? palette.accent : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {marcado && <span style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>✓</span>}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: palette.ink }}>
+                      Bling {p.numero} <span style={{ color: palette.inkMuted, fontWeight: 500 }}>· {p.canal_geral} {p.numero_loja ? `#${p.numero_loja}` : ''} · {p.conta}</span>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 2 }}>
+                      {p.cliente_nome || '—'}{p.ref ? ` · REF ${p.ref}` : ''} · padrão: <b style={{ color: palette.ink }}>{TIPO_LABEL[p.tipo] || p.tipo}</b>
+                      {p.ml_agendado_em ? ` · agendado ${String(p.ml_agendado_em).slice(0, 10).split('-').reverse().join('/')}` : ''}
+                      {p.cancelado ? ' · ⛔ cancelado' : jaSaiu ? ' · ✓ já impresso' : p.tem_nf ? (p.nf_situacao === 5 ? ' · NF autorizada' : ` · NF sit ${p.nf_situacao}`) : ' · sem NF'}
+                    </div>
+                  </div>
+                  <button disabled={!marcado || lote?.rodando} onClick={(e) => { e.stopPropagation(); imprimirTermica(true, p); }}
+                    style={{ border: 'none', borderRadius: 9, padding: '8px 14px', fontSize: 12.5, fontWeight: 800, color: '#fff', background: marcado ? palette.accent : '#c9d3db', cursor: marcado ? 'pointer' : 'default', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                    🖨 {jaSaiu ? 'Reimprimir' : 'Imprimir'} só este
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>
           Por localização e, dentro dela, as referências de maior quantidade primeiro — cada grupo sai com uma folha separadora antes das etiquetas (NF + transporte).
         </div>

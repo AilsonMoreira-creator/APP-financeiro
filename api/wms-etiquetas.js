@@ -28,11 +28,33 @@ export const config = { maxDuration: 300 };
 const BRAND = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 const n = (v) => Number(v) || 0;
 
+// 03/09 (pedido dele): BUSCA de um pedido pelo numero do Bling OU do
+// marketplace — pra imprimir/reimprimir SO ele, seguindo a regra em que ele
+// foi criado (flex sai como flex, agendado como agendado, etc).
+function tipoDoPedido(p) {
+  const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  if (p.ml_logistic_type === 'self_service' || p.print_regra === 'MELI_FLEX') return 'flex';
+  if (String(p.canal_geral || '') === 'Meluni' || p.print_regra === 'MELUNI') return 'meluni';
+  if (p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) > hojeBRT) return 'nf_agendada';
+  if (p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) <= hojeBRT) return 'etiqueta_liberada';
+  return 'nf_transporte';
+}
+async function buscarPedido(supabase, texto, conta) {
+  const t = String(texto || '').trim();
+  if (!t) return [];
+  const COLS_B = 'conta, pedido_id, numero, numero_loja, cliente_nome, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
+  let qb = supabase.from('wms_pedidos').select(COLS_B).or(`numero.eq.${t},numero_loja.eq.${t}`).limit(6);
+  if (conta && conta !== 'todas') qb = qb.eq('conta', conta);
+  const { data } = await qb;
+  // ref nao e coluna: vem do primeiro item (mesma origem da lista)
+  return (data || []).map(p => ({ ...p, tipo_inferido: tipoDoPedido(p), ref_busca: (Array.isArray(p.itens) && p.itens[0]?.ref) || '' }));
+}
+
 async function pedidosFiltrados(q) {
   const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   const contas = String(q.contas || 'todas');
   const loja = String(q.loja || 'todas');
-  const tipo = String(q.tipo || 'nf_transporte');
+  const tipo = String(q.tipo || 'nf_transporte');  // (no modo pedido, o handler ja forcou q.tipo)
   const ref = String(q.ref || '').replace(/^0+/, '');
   // 22/08: reimpressao POR BLOCO — a tela manda refs=2601,2708 (grupos
   // selecionados na Ordem de impressao) e so eles entram no lote
@@ -115,11 +137,13 @@ async function pedidosFiltrados(q) {
 
   const [{ data: comNfPend }, { data: comNfHoje }, { data: semNf }, { data: finSemNf }, { data: agend }] = await Promise.all([q1a, q1b, q2, q3, q4]);
   const vistosP = new Set();
-  const peds = [...(comNfPend || []), ...(comNfHoje || []), ...(semNf || []), ...(finSemNf || []), ...(agend || [])].filter(p => {
+  let peds = [...(comNfPend || []), ...(comNfHoje || []), ...(semNf || []), ...(finSemNf || []), ...(agend || [])].filter(p => {
     const k = String(p.pedido_id);
     if (vistosP.has(k)) return false;
     vistosP.add(k); return true;
   });
+  // 03/09: impressao de UM pedido buscado — a fila vira so ele
+  if (q._pedidoBusca) peds = [q._pedidoBusca];
 
   const out = [];
   for (const p of (peds || [])) {
@@ -421,6 +445,33 @@ export default async function handler(req, res) {
   // 18/08: o contador de "impressas hoje" usa esta data e ela só existia
   // dentro de pedidosFiltrados — a tela quebrava com "hojeBRT is not defined".
   const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+
+  // 03/09 (pedido dele): ?buscar=NUMERO — acha o pedido pelo numero do Bling
+  // ou do marketplace e devolve pro card da tela (com o tipo inferido).
+  if (q.buscar) {
+    try {
+      const achados = await buscarPedido(supabase, q.buscar, q.contas);
+      return res.status(200).json({ ok: true, pedidos: achados.map(p => ({
+        pedido_id: p.pedido_id, numero: p.numero, numero_loja: p.numero_loja, conta: p.conta,
+        canal_geral: p.canal_geral, cliente_nome: p.cliente_nome, ref: p.ref_busca, tipo: p.tipo_inferido,
+        print_regra: p.print_regra, print_estado: p.print_estado, print_motivo: p.print_motivo,
+        nf_situacao: p.nf_situacao, tem_nf: !!p.nf_id, status_wms: p.status_wms,
+        etiqueta_impressa_em: p.etiqueta_impressa_em, nf_agendada_impressa_em: p.nf_agendada_impressa_em,
+        ml_agendado_em: p.ml_agendado_em, ml_ship_status: p.ml_ship_status, ml_ship_substatus: p.ml_ship_substatus,
+        cancelado: p.ml_ship_status === 'cancelled' || p.status_wms === 'cancelado',
+      })) });
+    } catch (e) { return res.status(500).json({ ok: false, erro: String(e?.message || e) }); }
+  }
+  // ?pedido=NUMERO&conta=x: imprime SO esse pedido, na regra dele, como
+  // reimpressao (ignora carimbos), sem separadora nem folha de informacoes.
+  if (q.pedido) {
+    const achados = await buscarPedido(supabase, q.pedido, q.conta || q.contas);
+    const alvo = achados.find(p => String(p.pedido_id) === String(q.pedido_id)) || achados[0];
+    if (!alvo) return res.status(404).json({ ok: false, erro: 'pedido nao encontrado' });
+    if (alvo.ml_ship_status === 'cancelled' || alvo.status_wms === 'cancelado') return res.status(400).json({ ok: false, erro: 'pedido cancelado — nao imprime' });
+    q._pedidoBusca = alvo; q.tipo = alvo.tipo_inferido; q.reimprimir = '1'; q.sep = '0'; q.info = '0';
+    q.contas = alvo.conta; q.loja = 'todas'; q.refs = ''; q.ref = '';
+  }
   try {
     // CONTADORES POR TIPO (17/08, pedido dele): cada botão de IMPRIMIR mostra
     // quantas etiquetas estão esperando impressão. Lê só o banco.
