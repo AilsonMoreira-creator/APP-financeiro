@@ -294,7 +294,17 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
       <div style={{ background: '#fff', border: `1.5px solid ${palette.beige}`, borderRadius: 13, padding: 14, marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink }}>🔔 Alertas sonoros da TV</div>
-          <button onClick={novoAlerta} style={{ marginLeft: 'auto', border: '1px solid #c8d8e4', background: '#fff', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#4a7fa5', cursor: 'pointer', fontFamily: FONT }}>+ Novo alerta</button>
+          <button onClick={async () => {
+            // 03/09: dispara um TESTE de 5s na TV sem esperar horario — grava
+            // alerta_teste_em na config; a TV le no proximo poll (ate 1 min)
+            try {
+              const r = await fetch(`${API}/wms-listas`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ acao: 'config', config: { ...config, alertas, alerta_teste_em: Date.now() } }) });
+              const d = await r.json(); if (!d.ok) throw new Error('falhou');
+              alert('Teste enviado — a TV toca em até 1 minuto.');
+            } catch { alert('Não consegui enviar o teste.'); }
+          }} style={{ marginLeft: 'auto', border: '1px solid #f3cf9d', background: '#fdefe0', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#a05c1a', cursor: 'pointer', fontFamily: FONT }}>🔔 Tocar teste na TV agora</button>
+          <button onClick={novoAlerta} style={{ border: '1px solid #c8d8e4', background: '#fff', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#4a7fa5', cursor: 'pointer', fontFamily: FONT }}>+ Novo alerta</button>
         </div>
         <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 10 }}>
           No horário, a TV mostra o aviso em tela cheia e toca a campainha pelo som dela. Marque os dias em que repete, ou informe uma data pra tocar uma vez só. A TV precisa do som liberado uma vez (botão 🔔 no canto dela).

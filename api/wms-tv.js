@@ -221,7 +221,7 @@ export default async function handler(req, res) {
     // 30/08 (pedido dele): LEMBRETE em letras brancas no final da tela.
     // Aparece a partir da data/hora marcada na Config e some sozinho as
     // 23:59 BRT do dia marcado. textContent = sem risco de HTML no texto.
-    try{ cfgAlertas = (d.config && Array.isArray(d.config.alertas)) ? d.config.alertas : []; }catch(e){}
+    try{ cfgAlertas = (d.config && Array.isArray(d.config.alertas)) ? d.config.alertas : []; checarTeste(d.config && d.config.alerta_teste_em); }catch(e){}
     var lemEl = document.getElementById('lembrete');
     if (lemEl) {
       var cfgL = d.config || {};
@@ -322,16 +322,16 @@ export default async function handler(req, res) {
       bip(n % 2 ? 660 : 990, 0.35); n++;
     }, 500);
   }
-  function campainhaAudio(segundos){
+  function tocar(segundos){
     var el = document.getElementById('somAlerta');
-    if(!el) return false;
+    var fallback = function(){ if(audioCtx && audioCtx.state === 'running') campainha(segundos); };
+    if(!el){ fallback(); return; }
     try{
-      el.loop = true; el.currentTime = 0;
+      el.loop = true; el.currentTime = 0; el.volume = 1;
       var p = el.play();
-      if(p && p.catch) p.catch(function(){});
+      if(p && p.then){ p.then(function(){}).catch(function(){ fallback(); }); }
       setTimeout(function(){ try{ el.pause(); el.loop = false; }catch(e){} }, segundos * 1000);
-      return true;
-    }catch(e){ return false; }
+    }catch(e){ fallback(); }
   }
   function dispararAlerta(a){
     var hh = new Date(Date.now() - 3*3600000).toISOString().slice(11,16);
@@ -339,8 +339,10 @@ export default async function handler(req, res) {
     document.getElementById('alertaHora').textContent = hh;
     var el = document.getElementById('alerta'); el.style.display = 'flex';
     var dur = Math.max(1, Math.min(60, Number(a.duracao) || 5));
-    // 1) Web Audio se liberado; 2) <audio> embutido (TV Samsung costuma aceitar)
-    if(somLiberado) campainha(dur); else campainhaAudio(dur);
+    // 03/09: <audio> embutido PRIMEIRO (o caminho confiavel na Samsung); o
+    // Web Audio so se o play for recusado — "liberado" sem gesto podia ser
+    // fantasma (contexto running, alto-falante mudo).
+    tocar(dur);
     setTimeout(function(){ el.style.display = 'none'; }, Math.max(dur, 5) * 1000);
   }
   function checarAlertas(){
@@ -353,10 +355,21 @@ export default async function handler(req, res) {
       if(a.ativo === false || a.hora !== hhmm) return;
       var bate = a.data ? (a.data === dia) : ((a.dias || []).indexOf(dow) >= 0);
       if(!bate) return;
-      var chave = 'wms_alerta_' + a.id + '_' + dia;
+      // 03/09 (tocava "as vezes"): a chave era por alerta+dia — mudar a hora
+      // pra testar no mesmo dia nao tocava de novo. Agora inclui a hora.
+      var chave = 'wms_alerta_' + a.id + '_' + dia + '_' + a.hora;
       try{ if(localStorage.getItem(chave)) return; localStorage.setItem(chave, '1'); }catch(e){}
       dispararAlerta(a);
     });
+  }
+  // teste disparado pela Config ("Tocar teste na TV agora"): a config traz
+  // alerta_teste_em (epoch ms); se e recente e ainda nao tocou, toca 5s.
+  var testeTocado = null;
+  function checarTeste(t){
+    if(!t || t === testeTocado) return;
+    if(Date.now() - Number(t) > 3*60*1000) return;
+    testeTocado = t;
+    dispararAlerta({ nome: 'TESTE DO ALERTA', duracao: 5 });
   }
   setInterval(checarAlertas, 5000);
 

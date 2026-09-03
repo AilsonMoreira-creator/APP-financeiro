@@ -75,6 +75,7 @@ export async function lerWmsConfig() {
       lembrete_fim: String(p.lembrete_fim || ''),
       // 02/09 (pedido dele): alertas sonoros da TV
       alertas: Array.isArray(p.alertas) ? p.alertas : [],
+      alerta_teste_em: Number(p.alerta_teste_em) || 0,
     };
   } catch { return { ...WMS_CONFIG_DEFAULT }; }
 }
@@ -614,6 +615,7 @@ export default async function handler(req, res) {
             data: /^\d{4}-\d{2}-\d{2}$/.test(String(a.data || '')) ? String(a.data) : '',
             ativo: a.ativo !== false,
           })).filter(a => a.nome && a.hora),
+          alerta_teste_em: Number(c.alerta_teste_em) || 0,
           _updated: new Date().toISOString(),
         };
         const { error } = await supabase.from('amicia_data')
