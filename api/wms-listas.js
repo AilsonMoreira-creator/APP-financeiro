@@ -211,7 +211,10 @@ export default async function handler(req, res) {
           .select('pedido_id, ml_agendado_em, ml_ship_status, ml_ship_substatus, print_regra, ml_logistic_type, etiqueta_impressa_em')
           .neq('status_wms', 'cancelado')
           .lte('ml_agendado_em', hojeAg)
-          .gte('ml_agendado_em', new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10))
+          // 03/09: janela de 10 dias, HOJE primeiro — com 696 linhas em 20
+          // dias o limit sem ordem deixava os agendados do dia de fora (TV em 0)
+          .gte('ml_agendado_em', new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10))
+          .order('ml_agendado_em', { ascending: false })
           .limit(600);
         // 03/09 (auditoria: 86 na TV com 39 agendados pro dia): pedido de
         // dias anteriores ja impresso pelo app nao e revisitado pelo sync e
