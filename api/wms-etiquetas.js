@@ -938,16 +938,25 @@ export default async function handler(req, res) {
           + '^FO30,652^A0N,20,20^FDConsulta pela chave em www.nfe.fazenda.gov.br^FS'
           + '^FO30,690^GB752,2,2^FS'
           + '^FO30,706^A0N,22,22^FDPRODUTOS^FS'
-          + (info.itens || []).slice(0, 6).map((it, ix) => {
-            // REF primeiro (negrito maior), depois cor · tamanho · qtd, e a
-            // descricao curta embaixo — leitura de bancada em 1 segundo
-            const y = 736 + ix * 58;
-            const l1 = (it.ref ? 'REF ' + it.ref + '  ' : '') + (it.cor ? String(it.cor).toUpperCase() + '  ' : '') + (it.tam ? 'TAM ' + it.tam + '  ' : '') + it.qtd + ' pc';
-            const l2 = String(it.desc || '').slice(0, 44) + (!it.ref && it.sku ? ' (' + String(it.sku).slice(0, 14) + ')' : '');
-            return '^FO30,' + y + '^A0N,26,26^FD' + l1.replace(/[\^~]/g, ' ').slice(0, 46) + '^FS'
-              + '^FO30,' + (y + 28) + '^A0N,20,20^FD' + l2.replace(/[\^~]/g, ' ') + '^FS';
-          }).join('')
-          + ((info.itens || []).length > 6 ? '^FO30,' + (736 + 6 * 58) + '^A0N,20,20^FD... e mais ' + (info.itens.length - 6) + ' item(ns)^FS' : '')
+          + (() => {
+            // 03/09 (foto dele: Shein com 8 itens cortava em "... e mais 2"):
+            // acima de 6 itens a nota entra em MODO COMPACTO — uma linha por
+            // item (REF · COR · TAM · qtd, sem a descricao) e cabem 11 na
+            // MESMA folha. Folha extra quebraria o destaque aos pares na
+            // bancada; so acima de 11 (rarissimo) sobra o "... e mais N".
+            const its = info.itens || [];
+            const compacto = its.length > 6;
+            const passo = compacto ? 34 : 58;
+            const max = compacto ? 11 : 6;
+            return its.slice(0, max).map((it, ix) => {
+              const y = 736 + ix * passo;
+              const l1 = (it.ref ? 'REF ' + it.ref + '  ' : '') + (it.cor ? String(it.cor).toUpperCase() + '  ' : '') + (it.tam ? 'TAM ' + it.tam + '  ' : '') + it.qtd + ' pc';
+              const l2 = String(it.desc || '').slice(0, 44) + (!it.ref && it.sku ? ' (' + String(it.sku).slice(0, 14) + ')' : '');
+              return '^FO30,' + y + '^A0N,26,26^FD' + l1.replace(/[\^~]/g, ' ').slice(0, 46) + '^FS'
+                + (compacto ? '' : '^FO30,' + (y + 28) + '^A0N,20,20^FD' + l2.replace(/[\^~]/g, ' ') + '^FS');
+            }).join('')
+            + (its.length > max ? '^FO30,' + (736 + max * passo) + '^A0N,20,20^FD... e mais ' + (its.length - max) + ' item(ns)^FS' : '');
+          })()
           // 22/08 (pedido dele): envio PROGRAMADO — a data de despacho na
           // ULTIMA linha, centralizada, um pouco maior que a descricao e em
           // negrito (ZPL nao tem bold: duas passadas com 1 dot de offset)
