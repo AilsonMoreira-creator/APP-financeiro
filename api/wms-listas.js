@@ -213,12 +213,21 @@ export default async function handler(req, res) {
           .lte('ml_agendado_em', hojeAg)
           .gte('ml_agendado_em', new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10))
           .limit(600);
-        const liberadasHoje = (libLinhas || []).filter(p =>
-          p.print_regra !== 'ML_FULL'
-          && p.ml_logistic_type !== 'fulfillment'
-          && (p.ml_ship_status === 'ready_to_ship'
-            || (String(p.ml_agendado_em).slice(0, 10) === hojeAg && ['shipped', 'delivered'].includes(p.ml_ship_status)))
-        ).length;
+        // 03/09 (auditoria: 86 na TV com 39 agendados pro dia): pedido de
+        // dias anteriores ja impresso pelo app nao e revisitado pelo sync e
+        // fica congelado como ready_to_ship (in_hub, picked_up) — inflava.
+        // Regua: agendado HOJE e liberado (qualquer estagio pos-liberacao,
+        // menos invoice_pending, que ainda espera a nota) + atrasado de dias
+        // anteriores que AINDA falta imprimir.
+        const liberadasHoje = (libLinhas || []).filter(p => {
+          if (p.print_regra === 'ML_FULL' || p.ml_logistic_type === 'fulfillment') return false;
+          const dia = String(p.ml_agendado_em).slice(0, 10);
+          if (dia === hojeAg) {
+            return (p.ml_ship_status === 'ready_to_ship' && p.ml_ship_substatus !== 'invoice_pending')
+              || ['shipped', 'delivered'].includes(p.ml_ship_status);
+          }
+          return p.ml_ship_status === 'ready_to_ship' && p.ml_ship_substatus === 'ready_to_print' && !p.etiqueta_impressa_em;
+        }).length;
 
         return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: corteHhmm(cfgDash), corte_em: corteHoje, agendados_ml: agendadosMl || 0, etiquetas_liberadas_hoje: liberadasHoje || 0, ultimo_sync: ultSync?.[0]?.visto_em || null });
       }
