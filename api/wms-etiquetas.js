@@ -40,7 +40,9 @@ function tipoDoPedido(p) {
   return 'nf_transporte';
 }
 async function buscarPedido(supabase, texto, conta) {
-  const t = String(texto || '').trim();
+  // 03/09 (pedido dele): normaliza o que vem colado — "#2000018259672644"
+  // (ML/Shopee mostram com #), "Pedido: GSH...", espacos, pontos.
+  const t = String(texto || '').trim().replace(/^(pedido|venda|order)\s*[:#]?\s*/i, '').replace(/^[#\s]+/, '').replace(/[\s.]+/g, '');
   if (!t) return [];
   const COLS_B = 'conta, pedido_id, numero, numero_loja, cliente_nome, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
   let qb = supabase.from('wms_pedidos').select(COLS_B).or(`numero.eq.${t},numero_loja.eq.${t}`).limit(6);
