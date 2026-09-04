@@ -97,7 +97,7 @@ export default async function handler(req, res) {
         const t2 = typeof e2.text === 'function' ? await e2.text().catch(() => '') : '';
         saida.etiquetas_por_objeto_query = { http: e2.status, corpo: String(t2).slice(0, 400) };
         const e3 = await getComBody('https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF', headers, { idsObjetos: [vol] });
-        saida.etiquetas_por_objeto_body = { http: e3.status, corpo: String(e3.body || '').slice(0, 700) };
+        saida.etiquetas_por_objeto_body = { http: e3.status, corpo: String(e3.corpo || '').slice(0, 700) };
         const e4 = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/objetos/${vol}`, headers);
         const t4 = typeof e4.text === 'function' ? await e4.text().catch(() => '') : '';
         saida.objeto = { http: e4.status, corpo: String(t4).slice(0, 700) };
