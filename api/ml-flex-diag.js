@@ -13,6 +13,15 @@ export default async function handler(req, res) {
   // 04/09 (Envios Agora): ?shipment=NUMERO_LOJA&conta=x — devolve os campos
   // do shipment que podem identificar a modalidade (tags, shipping_option,
   // logistic_type, service, datas).
+  // 04/09: ?agora_teste=NUMERO_LOJA&conta=x — passa o pedido pelo mesmo
+  // registro do webhook (registrarAgoraDeOrder) e devolve o resultado.
+  if (req.query?.agora_teste) {
+    try {
+      const { registrarAgoraDeOrder } = await import('./_wms-agora.js');
+      const r = await registrarAgoraDeOrder(String(req.query.agora_teste), BRAND[req.query.conta || 'exitus']);
+      return res.status(200).json(r);
+    } catch (e) { return res.status(200).json({ ok: false, erro: String(e?.message || e) }); }
+  }
   if (req.query?.shipment) {
     try {
       const conta = req.query.conta || 'exitus';
