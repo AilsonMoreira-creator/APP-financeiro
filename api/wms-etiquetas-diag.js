@@ -87,6 +87,7 @@ export default async function handler(req, res) {
         transporte: { fretePorConta: d.transporte?.fretePorConta, volumes: d.transporte?.volumes || [], contato: d.transporte?.contato?.nome },
         notaFiscal: d.notaFiscal || null,
       };
+      await new Promise(r => setTimeout(r, 700));
       const etqR = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${pid}`, headers);
       const etqTxt = typeof etqR.text === 'function' ? await etqR.text().catch(() => '') : '';
       saida.etiquetas_por_venda = { http: etqR.status, corpo: String(etqTxt).slice(0, 700) };
@@ -96,7 +97,9 @@ export default async function handler(req, res) {
         const e2 = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsObjetos[]=${vol}`, headers);
         const t2 = typeof e2.text === 'function' ? await e2.text().catch(() => '') : '';
         saida.etiquetas_por_objeto_query = { http: e2.status, corpo: String(t2).slice(0, 400) };
+        await new Promise(r => setTimeout(r, 700));  // Bling: 3 req/s
         const e3 = await getComBody('https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF', headers, { idsObjetos: [vol] });
+        await new Promise(r => setTimeout(r, 700));
         saida.etiquetas_por_objeto_body = { http: e3.status, corpo: String(e3.corpo || '').slice(0, 700) };
         const e4 = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/objetos/${vol}`, headers);
         const t4 = typeof e4.text === 'function' ? await e4.text().catch(() => '') : '';
