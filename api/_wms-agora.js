@@ -125,3 +125,47 @@ export async function marcarAgoraImpresso(ids) {
   const agora = new Date().toISOString();
   await supabase.from('wms_agora').update({ etiqueta_impressa_em: agora, atendido_em: agora, atendido_por: 'app', atualizado_em: agora }).in('id', ids);
 }
+
+
+// ── 04/09 (ele perguntou "o webhook do meli ajuda nos outros pedidos?"):
+// SIM — o mesmo aviso de shipment atualiza o ESPELHO (wms_pedidos) em
+// segundos, com a mesma regra do agenda-sync horario: status/substatus,
+// data de agendamento (nunca apagada por null), MELI_AGENDADO quando
+// buffered. Liberadas, impressas no painel, coletadas e canceladas deixam
+// de esperar a proxima varredura. O sync horario vira rede de seguranca.
+export async function aplicarShipmentNoEspelho(shipmentId, brand, shipmentJa) {
+  const token = await getValidToken(brand);
+  const sh = shipmentJa || await mlGet(`/shipments/${shipmentId}`, token);
+  if (!sh) return { ok: false, motivo: 'shipment nao lido' };
+  const conta = CONTA_POR_BRAND[brand] || String(brand || '').toLowerCase();
+  // o espelho guarda numero_loja = pack (carrinho) ou order
+  const orderId = sh.order_id ? String(sh.order_id) : null;
+  let numeros = [];
+  if (orderId) {
+    numeros.push(orderId);
+    const order = await mlGet(`/orders/${orderId}`, token);
+    if (order?.pack_id) numeros.push(String(order.pack_id));
+  }
+  if (!numeros.length) return { ok: false, motivo: 'sem order' };
+  const buffering = sh.shipping_option?.buffering?.date || null;
+  const agendado = buffering ? String(buffering).slice(0, 10) : null;
+  const upd = { ml_ship_status: sh.status || null, ml_ship_substatus: sh.substatus || null, ml_ship_checado_em: new Date().toISOString() };
+  if (agendado) upd.ml_agendado_em = agendado;
+  if (agendado || sh.substatus === 'buffered') upd.print_regra = 'MELI_AGENDADO';
+  if (sh.status === 'cancelled') upd.status_wms = 'cancelado';
+  const { data } = await supabase.from('wms_pedidos').update(upd).eq('conta', conta).in('numero_loja', numeros).select('pedido_id');
+  return { ok: true, atualizados: (data || []).length, agendado, status: sh.status, substatus: sh.substatus };
+}
+
+export async function aplicarOrderNoEspelho(orderId, brand) {
+  const token = await getValidToken(brand);
+  const order = await mlGet(`/orders/${orderId}`, token);
+  if (!order) return { ok: false, motivo: 'order nao lida' };
+  const conta = CONTA_POR_BRAND[brand] || String(brand || '').toLowerCase();
+  const numeros = [String(order.id)]; if (order.pack_id) numeros.push(String(order.pack_id));
+  const cancelada = order.status === 'cancelled';
+  if (!cancelada) return { ok: true, atualizados: 0, motivo: 'sem acao (so cancelamento e tratado aqui)' };
+  const { data } = await supabase.from('wms_pedidos').update({ status_wms: 'cancelado', ml_ship_status: 'cancelled' })
+    .eq('conta', conta).in('numero_loja', numeros).select('pedido_id');
+  return { ok: true, atualizados: (data || []).length, cancelada: true };
+}

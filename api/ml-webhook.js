@@ -823,10 +823,14 @@ export default async function handler(req, res) {
       try {
         const { data: tokenRec } = await supabase.from('ml_tokens').select('brand').eq('seller_id', String(user_id)).single();
         if (!tokenRec) return res.status(200).json({ ignored: true, reason: 'unknown_seller' });
-        const { registrarAgoraDeOrder, registrarAgoraDeShipment } = await import('./_wms-agora.js');
+        const { registrarAgoraDeOrder, registrarAgoraDeShipment, aplicarShipmentNoEspelho, aplicarOrderNoEspelho } = await import('./_wms-agora.js');
         const id = String(resource).split('/').filter(Boolean).pop();
         const r = topic === 'shipments' ? await registrarAgoraDeShipment(id, tokenRec.brand) : await registrarAgoraDeOrder(id, tokenRec.brand);
-        return res.status(200).json({ ok: true, topic, agora: !!r?.agora, novo: !!r?.novo, motivo: r?.motivo || null });
+        // 04/09: o mesmo aviso atualiza o espelho dos pedidos normais em
+        // segundos (status/agendamento/cancelamento) — antes so o sync horario
+        let esp = null;
+        try { esp = topic === 'shipments' ? await aplicarShipmentNoEspelho(id, tokenRec.brand) : await aplicarOrderNoEspelho(id, tokenRec.brand); } catch (e) { esp = { ok: false, erro: String(e?.message || e) }; }
+        return res.status(200).json({ ok: true, topic, agora: !!r?.agora, novo: !!r?.novo, motivo: r?.motivo || null, espelho: esp });
       } catch (e) {
         console.error('[ml-webhook agora]', e?.message || e);
         return res.status(200).json({ ok: false, erro: String(e?.message || e) });
