@@ -50,7 +50,13 @@ function itensDaOrder(order) {
  */
 export async function registrarAgoraDeOrder(orderId, brand) {
   const token = await getValidToken(brand);
-  const order = await mlGet(`/orders/${orderId}`, token);
+  let order = await mlGet(`/orders/${orderId}`, token);
+  if (!order) {
+    // numero pode ser o PACK (carrinho): resolve a primeira order do pack
+    const pack = await mlGet(`/packs/${orderId}`, token);
+    const oid = pack?.orders?.[0]?.id;
+    if (oid) order = await mlGet(`/orders/${oid}`, token);
+  }
   if (!order) return { agora: false, motivo: 'order nao lida' };
   const sid = order.shipping?.id;
   if (!sid) return { agora: false, motivo: 'sem shipment' };
