@@ -76,6 +76,7 @@ export async function lerWmsConfig() {
       // 02/09 (pedido dele): alertas sonoros da TV
       alertas: Array.isArray(p.alertas) ? p.alertas : [],
       alerta_teste_em: Number(p.alerta_teste_em) || 0,
+      alerta_teste_som: String(p.alerta_teste_som || 'suave'),
     };
   } catch { return { ...WMS_CONFIG_DEFAULT }; }
 }
@@ -613,9 +614,11 @@ export default async function handler(req, res) {
             duracao: Math.max(1, Math.min(60, Number(a.duracao) || 5)),
             dias: (Array.isArray(a.dias) ? a.dias : []).map(Number).filter(d => d >= 0 && d <= 6),
             data: /^\d{4}-\d{2}-\d{2}$/.test(String(a.data || '')) ? String(a.data) : '',
+            som: ['suave', 'campainha', 'sino'].includes(String(a.som)) ? String(a.som) : 'suave',
             ativo: a.ativo !== false,
           })).filter(a => a.nome && a.hora),
           alerta_teste_em: Number(c.alerta_teste_em) || 0,
+          alerta_teste_som: ['suave', 'campainha', 'sino'].includes(String(c.alerta_teste_som)) ? String(c.alerta_teste_som) : 'suave',
           _updated: new Date().toISOString(),
         };
         const { error } = await supabase.from('amicia_data')

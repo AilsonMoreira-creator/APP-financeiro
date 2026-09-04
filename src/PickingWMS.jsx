@@ -174,7 +174,9 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
   // data unica), ligado/desligado.
   const [alertas, setAlertas] = useState(() => Array.isArray(config.alertas) ? config.alertas : []);
   const DIAS_SEM = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-  const novoAlerta = () => setAlertas(a => [...a, { id: String(Date.now()), nome: '', hora: '11:30', duracao: 5, dias: [1, 2, 3, 4, 5], data: '', ativo: true }]);
+  const novoAlerta = () => setAlertas(a => [...a, { id: String(Date.now()), nome: '', hora: '11:30', duracao: 5, dias: [1, 2, 3, 4, 5], data: '', ativo: true, som: 'suave' }]);
+  const [somTeste, setSomTeste] = useState('suave');
+  const SONS = [['suave', '🔉 Suave'], ['campainha', '🔔 Campainha'], ['sino', '🎵 Sino']];
   const mudaAlerta = (id, campo, valor) => setAlertas(a => a.map(x => x.id === id ? { ...x, [campo]: valor } : x));
   const removeAlerta = (id) => setAlertas(a => a.filter(x => x.id !== id));
   const [lemEm, setLemEm] = useState(() => {
@@ -299,11 +301,14 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
             // alerta_teste_em na config; a TV le no proximo poll (ate 1 min)
             try {
               const r = await fetch(`${API}/wms-listas`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ acao: 'config', config: { ...config, alertas, alerta_teste_em: Date.now() } }) });
+                body: JSON.stringify({ acao: 'config', config: { ...config, alertas, alerta_teste_em: Date.now(), alerta_teste_som: somTeste } }) });
               const d = await r.json(); if (!d.ok) throw new Error('falhou');
               alert('Teste enviado — a TV toca em até 1 minuto.');
             } catch { alert('Não consegui enviar o teste.'); }
           }} style={{ marginLeft: 'auto', border: '1px solid #f3cf9d', background: '#fdefe0', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#a05c1a', cursor: 'pointer', fontFamily: FONT }}>🔔 Tocar teste na TV agora</button>
+          <select value={somTeste} onChange={e => setSomTeste(e.target.value)} title="Som do teste" style={{ padding: '5px 8px', borderRadius: 8, border: '1.5px solid #e2e8ee', fontSize: 12, fontFamily: FONT }}>
+            {SONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
           <button onClick={novoAlerta} style={{ border: '1px solid #c8d8e4', background: '#fff', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#4a7fa5', cursor: 'pointer', fontFamily: FONT }}>+ Novo alerta</button>
         </div>
         <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 10 }}>
@@ -319,6 +324,10 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
                 <input type="time" value={a.hora} onChange={e => mudaAlerta(a.id, 'hora', e.target.value)} style={{ padding: '7px 8px', borderRadius: 8, border: '1.5px solid #e2e8ee', fontSize: 13, fontFamily: FONT }} /></label>
               <label style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 4 }}>Campainha
                 <input type="number" min={1} max={60} value={a.duracao} onChange={e => mudaAlerta(a.id, 'duracao', e.target.value)} style={{ width: 56, padding: '7px 8px', borderRadius: 8, border: '1.5px solid #e2e8ee', fontSize: 13, fontFamily: FONT }} /> s</label>
+              <label style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 4 }}>Som
+                <select value={a.som || 'suave'} onChange={e => mudaAlerta(a.id, 'som', e.target.value)} style={{ padding: '7px 8px', borderRadius: 8, border: '1.5px solid #e2e8ee', fontSize: 13, fontFamily: FONT }}>
+                  {SONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select></label>
               <label style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
                 <input type="checkbox" checked={!!a.ativo} onChange={e => mudaAlerta(a.id, 'ativo', e.target.checked)} style={{ accentColor: '#1e8e4e' }} /> ligado</label>
               <button onClick={() => removeAlerta(a.id)} title="Remover" style={{ border: 'none', background: 'none', color: '#c0392b', fontSize: 16, cursor: 'pointer' }}>×</button>
