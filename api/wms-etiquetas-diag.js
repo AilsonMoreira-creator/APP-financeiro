@@ -74,6 +74,31 @@ export default async function handler(req, res) {
       return res.status(200).json(out);
     }
 
+    // 04/09 (34 Shopee "sem etiqueta" com a Shopee dizendo tudo certo):
+    // ?etiqueta=1&pedido_id=X — o que o Bling responde HOJE pra esse pedido:
+    // detalhe (transporte/volumes) + a rota de etiquetas, cru.
+    if (req.query?.etiqueta === '1' && req.query?.pedido_id) {
+      const pid = String(req.query.pedido_id);
+      const detR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, headers);
+      const det = typeof detR.json === 'function' ? await detR.json().catch(() => ({})) : {};
+      const d = det?.data || {};
+      const saida = {
+        pedido: d.numero, numero_loja: d.numeroLoja, loja_id: d.loja?.id, situacao: d.situacao?.id,
+        transporte: { fretePorConta: d.transporte?.fretePorConta, volumes: d.transporte?.volumes || [], contato: d.transporte?.contato?.nome },
+        notaFiscal: d.notaFiscal || null,
+      };
+      const etqR = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${pid}`, headers);
+      const etqTxt = typeof etqR.text === 'function' ? await etqR.text().catch(() => '') : '';
+      saida.etiquetas_por_venda = { http: etqR.status, corpo: String(etqTxt).slice(0, 700) };
+      const vol = (d.transporte?.volumes || [])[0]?.id;
+      if (vol) {
+        const e2 = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsObjetos[]=${vol}`, headers);
+        const t2 = typeof e2.text === 'function' ? await e2.text().catch(() => '') : '';
+        saida.etiquetas_por_objeto = { http: e2.status, corpo: String(t2).slice(0, 700) };
+      }
+      return res.status(200).json(saida);
+    }
+
     // ?emitir=1&pedido_id=X — TESTE DE EMISSÃO (12/08, rollout Muniam):
     // replica o clique manual dele: gerar NF do pedido → enviar pra SEFAZ.
     // Anti-duplicidade: aborta se o pedido já aponta uma NF.
