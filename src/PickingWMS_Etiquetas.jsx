@@ -899,6 +899,12 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
                 {aguardando} aguardando gerar NF no Bling
               </span>
             )}
+            {(dados?.aguardando_logistica || 0) > 0 && (
+              <span title="Nota autorizada, mas o Bling ainda não tem a etiqueta de transporte (Shopee/Magalu: o envio ainda não foi organizado). Organize o envio e clique em Preparar agora."
+                style={{ fontSize: 12, fontWeight: 700, color: palette.warn, background: palette.warnSoft, padding: '6px 11px', borderRadius: 999 }}>
+                {dados.aguardando_logistica} aguardando logística no Bling
+              </span>
+            )}
           </div>
         )}
 

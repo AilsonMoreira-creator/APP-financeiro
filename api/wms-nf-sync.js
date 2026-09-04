@@ -115,8 +115,12 @@ export default async function handler(req, res) {
       }
       for (const [sit, ids] of Object.entries(porSituacao)) {
         for (let i = 0; i < ids.length; i += 200) {
+          // 04/09: este cron so revarre notas em 5 no espelho — descobrir 6 aqui e
+          // transicao real: carimba nf_virou_6_em (base do "impressas hoje")
+          const upd = { nf_situacao: Number(sit), nf_checado_em: new Date().toISOString() };
+          if (Number(sit) === 6) upd.nf_virou_6_em = new Date().toISOString();
           const { count } = await supabase.from('wms_pedidos')
-            .update({ nf_situacao: Number(sit), nf_checado_em: new Date().toISOString() }, { count: 'exact' })
+            .update(upd, { count: 'exact' })
             .in('nf_id', ids.slice(i, i + 200));
           r.situacoes_gravadas += count || 0;
         }

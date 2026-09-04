@@ -82,7 +82,7 @@ async function pedidosFiltrados(q) {
   // mais de 3 dias e caso resolvido por fora (ex: etiqueta impressa direto no
   // Seller Center da Shopee, que nao deixa sinal) — sai da fila de impressao
   const desde3 = new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10); // data pura BRT — o dia-limite (3 dias atras) ainda entra
-  const COLS = 'conta, pedido_id, numero, numero_loja, cliente_nome, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
+  const COLS = 'conta, pedido_id, numero, numero_loja, cliente_nome, nf_virou_6_em, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
 
   // 24/08 (caso dele: chip 3 × previa 2 persistente): o limit(500) numa janela
   // de 7 dias com ~2.500 pedidos-com-NF CORTAVA a fila em silencio — pendencia
@@ -644,8 +644,12 @@ export default async function handler(req, res) {
           // 22/08 (ele apontou contagem baixa): pedido de ONTEM impresso HOJE
           // pelo painel nao tem carimbo nosso — a regua de "so pedido de hoje"
           // derrubava ele da conta. Janela: hoje + ontem.
-          const ontemBRT = new Date(Date.now() - 3 * 3600000 - 86400000).toISOString().slice(0, 10);
-          const impressaBlingHoje = !p.etiqueta_impressa_em && String(p.data_pedido || '').slice(0, 10) >= ontemBRT;
+          // 04/09 (aprovado por ele): "impressa pelo Bling HOJE" = a nota virou
+          // situacao 6 HOJE (carimbo nf_virou_6_em do nf-sync). Nota de ontem
+          // impressa ontem nao conta mais em "hoje". Sem carimbo (historico
+          // anterior a 04/09) nao conta.
+          const virou6Hoje = p.nf_virou_6_em && new Date(new Date(p.nf_virou_6_em).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hojeBRT;
+          const impressaBlingHoje = !p.etiqueta_impressa_em && !!virou6Hoje;
           if (impressaHoje || impressaBlingHoje) { grupos[k].impressas++; jaImpressas++; }
           else grupos[k].pedidos--;          // impressa em outro dia: fora da conta
         } else if (q.tipo === 'meluni'

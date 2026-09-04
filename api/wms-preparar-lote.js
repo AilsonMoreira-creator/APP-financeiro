@@ -113,7 +113,9 @@ export default async function handler(req, res) {
     // quem precisa de etiqueta e está PRONTO
     let sel = supabase.from('wms_pedidos')
       .select('pedido_id, conta, numero, numero_loja, canal_geral, ml_logistic_type, print_estado, print_etiqueta')
-      .eq('print_estado', 'PRONTO').eq('print_etiqueta', true)
+      // 04/09 (38 presos: "etiqueta ainda nao gerada no Bling"): AGUARDA_LOGISTICA
+      // e revisitado a cada preparo — quando o Bling libera a etiqueta, volta PRONTO
+      .in('print_estado', ['PRONTO', 'AGUARDA_LOGISTICA']).eq('print_etiqueta', true)
       .in('conta', contas)
       .is('etiqueta_impressa_em', null)
       .order('data_pedido', { ascending: true }).limit(600);
@@ -239,6 +241,11 @@ export default async function handler(req, res) {
             // 20/08 (cron 7:50): o VISUAL do ZPL fica pronto no preparo — a
             // prévia de manhã sai do cache em segundos
             if (doc.formato === 'ZPL') await guardarPreviaPng(p.pedido_id, conta, doc.conteudo);
+            // 04/09: estava preso como "aguarda logistica" e o Bling liberou — volta PRONTO
+            if (p.print_estado === 'AGUARDA_LOGISTICA') {
+              await supabase.from('wms_pedidos').update({ print_estado: 'PRONTO', print_motivo: 'nota autorizada, pronto pra imprimir' }).eq('pedido_id', p.pedido_id);
+              r.destravados = (r.destravados || 0) + 1;
+            }
             c.ok++; r.preparados++;
           } catch (e) {
             c.erro++; r.erros++;
