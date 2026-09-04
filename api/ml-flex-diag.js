@@ -10,6 +10,38 @@ export default async function handler(req, res) {
   // 01/09 (foto: flex saiu PDF invertido/miudo): ?testa_zpl=NUMERO_LOJA&conta=x
   // pergunta ao ML, pro shipment daquele pedido, o que ele devolve em zpl2 e
   // em pdf — pra saber se o ML esta NEGANDO zpl2 pro self_service.
+  // 04/09 (Envios Agora): ?shipment=NUMERO_LOJA&conta=x — devolve os campos
+  // do shipment que podem identificar a modalidade (tags, shipping_option,
+  // logistic_type, service, datas).
+  if (req.query?.shipment) {
+    try {
+      const conta = req.query.conta || 'exitus';
+      const token = await getValidToken(BRAND[conta]);
+      const h = { Authorization: `Bearer ${token}` };
+      let ordId = req.query.shipment, sid = null, order = null;
+      let ro = await fetch(`https://api.mercadolibre.com/orders/${ordId}`, { headers: h });
+      if (ro.ok) { order = await ro.json(); sid = order?.shipping?.id; }
+      else {
+        const rp = await fetch(`https://api.mercadolibre.com/packs/${ordId}`, { headers: h });
+        const jp = rp.ok ? await rp.json() : null;
+        ordId = jp?.orders?.[0]?.id;
+        if (ordId) { const ro2 = await fetch(`https://api.mercadolibre.com/orders/${ordId}`, { headers: h }); if (ro2.ok) { order = await ro2.json(); sid = order?.shipping?.id; } }
+        if (!sid) sid = jp?.shipment?.id || null;
+      }
+      if (!sid) return res.status(200).json({ ok: false, passo: 'shipment nao achado' });
+      const rs = await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: h, });
+      const sh = rs.ok ? await rs.json() : { erro: rs.status };
+      return res.status(200).json({
+        sid, order_date_created: order?.date_created, order_tags: order?.tags,
+        shipment: {
+          status: sh.status, substatus: sh.substatus, logistic_type: sh.logistic_type, mode: sh.mode,
+          tags: sh.tags, service_id: sh.service_id, shipping_option: sh.shipping_option,
+          date_created: sh.date_created, lead_time: sh.lead_time,
+          logistic: sh.logistic, sla: sh.sla,
+        },
+      });
+    } catch (e) { return res.status(200).json({ ok: false, erro: String(e?.message || e) }); }
+  }
   if (req.query?.testa_zpl) {
     try {
       const conta = req.query.conta || 'exitus';
