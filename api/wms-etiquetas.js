@@ -378,7 +378,7 @@ async function ajustarPdfFlex(b64) {
 // logistica de cada pedido flex, com cliente, numeros (Bling e ML), data e
 // os itens no detalhe da nota (ref, cor, tamanho) + LOCALIZACAO e total de
 // pecas (os dois extras que ajudam separacao e conferencia).
-function zplProdutoFlex(p) {
+function zplProdutoFlex(p, titulo = 'FLEX') {
   const limpa = (t) => String(t || '').replace(/[\^~]/g, '').trim();
   const itens = Array.isArray(p.itens) ? p.itens : [];
   const totalPc = itens.reduce((a, i) => a + (Number(i.quantidade) || 0), 0) || itens.length;
@@ -387,7 +387,7 @@ function zplProdutoFlex(p) {
   // 01/09 (ajuste dele apos o teste): cabecalho so FLEX; Bling na MESMA fonte
   // do ML; respiro depois do cliente e antes dos produtos.
   let y = 30;
-  linhas.push(`^FO0,${y}^FB812,1,0,C^A0N,54,54^FDFLEX^FS`); y += 68;
+  linhas.push(`^FO0,${y}^FB812,1,0,C^A0N,54,54^FD${titulo}^FS`); y += 68;
   linhas.push(`^FO0,${y}^FB812,1,0,C^A0N,38,38^FD${limpa(p.conta).toUpperCase()} · pedido ${dataP}^FS`); y += 70;
   linhas.push(`^FO24,${y}^FB764,2,0,L^A0N,48,48^FD${limpa(p.cliente_nome).slice(0, 60)}^FS`); y += 118;
   linhas.push(`^FO24,${y}^A0N,44,44^FDBling ${limpa(p.numero)}^FS`); y += 58;
@@ -512,7 +512,8 @@ export default async function handler(req, res) {
         if (vistos.has(k)) return false;
         vistos.add(k); return true;
       });
-      const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0, cancelados: 0 };
+      const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0, cancelados: 0, agora: 0 };
+      try { const { agoraAbertos } = await import('./_wms-agora.js'); c.agora = (await agoraAbertos()).length; } catch { /* sem chip */ }
       const dlNossoCont = await setDownloadNosso(supabase, data);
       const desde3Cont = new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10);
       for (const p of (data || [])) {
@@ -598,6 +599,18 @@ export default async function handler(req, res) {
 
     const peds = await pedidosFiltrados(q);
 
+    // 04/09: previa da aba ENVIOS AGORA — um grupo por pedido, direto de wms_agora
+    if (q.previa === '1' && q.tipo === 'agora') {
+      const { agoraAbertos } = await import('./_wms-agora.js');
+      const ab = await agoraAbertos();
+      const grupos = ab.map(a => {
+        const it0 = (a.itens || [])[0] || {};
+        return { loc: '⚡', ref: String(it0.sku || a.numero_loja).replace(/^0+/, ''), pedidos: 1, prontas: 1, impressas: 0,
+          contas: [a.conta], canais: ['Mercado Livre'], agora_id: a.id, cliente: a.cliente_nome, prazo_em: a.prazo_em, ml_criado_em: a.ml_criado_em };
+      });
+      return res.status(200).json({ sincronizado_em: new Date().toISOString(), total_pedidos: ab.length, prontas: ab.length,
+        aguardando_logistica: 0, ja_impressas: 0, aguardando: 0, grupos, nota: null });
+    }
     if (q.previa === '1') {
       // 17/08 — REDESENHO: a prévia NÃO fala mais com o Bling. A situação da
       // nota vem pré-carregada pelo cron `wms-nf-sync` (a cada 10 min), o que
@@ -1059,6 +1072,55 @@ export default async function handler(req, res) {
         } catch { return null; }
         finally { await new Promise(r2 => setTimeout(r2, 340)); }
       };
+    // 04/09 (Envios Agora, regra dele): casada do produto + logistica do ML,
+    // SEM nota, sem separadora, sem folha de informacoes. Fonte: wms_agora
+    // (webhook do ML), enriquecida com o pedido do Bling quando ja existir
+    // (REF/cor/tamanho/localizacao). Reimpressao (?reimprimir=1) inclui os
+    // ja atendidos de hoje.
+    if (q.zpl === '1' && q.tipo === 'agora') {
+      const { agoraAbertos, marcarAgoraImpresso } = await import('./_wms-agora.js');
+      let lista = await agoraAbertos();
+      if (q.reimprimir === '1') {
+        const { data: hojeAg } = await supabase.from('wms_agora').select('*')
+          .gte('ml_criado_em', new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10) + 'T03:00:00Z')
+          .order('ml_criado_em', { ascending: true });
+        lista = hojeAg || [];
+      }
+      if (q.agora_id) lista = lista.filter(a => String(a.id) === String(q.agora_id));
+      const numeros = [...new Set(lista.map(a => a.numero_loja))];
+      const { data: bl } = numeros.length
+        ? await supabase.from('wms_pedidos').select(COLS).in('numero_loja', numeros)
+        : { data: [] };
+      const pseudo = lista.map(a => {
+        const b = (bl || []).find(x => String(x.numero_loja) === String(a.numero_loja) && x.conta === a.conta);
+        const itens = (b?.itens?.length ? b.itens : (a.itens || []).map(i => ({ ref: i.sku, cor: i.cor, tamanho: i.tamanho, descLimpa: i.descricao, quantidade: i.quantidade })));
+        const it0 = itens[0] || {};
+        return {
+          pedido_id: 'agora-' + a.id, agora_id: a.id, conta: a.conta,
+          numero: b?.numero || ('ML ' + a.numero_loja), numero_loja: a.numero_loja, canal_geral: 'Mercado Livre',
+          cliente_nome: b?.cliente_nome || a.cliente_nome, data_pedido: a.ml_criado_em, itens,
+          ref: String(it0.ref || '?').replace(/^0+/, ''), loc: String(it0.estoque || '—').toUpperCase(),
+        };
+      });
+      const blocos = []; const idsOk = []; const refsOk = []; const semEtq = []; const emPdf = [];
+      for (const conta of new Set(pseudo.map(p => p.conta))) {
+        const lst = pseudo.filter(p => p.conta === conta);
+        let r = {};
+        try { r = await etiquetasDoMl(lst, conta); } catch { r = {}; }
+        for (const p of lst) {
+          const e = r[String(p.pedido_id)];
+          if (!e || !e.conteudo) { semEtq.push(p.numero); continue; }
+          blocos.push({ tipo: 'produto_flex', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplProdutoFlex(p, 'ENVIOS AGORA') });
+          if (e.formato === 'PDF') { blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: await ajustarPdfFlex(e.conteudo) }); emPdf.push(p.numero); }
+          else blocos.push({ tipo: 'etiqueta', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: e.conteudo });
+          idsOk.push(p.agora_id); refsOk.push(p.ref);
+        }
+      }
+      if (q.seco === '1') return res.status(200).json({ seco: true, total: idsOk.length, resumo: blocos.map(b => `${b.tipo}:${b.pedido || b.ref || '?'}`), sem_etiqueta: semEtq });
+      if (idsOk.length) await marcarAgoraImpresso(idsOk);
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: emPdf, sem_danfe: [], sem_etiqueta: semEtq, sem_etiqueta_ids: [], aguardando_logistica: [], programados: [], restantes: 0, ultimo_grupo: '' });
+    }
+
     if (q.zpl === '1' && q.tipo === 'nf_agendada') {
       // 26/08 (teste dele: "NF normal reduzida" nao serve): a nota agendada
       // sai na TERMICA como DANFE RICA, com o ENVIAR dd/mm em destaque no

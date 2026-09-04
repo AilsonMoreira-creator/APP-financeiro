@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     if (!tokenRec) return res.status(200).json({ ignored: true, reason: 'unknown_seller' });
 
     const brand = tokenRec.brand;
-    const sellerId = tokenRec.seller_id;
+    let sellerId = tokenRec.seller_id;
     const token = await getValidToken(brand);
 
     // Busca a mensagem individual

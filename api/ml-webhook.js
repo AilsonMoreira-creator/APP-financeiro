@@ -816,6 +816,22 @@ export default async function handler(req, res) {
       const { default: messagesHandler } = await import('./ml-messages-webhook.js');
       return messagesHandler(req, res);
     }
+    // 04/09 (Envios Agora): pedidos e envios chegam aqui em segundos. So os
+    // que forem "proximity"/"Instant" viram linha em wms_agora; o resto e
+    // ignorado (o espelho do Bling cuida deles como sempre).
+    if ((topic === 'orders_v2' || topic === 'orders' || topic === 'shipments') && resource) {
+      try {
+        const { data: tokenRec } = await supabase.from('ml_tokens').select('brand').eq('seller_id', String(user_id)).single();
+        if (!tokenRec) return res.status(200).json({ ignored: true, reason: 'unknown_seller' });
+        const { registrarAgoraDeOrder, registrarAgoraDeShipment } = await import('./_wms-agora.js');
+        const id = String(resource).split('/').filter(Boolean).pop();
+        const r = topic === 'shipments' ? await registrarAgoraDeShipment(id, tokenRec.brand) : await registrarAgoraDeOrder(id, tokenRec.brand);
+        return res.status(200).json({ ok: true, topic, agora: !!r?.agora, novo: !!r?.novo, motivo: r?.motivo || null });
+      } catch (e) {
+        console.error('[ml-webhook agora]', e?.message || e);
+        return res.status(200).json({ ok: false, erro: String(e?.message || e) });
+      }
+    }
     if (topic !== 'questions' || !resource) return res.status(200).json({ ignored: true });
 
     const { data: tokenRec } = await supabase.from('ml_tokens').select('brand').eq('seller_id', String(user_id)).single();

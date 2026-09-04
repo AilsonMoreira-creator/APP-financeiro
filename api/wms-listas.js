@@ -234,7 +234,21 @@ export default async function handler(req, res) {
           return p.ml_ship_status === 'ready_to_ship' && p.ml_ship_substatus === 'ready_to_print' && !p.etiqueta_impressa_em;
         }).length;
 
-        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: corteHhmm(cfgDash), corte_em: corteHoje, agendados_ml: agendadosMl || 0, etiquetas_liberadas_hoje: liberadasHoje || 0, ultimo_sync: ultSync?.[0]?.visto_em || null });
+        // 04/09 (Envios Agora): abertos com a hora real do ML — a TV faz o
+        // cronometro regressivo do mais antigo e toca ao entrar o primeiro.
+        let agora = { abertos: 0, mais_antigo_em: null, prazo_em: null, lista: [], atendidos_hoje: 0 };
+        try {
+          const { agoraAbertos } = await import('./_wms-agora.js');
+          const ab = await agoraAbertos();
+          const { count: atendHoje } = await supabase.from('wms_agora').select('id', { count: 'exact', head: true })
+            .not('atendido_em', 'is', null).gte('atendido_em', new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10) + 'T03:00:00Z');
+          agora = {
+            abertos: ab.length, mais_antigo_em: ab[0]?.ml_criado_em || null, prazo_em: ab[0]?.prazo_em || null,
+            lista: ab.slice(0, 8).map(a => ({ id: a.id, conta: a.conta, numero_loja: a.numero_loja, cliente: a.cliente_nome, ml_criado_em: a.ml_criado_em, prazo_em: a.prazo_em })),
+            atendidos_hoje: atendHoje || 0,
+          };
+        } catch { /* sem o card */ }
+        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: corteHhmm(cfgDash), corte_em: corteHoje, agendados_ml: agendadosMl || 0, etiquetas_liberadas_hoje: liberadasHoje || 0, agora, ultimo_sync: ultSync?.[0]?.visto_em || null });
       }
 
       if (acao === 'config') {

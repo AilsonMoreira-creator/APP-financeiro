@@ -675,6 +675,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             title="Só as etiquetas logísticas que o Mercado Livre liberou pra postar hoje (a NF já foi impressa antes).">
             🏷 Etiquetas liberadas<Badge n={contadores?.etiqueta_liberada} />
           </button>
+          <button onClick={() => setFTipo('agora')} style={{ ...btn(fTipo === 'agora'), ...(contadores?.agora ? { borderColor: '#f0b429', background: fTipo === 'agora' ? '#f0b429' : '#fdf6dd', color: fTipo === 'agora' ? '#fff' : '#8a6d1a' } : {}) }}
+            title="Envios Agora do Mercado Livre: 25 minutos pra embalar. Sai a etiqueta do produto casada com a logística do ML, sem nota (regra dele). Chega em segundos pelo webhook do ML.">
+            ⚡ Envios Agora<Badge n={contadores?.agora} />
+          </button>
           <button onClick={() => setFTipo('cancelados')} style={btn(fTipo === 'cancelados')}
             title="Pedidos cancelados no marketplace com a nota ainda viva. Cancele a nota no Bling e o pedido sai daqui sozinho.">
             🚫 Cancelados<Badge n={contadores?.cancelados} />
@@ -829,6 +833,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         {fTipo === 'nf_agendada' && (
           <div style={{ fontSize: 12, color: palette.inkSoft, background: '#fdf6e3', border: '1px solid #e8d9a8', borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
             Envio programado do Mercado Livre: sai <b>só a nota</b>, com a data de envio no cabeçalho dela (mesma quantidade de folhas de sempre). Separe a mercadoria e guarde — no dia, use “Etiquetas liberadas”. A NF continua valendo.
+          </div>
+        )}
+        {fTipo === 'agora' && (
+          <div style={{ fontSize: 12, color: '#8a6d1a', background: '#fdf6dd', border: '1px solid #eeda92', borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
+            ⚡ <b>Envios Agora</b> — o Mercado Livre dá <b>25 minutos</b> pra embalar. Sai a etiqueta do produto casada com a logística do ML (sem nota), sem separadora e sem folha de informações. A lista aqui é dos abertos agora; o cronômetro está na TV.
           </div>
         )}
         {fTipo === 'cancelados' && (
