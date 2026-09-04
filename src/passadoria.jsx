@@ -52,12 +52,22 @@ export function usePassadoria() {
   const [registros, setRegistros] = useState([]);
   const [nomes, setNomes] = useState(NOMES_PADRAO);
   const [loading, setLoading] = useState(true);
+  const [erroCarga, setErroCarga] = useState('');
 
   const carregarRegistros = useCallback(async () => {
     try {
-      const { data } = await supabase.from('oficinas_passadoria').select('*');
-      if (Array.isArray(data)) setRegistros(data);
-    } catch (e) { console.warn('[passadoria] registros:', e?.message); }
+      // 04/09 (tela "sem nenhum corte" com o banco instavel): a falha era
+      // engolida e a lista ficava vazia sem aviso. Agora: 3 tentativas com
+      // pausa; se ainda falhar, mostra o erro e o botao de tentar de novo.
+      let ultimoErro = null;
+      for (let tent = 1; tent <= 3; tent++) {
+        const { data, error } = await supabase.from('oficinas_passadoria').select('*');
+        if (!error && Array.isArray(data)) { setRegistros(data); setErroCarga(''); return; }
+        ultimoErro = error?.message || 'sem resposta';
+        await new Promise(r => setTimeout(r, 1500 * tent));
+      }
+      setErroCarga(ultimoErro);
+    } catch (e) { console.warn('[passadoria] registros:', e?.message); setErroCarga(String(e?.message || e)); }
   }, []);
 
   const carregarNomes = useCallback(async () => {
@@ -201,7 +211,7 @@ export function usePassadoria() {
     setNomes(prev => { const novos = prev.filter(x => x !== n); salvarNomes(novos); return novos; });
   }, [salvarNomes]);
 
-  return { registros, nomes, loading, registroPorCorte, definir, toggleEntregue, remover, addNome, removeNome, salvarPagamento, registrarPagamento };
+  return { registros, nomes, loading, erroCarga, recarregar: carregarRegistros, registroPorCorte, definir, toggleEntregue, remover, addNome, removeNome, salvarPagamento, registrarPagamento };
 }
 
 // ── Ícone: ferro de passar ───────────────────────────────────────────────────
@@ -667,6 +677,13 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa, cortes = 
   const [trocando, setTrocando] = useState(null); // registro sendo trocado de passadoria
   const toggleSel = (id) => setSelecao(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const registros = api?.registros || [];
+  const faixaErro = api?.erroCarga ? (
+    <div style={{ background: '#fdeaea', border: '1px solid #f4b8b8', borderRadius: 10, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 13, color: '#c0392b', fontWeight: 700 }}>⚠ Não consegui carregar os cortes</span>
+      <span style={{ fontSize: 12, color: '#8a9aa4' }}>({api.erroCarga}) — o banco pode estar instável.</span>
+      <button onClick={() => api.recarregar?.()} style={{ marginLeft: 'auto', border: '1px solid #f4b8b8', background: '#fff', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: '#c0392b', cursor: 'pointer', fontFamily: FN }}>Tentar de novo</button>
+    </div>
+  ) : null;
   const nomes = api?.nomes || [];
 
   const termo = busca.trim().toLowerCase();
@@ -710,6 +727,7 @@ export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa, cortes = 
         <button onClick={() => setGerenciar(true)} title="Cadastrar / remover passadorias" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d8e2ea', background: '#fff', color: '#5a6470', cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ Gerenciar</button>
       </div>
 
+      {faixaErro}
       <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar ref ou descrição..." style={{ ...inputPass, width: '100%', boxSizing: 'border-box', marginBottom: 8 }} />
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
