@@ -297,6 +297,10 @@ export default async function handler(req, res) {
           visto_em: new Date().toISOString(), atualizado_em: new Date().toISOString(),
         }, { onConflict: 'conta,pedido_id' });
         r.novos++;
+        // 05/09: pedido ML nasce classificado (1 consulta ao ML)
+        if (String(canal.geral || '') === 'Mercado Livre' && (ped.numeroLoja || ped.numeroPedidoLoja)) {
+          try { const { hidratarPedidoMl } = await import('./_wms-agora.js'); await hidratarPedidoMl(String(ped.numeroLoja || ped.numeroPedidoLoja), conta); } catch { /* melhor esforco */ }
+        }
         await new Promise(x => setTimeout(x, DELAY_MS));
       } catch (e) { r.erros++; }
     }

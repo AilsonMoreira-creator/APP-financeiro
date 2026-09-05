@@ -171,3 +171,32 @@ export async function aplicarOrderNoEspelho(orderId, brand) {
     .eq('conta', conta).in('numero_loja', numeros).select('pedido_id');
   return { ok: true, atualizados: (data || []).length, cancelada: true };
 }
+
+
+// ── 05/09 (2 Flex vazaram pro NF+transporte): pedido do ML nasce no espelho
+// via Bling SEM tipo de logistica — o aviso do ML costuma chegar ANTES de o
+// pedido existir aqui e se perde. Ao criar o pedido, UMA consulta ao ML
+// grava logistic_type/status/agendamento: nasce classificado (Flex e Flex,
+// agendado e agendado) antes de qualquer lote. Melhor esforco: nunca trava
+// a criacao.
+export async function hidratarPedidoMl(numeroLoja, conta) {
+  try {
+    const brand = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' }[String(conta || '').toLowerCase()];
+    if (!brand || !numeroLoja) return { ok: false };
+    const token = await getValidToken(brand);
+    let order = await mlGet(`/orders/${numeroLoja}`, token);
+    if (!order) {
+      const pack = await mlGet(`/packs/${numeroLoja}`, token);
+      const oid = pack?.orders?.[0]?.id;
+      if (oid) order = await mlGet(`/orders/${oid}`, token);
+    }
+    const sid = order?.shipping?.id;
+    if (!sid) return { ok: false, motivo: 'sem shipment' };
+    const sh = await mlGet(`/shipments/${sid}`, token);
+    if (!sh) return { ok: false, motivo: 'shipment nao lido' };
+    const r = await aplicarShipmentNoEspelho(sid, brand, sh);
+    // Envios Agora tambem nasce aqui, se for o caso
+    if (ehEnviosAgora(sh)) await upsertAgora({ order, shipment: sh, brand }).catch(() => null);
+    return { ok: true, logistic_type: sh.logistic_type, ...r };
+  } catch (e) { return { ok: false, erro: String(e?.message || e) }; }
+}
