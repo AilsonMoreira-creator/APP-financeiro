@@ -1,7 +1,7 @@
 // /api/ml-flex-diag — one-off: conta na API DO MERCADO LIVRE quantos envios
 // FLEX (self_service) estao esperando impressao (ready_to_ship/ready_to_print)
 // nas 3 contas — pra bater com o contador do WMS.
-import { getValidToken } from './_ml-helpers.js';
+import { getValidToken, supabase } from './_ml-helpers.js';
 
 const BRAND = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 const espera = (ms) => new Promise(r => setTimeout(r, ms));
