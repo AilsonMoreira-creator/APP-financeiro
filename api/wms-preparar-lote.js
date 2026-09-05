@@ -217,7 +217,7 @@ export default async function handler(req, res) {
           if (!link) {
             c.sem_etiqueta++; r.sem_etiqueta++;
             await supabase.from('wms_pedidos').update({
-              print_estado: 'AGUARDA_LOGISTICA', print_motivo: 'etiqueta ainda não gerada no Bling',
+              print_estado: 'AGUARDA_LOGISTICA', print_motivo: 'NF ok — etiqueta de transporte ainda não disponível no Bling',
             }).eq('pedido_id', p.pedido_id);
             continue;
           }

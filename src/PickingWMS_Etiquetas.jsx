@@ -912,9 +912,9 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
               </span>
             )}
             {(dados?.aguardando_logistica || 0) > 0 && (
-              <span title="Nota autorizada, mas o Bling ainda não tem a etiqueta de transporte (Shopee/Magalu: o envio ainda não foi organizado). Organize o envio e clique em Preparar agora."
+              <span title="A NF já está autorizada. O que falta é a etiqueta de TRANSPORTE, que o Bling só disponibiliza depois que o envio é organizado no marketplace (Shopee/Shein/Magalu). Organize o envio e clique em Preparar agora."
                 style={{ fontSize: 12, fontWeight: 700, color: palette.warn, background: palette.warnSoft, padding: '6px 11px', borderRadius: 999 }}>
-                {dados.aguardando_logistica} aguardando logística no Bling
+                {dados.aguardando_logistica} com NF ok, sem etiqueta de transporte no Bling
               </span>
             )}
           </div>
@@ -1006,7 +1006,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
               })()}
               {!!(lote.aguardando?.length) && (
                 <div style={{ fontSize: 12, color: '#6a5a20', background: '#fbf7ea', border: '1px solid #ece2c2', borderRadius: 8, padding: '8px 10px', marginTop: 8 }}>
-                  ⏳ <b>{lote.aguardando.length} pedido(s) aguardando logística</b> — o Bling ainda não liberou a etiqueta ({lote.aguardando.slice(0, 4).join(', ')}{lote.aguardando.length > 4 ? '…' : ''}). Não é falha de impressão: entram sozinhos quando a transportadora arranjar a coleta. Não entraram neste lote.
+                  ⏳ <b>{lote.aguardando.length} pedido(s) com NF ok, sem etiqueta de transporte</b> — o Bling ainda não disponibilizou a etiqueta logística ({lote.aguardando.slice(0, 4).join(', ')}{lote.aguardando.length > 4 ? '…' : ''}). Não é falha de impressão: entram sozinhos quando a transportadora arranjar a coleta. Não entraram neste lote.
                 </div>
               )}
               {!!(lote.programados?.length) && (
