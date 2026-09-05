@@ -1387,10 +1387,16 @@ export default async function handler(req, res) {
       const foraDoAlvo = [];
       const foraIds = [];
       const aguardaLogZpl = [];
+      // 05/09 (pedido dele: "o time fica sem saber o que fazer"): cada pedido
+      // que NAO sai ganha uma linha com numero, canal, conta, REF e MOTIVO —
+      // o modal lista isso em vez de "0/1" por referencia.
+      const pendentes = [];
+      const cap = (t) => String(t || '').charAt(0).toUpperCase() + String(t || '').slice(1);
+      const pend = (p, motivo) => pendentes.push({ numero: p.numero, conta: cap(p.conta), canal: p.canal_geral, ref: p.ref, loc: p.loc, motivo });
       for (const p of candidatosLote) {
         if (doMlZpl[String(p.pedido_id)] || guardados[String(p.pedido_id)] || links[String(p.pedido_id)]) alvo.push(p);
-        else if (p.print_estado === 'AGUARDA_LOGISTICA' && p.canal_geral !== 'Mercado Livre') aguardaLogZpl.push(`${p.numero} (${p.canal_geral})`);
-        else { foraDoAlvo.push(`${p.numero} ${String(p.conta || '').charAt(0).toUpperCase() + String(p.conta || '').slice(1)}`); foraIds.push(p.pedido_id); }
+        else if (p.print_estado === 'AGUARDA_LOGISTICA' && p.canal_geral !== 'Mercado Livre') { aguardaLogZpl.push(`${p.numero} (${p.canal_geral})`); pend(p, 'etiqueta ainda não gerada no Bling — organize o envio e clique em Preparar agora'); }
+        else { foraDoAlvo.push(`${p.numero} ${cap(p.conta)}`); foraIds.push(p.pedido_id); pend(p, p.canal_geral === 'Mercado Livre' ? 'ML não entregou a etiqueta (veja a consulta abaixo)' : 'etiqueta não encontrada no Bling'); }
       }
 
       const blocos = []; const idsOk = []; const refsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo]; const programados = [];
@@ -1553,7 +1559,7 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
           // a etiqueta existia; quando falhava, saía NOTA ÓRFÃ e a esteira
           // física embaralhava os pares.
           const temEtiqueta = ehPdf ? !!pdf64 : !!zplDoPedido;
-          if (!temEtiqueta) { semEtiqueta.push(p.numero); continue; }
+          if (!temEtiqueta) { semEtiqueta.push(p.numero); pend(p, 'etiqueta não veio na hora de imprimir'); continue; }
           if (comDanfe) {
             // 24/08 (pedido dele): a DANFE RICA (REF · cor · tamanho, gerada do
             // XML) vale pra TODOS os canais — Shein incluida. O PDF bagunçado
@@ -1570,7 +1576,7 @@ ${q.por_empresa === '1' ? `^FO0,800^FB812,1,0,C^A0N,90,90^FD${String(p.conta).to
               blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplNum });
             }
             else if (dRes?.conteudo) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: dRes.conteudo });
-            else { semDanfe.push(p.numero); continue; }   // sem nota, etiqueta não sai sozinha
+            else { semDanfe.push(p.numero); pend(p, 'DANFE não disponível — nota sem PDF no Bling'); continue; }   // sem nota, etiqueta não sai sozinha
           }
           // 01/09 (pedido dele): no lote FLEX, cada logistica sai CASADA com a
           // etiqueta do produto — a logistica nao diz o que vai dentro.
@@ -1652,7 +1658,7 @@ ${linhasI}
           detalhe: { pares: idsOk.length, restantes, sem_danfe: semDanfe.length ? semDanfe : undefined, pedidos: idsOk },
         }).then?.(() => {}, () => {});
       }
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, aguardando_logistica: aguardaLogZpl, programados, restantes, ultimo_grupo: grupoAtual });
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, aguardando_logistica: aguardaLogZpl, programados, pendentes, restantes, ultimo_grupo: grupoAtual });
     }
 
     // ── marcar como impressas depois que a térmica confirmou

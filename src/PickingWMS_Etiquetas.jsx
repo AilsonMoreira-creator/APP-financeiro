@@ -365,6 +365,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       } catch { /* job é auditoria, não trava a impressão */ }
       let totalGeral = 0; let semDanfeTotal = []; let rodadas = 0;
       let semEtiquetaIdsTotal = []; // 02/09: pra perguntar ao ML no fim do lote
+      let pendentesTotal = [];       // 05/09: numero por numero, com motivo
       let sepCont = ''; // emenda da separadora: grupo cortado entre rodadas nao repete a folha
       while (rodadas < 40) {
         rodadas++;
@@ -468,6 +469,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         });
         semDanfeTotal = semDanfeTotal.concat(jL.sem_danfe || []);
         semEtiquetaIdsTotal = semEtiquetaIdsTotal.concat(jL.sem_etiqueta_ids || []);
+        pendentesTotal = pendentesTotal.concat(jL.pendentes || []);
+        setLote(prev => prev ? { ...prev, pendentes: pendentesTotal } : prev);
         if (!jL.restantes) break;
         setImprimindo(`Imprimindo em ${impressora}… ${totalGeral} enviadas, faltam ${jL.restantes}`);
       }
@@ -983,6 +986,24 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
                 );
               })}
               {lote.erro && <div style={{ fontSize: 12, color: '#c0392b', padding: '10px 4px' }}>⚠ {lote.erro}</div>}
+              {/* 05/09 (pedido dele): quem NAO saiu, numero por numero, com o motivo */}
+              {!!(lote.pendentes?.length) && (() => {
+                const vistos = new Set();
+                const lista = lote.pendentes.filter(p => { const k = `${p.conta}|${p.numero}`; if (vistos.has(k)) return false; vistos.add(k); return true; });
+                return (
+                  <div style={{ background: '#fdeaea', border: '1px solid #f4b8b8', borderRadius: 8, padding: '8px 10px', marginTop: 8 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#c0392b', marginBottom: 6 }}>✗ {lista.length} pedido(s) não saíram neste lote</div>
+                    {lista.map((p, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, color: '#2c3e50', padding: '3px 0', borderTop: i ? '1px solid #f8d6d6' : 'none' }}>
+                        <span style={{ fontWeight: 800, minWidth: 64 }}>{p.numero}</span>
+                        <span style={{ color: palette.inkMuted, minWidth: 130 }}>{p.canal} · {p.conta}</span>
+                        <span style={{ color: palette.inkMuted, minWidth: 70 }}>{p.loc && p.loc !== '—' ? `${p.loc} · ` : ''}REF {p.ref}</span>
+                        <span style={{ color: '#a05c1a', flex: 1 }}>{p.motivo}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               {!!(lote.aguardando?.length) && (
                 <div style={{ fontSize: 12, color: '#6a5a20', background: '#fbf7ea', border: '1px solid #ece2c2', borderRadius: 8, padding: '8px 10px', marginTop: 8 }}>
                   ⏳ <b>{lote.aguardando.length} pedido(s) aguardando logística</b> — o Bling ainda não liberou a etiqueta ({lote.aguardando.slice(0, 4).join(', ')}{lote.aguardando.length > 4 ? '…' : ''}). Não é falha de impressão: entram sozinhos quando a transportadora arranjar a coleta. Não entraram neste lote.
