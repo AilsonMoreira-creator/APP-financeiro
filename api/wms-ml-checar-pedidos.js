@@ -49,7 +49,10 @@ export default async function handler(req, res) {
     for (const p of alvo) {
       if (Date.now() - inicio > 100000) { semResposta.push({ numero: p.numero, motivo: 'tempo esgotado' }); continue; }
       try {
-        if (!(p.conta in tokens)) tokens[p.conta] = await getValidToken(p.conta).catch(() => null);
+        // 05/09: o token e guardado por brand capitalizada (Exitus/Lumia/Muniam);
+        // com a conta em minuscula vinha sempre "sem token da conta"
+        const brandDe = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
+        if (!(p.conta in tokens)) tokens[p.conta] = await getValidToken(brandDe[p.conta] || p.conta).catch(() => null);
         const tk = tokens[p.conta];
         if (!tk) { semResposta.push({ numero: p.numero, motivo: 'sem token da conta' }); continue; }
         const h = { Authorization: `Bearer ${tk}` };

@@ -821,7 +821,9 @@ export default async function handler(req, res) {
     // ignorado (o espelho do Bling cuida deles como sempre).
     if ((topic === 'orders_v2' || topic === 'orders' || topic === 'shipments') && resource) {
       try {
-        const { data: tokenRec } = await supabase.from('ml_tokens').select('brand').eq('seller_id', String(user_id)).single();
+        // 05/09: seller pode estar em 2 brands (Lumia/Muniam) — .single() quebrava
+        const { data: tokenRecs } = await supabase.from('ml_tokens').select('brand').eq('seller_id', String(user_id)).order('updated_at', { ascending: false }).limit(1);
+        const tokenRec = tokenRecs?.[0];
         if (!tokenRec) return res.status(200).json({ ignored: true, reason: 'unknown_seller' });
         const { registrarAgoraDeOrder, registrarAgoraDeShipment, aplicarShipmentNoEspelho, aplicarOrderNoEspelho } = await import('./_wms-agora.js');
         const id = String(resource).split('/').filter(Boolean).pop();

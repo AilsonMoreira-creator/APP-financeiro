@@ -17,7 +17,7 @@ export default async function handler(req, res) {
 
     // Identifica a marca pelo seller_id
     const { data: tokenRec } = await supabase
-      .from('ml_tokens').select('brand, seller_id').eq('seller_id', String(user_id)).single();
+      .from('ml_tokens').select('brand, seller_id').eq('seller_id', String(user_id)).order('updated_at', { ascending: false }).limit(1).maybeSingle();
     if (!tokenRec) return res.status(200).json({ ignored: true, reason: 'unknown_seller' });
 
     const brand = tokenRec.brand;

@@ -120,6 +120,15 @@ export async function saveToken(brand, tokenData) {
     updated_at: new Date().toISOString(),
   };
   await supabase.from('ml_tokens').upsert(record, { onConflict: 'brand' });
+  // 05/09 (Lumia caiu em PDF o dia todo): Lumia e Muniam estao autorizadas
+  // no MESMO seller do ML, e o ML rotaciona o refresh token — cada renovacao
+  // de uma matava a outra. Agora o par novo e propagado pros registros
+  // irmaos (mesmo seller_id), assim os dois seguem validos.
+  try {
+    await supabase.from('ml_tokens')
+      .update({ access_token: record.access_token, refresh_token: record.refresh_token, expires_at: record.expires_at, updated_at: record.updated_at })
+      .eq('seller_id', record.seller_id).neq('brand', brand);
+  } catch { /* melhor esforco */ }
   return record;
 }
 
