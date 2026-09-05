@@ -49,6 +49,13 @@ export function classificar(p, hojeBRT) {
     motivo: saiu ? 'já impresso' : 'fluxo Meluni',
   };
   if (full) return { regra: 'ML_FULL', nf: false, etiqueta: false, estado: 'PRONTO', motivo: 'Full: sai pelo armazém do ML' };
+  // 05/09 (Envios Agora, regra dele): SEM nota — casada do produto + logistica
+  // do ML pela aba propria. Sem isto o pedido ficava "aguardando NF" pra sempre.
+  if (p._agora) return {
+    regra: 'MELI_AGORA', nf: false, etiqueta: true,
+    estado: saiu ? 'IMPRESSO' : 'PRONTO',
+    motivo: saiu ? 'já impresso' : 'Envios Agora: 25 min pra embalar',
+  };
 
   if (agendado) {
     if (temNf && nfMorta) return { regra: 'MELI_AGENDADO', nf: true, etiqueta: false, estado: 'ERRO', motivo: rotuloMorta };
@@ -92,10 +99,17 @@ export default async function handler(req, res) {
   const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   try {
     const { data: peds } = await supabase.from('wms_pedidos')
-      .select('pedido_id, conta, canal_geral, canal_detalhe, ml_logistic_type, status_wms, nf_id, nf_situacao, ml_agendado_em, etiqueta_impressa_em, nf_agendada_impressa_em')
+      .select('pedido_id, conta, canal_geral, canal_detalhe, ml_logistic_type, status_wms, nf_id, nf_situacao, ml_agendado_em, etiqueta_impressa_em, nf_agendada_impressa_em, numero_loja')
       .neq('status_wms', 'cancelado')
       .gte('criado_em', new Date(Date.now() - 5 * 86400000).toISOString())
       .limit(2000);
+    // 05/09: pedidos que sao Envios Agora (wms_agora, webhook do ML)
+    const agoraSet = new Set();
+    try {
+      const { data: ag } = await supabase.from('wms_agora').select('conta, numero_loja').gte('ml_criado_em', new Date(Date.now() - 7 * 86400000).toISOString());
+      for (const a of (ag || [])) agoraSet.add(`${a.conta}|${a.numero_loja}`);
+      for (const p of (peds || [])) if (agoraSet.has(`${p.conta}|${p.numero_loja}`)) p._agora = true;
+    } catch { /* sem cruzamento */ }
 
     const contagem = {};
     const porEstado = {};
