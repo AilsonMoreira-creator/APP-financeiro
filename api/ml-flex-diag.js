@@ -15,6 +15,20 @@ export default async function handler(req, res) {
   // logistic_type, service, datas).
   // 04/09: ?agora_teste=NUMERO_LOJA&conta=x — passa o pedido pelo mesmo
   // registro do webhook (registrarAgoraDeOrder) e devolve o resultado.
+  // 05/09: ?quem=1 — testa o token de cada conta em /users/me (vale? de quem e?)
+  if (req.query?.quem === '1') {
+    const saida = {};
+    for (const [conta, brand] of Object.entries(BRAND)) {
+      try {
+        const { data: rec } = await supabase.from('ml_tokens').select('access_token, seller_id, updated_at').eq('brand', brand).maybeSingle();
+        if (!rec) { saida[conta] = { erro: 'sem registro' }; continue; }
+        const r = await fetch('https://api.mercadolibre.com/users/me', { headers: { Authorization: `Bearer ${rec.access_token}` } });
+        const j = await r.json().catch(() => ({}));
+        saida[conta] = { http: r.status, seller_id_banco: rec.seller_id, id_ml: j.id, nickname: j.nickname, erro: j.message || null, token_atualizado: rec.updated_at };
+      } catch (e) { saida[conta] = { erro: String(e?.message || e) }; }
+    }
+    return res.status(200).json(saida);
+  }
   if (req.query?.agora_teste) {
     try {
       const { registrarAgoraDeOrder } = await import('./_wms-agora.js');
