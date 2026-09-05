@@ -82,7 +82,7 @@ export default async function handler(req, res) {
       const headersPost = { ...headers, 'Content-Type': 'application/json' };
 
       const { data: peds } = await supabase.from('wms_pedidos')
-        .select('pedido_id, numero, canal_geral, ml_logistic_type, nf_id, status_wms')
+        .select('pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, nf_id, status_wms')
         .eq('conta', conta)
         .in('status_wms', ['aberto', 'em_separacao'])
         .is('nf_id', null)
@@ -97,7 +97,20 @@ export default async function handler(req, res) {
         if (Date.now() - inicio > 250000) { resumo.detalhe.push({ conta, aviso: 'tempo esgotado — continua na próxima rodada' }); break; }
         if (geradosNaConta >= limite) break;
 
-        // exclusões da operação: Full, Flex e Meluni não geram NF
+        // 05/09 (158670: Flex ganhou NF 17s depois de nascer no espelho, antes
+        // de alguem saber que era Flex): pedido do ML SEM tipo conhecido nao
+        // recebe nota as cegas — consulta o ML agora e classifica primeiro.
+        if (String(p.canal_geral || '') === 'Mercado Livre' && !p.ml_logistic_type && p.numero_loja) {
+          try {
+            const { hidratarPedidoMl } = await import('./_wms-agora.js');
+            const h = await hidratarPedidoMl(String(p.numero_loja), conta);
+            if (h?.logistic_type) p.ml_logistic_type = h.logistic_type;
+            if (h?.agora) { resumo.pulados++; continue; }   // Envios Agora: sem NF (regra dele)
+          } catch { /* sem resposta do ML: segue a regra abaixo */ }
+          // ainda sem tipo (ML fora, token, etc): NAO gera — proxima rodada tenta
+          if (!p.ml_logistic_type) { resumo.pulados++; resumo.sem_tipo_ml = (resumo.sem_tipo_ml || 0) + 1; continue; }
+        }
+        // exclusões da operação: Full, Flex, Envios Agora e Meluni não geram NF
         const flex = p.ml_logistic_type === 'self_service';
         const full = p.ml_logistic_type === 'fulfillment';
         const meluni = p.canal_geral === 'Meluni' || (conta === 'lumia' && p.canal_geral === 'Outros');

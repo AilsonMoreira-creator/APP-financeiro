@@ -196,7 +196,8 @@ export async function hidratarPedidoMl(numeroLoja, conta) {
     if (!sh) return { ok: false, motivo: 'shipment nao lido' };
     const r = await aplicarShipmentNoEspelho(sid, brand, sh);
     // Envios Agora tambem nasce aqui, se for o caso
-    if (ehEnviosAgora(sh)) await upsertAgora({ order, shipment: sh, brand }).catch(() => null);
-    return { ok: true, logistic_type: sh.logistic_type, ...r };
+    const agora = ehEnviosAgora(sh);
+    if (agora) await upsertAgora({ order, shipment: sh, brand }).catch(() => null);
+    return { ok: true, logistic_type: sh.logistic_type, agora, ...r };
   } catch (e) { return { ok: false, erro: String(e?.message || e) }; }
 }
