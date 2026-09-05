@@ -150,6 +150,8 @@ export async function aplicarShipmentNoEspelho(shipmentId, brand, shipmentJa) {
   const buffering = sh.shipping_option?.buffering?.date || null;
   const agendado = buffering ? String(buffering).slice(0, 10) : null;
   const upd = { ml_ship_status: sh.status || null, ml_ship_substatus: sh.substatus || null, ml_ship_checado_em: new Date().toISOString() };
+  // 05/09: tipo de logistica no primeiro sinal — Flex (self_service) vira Flex na hora
+  if (sh.logistic_type) upd.ml_logistic_type = sh.logistic_type;
   if (agendado) upd.ml_agendado_em = agendado;
   if (agendado || sh.substatus === 'buffered') upd.print_regra = 'MELI_AGENDADO';
   if (sh.status === 'cancelled') upd.status_wms = 'cancelado';
