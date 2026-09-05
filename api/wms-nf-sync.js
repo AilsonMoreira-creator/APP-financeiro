@@ -115,14 +115,27 @@ export default async function handler(req, res) {
       }
       for (const [sit, ids] of Object.entries(porSituacao)) {
         for (let i = 0; i < ids.length; i += 200) {
-          // 04/09: este cron so revarre notas em 5 no espelho — descobrir 6 aqui e
-          // transicao real: carimba nf_virou_6_em (base do "impressas hoje")
-          const upd = { nf_situacao: Number(sit), nf_checado_em: new Date().toISOString() };
-          if (Number(sit) === 6) upd.nf_virou_6_em = new Date().toISOString();
-          const { count } = await supabase.from('wms_pedidos')
-            .update(upd, { count: 'exact' })
-            .in('nf_id', ids.slice(i, i + 200));
-          r.situacoes_gravadas += count || 0;
+          // 05/09 (auditoria: 264 "impressas" as 09:20 num sabado): esta perna
+          // varre TODAS as notas da janela, inclusive as que JA eram 6 — o
+          // carimbo nf_virou_6_em so pode ir em quem esta MUDANDO pra 6
+          // (transicao real). Quem ja era 6 recebe so o nf_checado_em.
+          const fatia = ids.slice(i, i + 200);
+          const agoraIso = new Date().toISOString();
+          if (Number(sit) === 6) {
+            const { count: c1 } = await supabase.from('wms_pedidos')
+              .update({ nf_situacao: 6, nf_checado_em: agoraIso, nf_virou_6_em: agoraIso }, { count: 'exact' })
+              .in('nf_id', fatia).neq('nf_situacao', 6);
+            const { count: c2 } = await supabase.from('wms_pedidos')
+              .update({ nf_checado_em: agoraIso }, { count: 'exact' })
+              .in('nf_id', fatia).eq('nf_situacao', 6);
+            r.situacoes_gravadas += (c1 || 0) + (c2 || 0);
+            r.viraram_6 = (r.viraram_6 || 0) + (c1 || 0);
+          } else {
+            const { count } = await supabase.from('wms_pedidos')
+              .update({ nf_situacao: Number(sit), nf_checado_em: agoraIso }, { count: 'exact' })
+              .in('nf_id', fatia);
+            r.situacoes_gravadas += count || 0;
+          }
         }
       }
     }
