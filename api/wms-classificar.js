@@ -34,6 +34,11 @@ export function classificar(p, hojeBRT) {
   const nfPronta = sit === 5;
   const nfImpressa = sit === 6;
   const nfMorta = sit === 2 || sit === 4 || sit === 9 || sit === 11;
+  // 07/09 (varredura: 6 "ERRO" que eram cancelamentos certos): pedido
+  // cancelado na plataforma com a nota cancelada = estado final correto,
+  // nao e erro. ERRO fica so pro pedido ATIVO com nota morta.
+  const pedidoCancelado = p.ml_ship_status === 'cancelled' || p.status_wms === 'cancelado';
+  if (pedidoCancelado && sit === 2) return { regra: p.print_regra || 'NORMAL', nf: false, etiqueta: false, estado: 'CANCELADO', motivo: 'pedido e nota cancelados — nada a fazer' };
   const nfEmTransito = sit === 1 || sit === 8;
   const rotuloMorta = sit === 2 ? 'nota cancelada — precisa emitir outra'
     : sit === 4 ? 'nota rejeitada pela SEFAZ'
