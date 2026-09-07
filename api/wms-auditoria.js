@@ -47,13 +47,14 @@ export default async function handler(req, res) {
     if (p.ml_logistic_type === 'fulfillment') return 'full';
     if (p.ml_logistic_type === 'self_service') return 'flex';
     if (p.canal_geral === 'Meluni') return 'meluni';
-    if (p.etiqueta_impressa_em || p.nf_situacao === 6 || p.status_wms === 'finalizado') return 'ja_impressa';
+    // finalizado NAO exclui: o Bling marca atendido quando a NF nasce
+    if (p.etiqueta_impressa_em || p.nf_situacao === 6) return 'ja_impressa';
     return 'nf_transporte';
   };
 
   // ── BLING: notas autorizadas (sit 5) por conta ──
   for (const conta of contas) {
-    const c = { notas_autorizadas_bling: 0, no_app: { nf_transporte: 0, nf_agendada: 0, cancelados: 0, ja_impressa: 0, flex: 0, full: 0, meluni: 0, agendada_ja_impressa: 0 }, nao_encontradas_no_app: [], erro: null };
+    const c = { notas_autorizadas_bling: 0, fora_do_wms_sem_loja: 0, no_app: { nf_transporte: 0, nf_agendada: 0, cancelados: 0, ja_impressa: 0, flex: 0, full: 0, meluni: 0, agendada_ja_impressa: 0 }, nao_encontradas_no_app: [], erro: null };
     saida.bling.por_conta[conta] = c;
     try {
       const token = await refreshBlingToken(conta);
@@ -63,9 +64,11 @@ export default async function handler(req, res) {
         const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
         const lista = j?.data || [];
         for (const nf of lista) {
-          c.notas_autorizadas_bling++;
           const p = porNf.get(`${conta}|${nf.id}`);
-          if (!p) { c.nao_encontradas_no_app.push({ nf_id: nf.id, numero_nf: nf.numero, pedido: nf.numeroPedidoLoja || null, emissao: nf.dataEmissao }); continue; }
+          // nota sem loja (balcao/atacado da Exitus) nunca e do WMS — fica fora do comparavel
+          if (!p && !(nf.loja?.id)) { c.fora_do_wms_sem_loja++; continue; }
+          c.notas_autorizadas_bling++;
+          if (!p) { c.nao_encontradas_no_app.push({ nf_id: nf.id, numero_nf: nf.numero, loja_id: nf.loja?.id, pedido: nf.numeroPedidoLoja || null, emissao: nf.dataEmissao }); continue; }
           const chip = chipDe(p);
           c.no_app[chip] = (c.no_app[chip] || 0) + 1;
         }
@@ -86,7 +89,7 @@ export default async function handler(req, res) {
 
   // ── ML: ready_to_ship por conta → Flex / liberadas / agora ──
   for (const conta of contas) {
-    const c = { ready_to_ship_ml: 0, no_app: { flex: 0, etiqueta_liberada: 0, agora: 0, nf_transporte: 0, ja_impressa: 0, outro: 0 }, nao_encontrados_no_app: [], erro: null };
+    const c = { ready_to_ship_ml: 0, no_app: { flex: 0, etiqueta_liberada: 0, agora: 0, nf_transporte: 0, agendada_futura: 0, ja_impressa: 0, coletado_ou_painel: 0, outro: 0 }, nao_encontrados_no_app: [], erro: null };
     saida.ml.por_conta[conta] = c;
     try {
       const brand = BRAND[conta];
@@ -95,7 +98,8 @@ export default async function handler(req, res) {
       const h = { Authorization: `Bearer ${token}` };
       const vistos = new Set();
       for (let offset = 0; offset < 400; offset += 50) {
-        const r = await fetch(`https://api.mercadolibre.com/orders/search?seller=${tk?.seller_id}&shipping.status=ready_to_ship&sort=date_desc&limit=50&offset=${offset}`, { headers: h });
+        const dFrom = new Date(Date.now() - 10 * 86400000).toISOString();
+        const r = await fetch(`https://api.mercadolibre.com/orders/search?seller=${tk?.seller_id}&shipping.status=ready_to_ship&order.date_created.from=${encodeURIComponent(dFrom)}&sort=date_desc&limit=50&offset=${offset}`, { headers: h });
         if (!r.ok) { c.erro = `orders/search http ${r.status}`; break; }
         const j = await r.json().catch(() => ({}));
         const results = j?.results || [];
@@ -109,9 +113,13 @@ export default async function handler(req, res) {
           if (ag) { c.no_app.agora++; continue; }
           if (!p) { c.nao_encontrados_no_app.push({ pedido_ml: chave, data: o.date_created, status_envio: o.shipping?.status }); continue; }
           if (p.etiqueta_impressa_em) { c.no_app.ja_impressa++; continue; }
+          const sub = p.ml_ship_substatus || '';
           if (p.ml_logistic_type === 'self_service') c.no_app.flex++;
-          else if (p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) <= hojeBRT) c.no_app.etiqueta_liberada++;
-          else if (!p.ml_agendado_em) c.no_app.nf_transporte++;
+          else if (p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) > hojeBRT) c.no_app.agendada_futura++;
+          else if (p.ml_agendado_em && sub === 'ready_to_print') c.no_app.etiqueta_liberada++;
+          else if (p.ml_agendado_em) c.no_app.coletado_ou_painel++;          // in_hub, ready_for_pickup, printed...
+          else if (!p.ml_agendado_em && sub === 'ready_to_print') c.no_app.nf_transporte++;
+          else if (!p.ml_agendado_em) c.no_app.coletado_ou_painel++;
           else c.no_app.outro++;
         }
         if (results.length < 50) break;
