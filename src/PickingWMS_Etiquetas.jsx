@@ -63,6 +63,13 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const [selRefs, setSelRefs] = useState([]);
   const [comSep, setComSep] = useState(true);   // 25/08 (ordem dele): separadora de REF, ligada por padrao
   const [comInfo, setComInfo] = useState(true); // 01/09 (pedido dele): folha de informacoes do lote, ligada por padrao
+  // 07/09 (pedido dele): auditoria dos chips contra Bling e ML
+  const [auditoria, setAuditoria] = useState(null);   // null | 'rodando' | resultado
+  const auditar = async () => {
+    setAuditoria('rodando');
+    try { const r = await fetch(`${API}/wms-auditoria?contas=${encodeURIComponent(fConta === 'todas' ? 'exitus,lumia,muniam' : fConta)}`); setAuditoria(await r.json()); }
+    catch (e) { setAuditoria({ erro: String(e?.message || e) }); }
+  };
   // 03/09 (pedido dele): busca de pedido (nº Bling ou nº marketplace)
   const [buscaPed, setBuscaPed] = useState('');
   const [buscados, setBuscados] = useState(null);   // null = sem busca; [] = nada achado
@@ -753,6 +760,69 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
           <Printer size={16} /> Testar QZ
         </button>
+        <button onClick={auditar} disabled={auditoria === 'rodando'}
+          title="Confere os chips contra as fontes: Bling (notas autorizadas = NF+transporte + agendadas + cancelados) e Mercado Livre (Flex, liberadas, Envios Agora). Só leitura, ~1 min."
+          style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
+          🔍 {auditoria === 'rodando' ? 'Auditando…' : 'Auditar'}
+        </button>
+        {auditoria && auditoria !== 'rodando' && (() => {
+          const a = auditoria;
+          const soma = (o, ks) => ks.reduce((t, k) => t + Number(o?.[k] || 0), 0);
+          const linha = (label, v, ok) => (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '4px 0', color: palette.ink }}>
+              <span>{label}</span><b style={{ color: ok === undefined ? palette.ink : ok ? palette.ok : '#c0392b' }}>{v}</b>
+            </div>
+          );
+          return (
+            <div onClick={() => setAuditoria(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+              <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 18, width: 'min(680px, 96vw)', maxHeight: '88vh', overflow: 'auto', fontFamily: FONT }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>🔍 Auditoria — chips × Bling × Mercado Livre</div>
+                <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 12 }}>Notas autorizadas no Bling desde {a.janela_desde} · prontos no ML nos últimos 10 dias · {a.segundos}s</div>
+                {a.erro && <div style={{ color: '#c0392b', fontSize: 13 }}>⚠ {a.erro}</div>}
+                {a.bling && (
+                  <div style={{ border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: palette.ink, marginBottom: 6 }}>Bling — NF autorizadas (situação 5)</div>
+                    {Object.entries(a.bling.por_conta).map(([conta, c]) => {
+                      const app = soma(c.no_app, ['nf_transporte', 'nf_agendada', 'cancelados', 'agendado_dia_chegou']);
+                      const fora = Object.values(c.por_loja_fora_do_app || {}).reduce((t, n) => t + n, 0);
+                      const bate = c.notas_autorizadas_bling - fora === app;
+                      return (
+                        <div key={conta} style={{ padding: '6px 0', borderTop: `1px solid #f0ece6` }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 800, color: palette.accent, textTransform: 'capitalize' }}>{conta} {c.erro ? <span style={{ color: '#c0392b', fontWeight: 400 }}>· {c.erro}</span> : ''}</div>
+                          {linha('No Bling (autorizadas)', c.notas_autorizadas_bling)}
+                          {linha('No app: NF+transporte + agendadas + cancelados + liberadas do dia', app, bate)}
+                          {fora > 0 && linha(`Fora do WMS (loja ${Object.keys(c.por_loja_fora_do_app).join(', ')})`, fora)}
+                          {!bate && linha('Diferença', c.notas_autorizadas_bling - fora - app, false)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {a.ml && (
+                  <div style={{ border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: palette.ink, marginBottom: 6 }}>Mercado Livre — prontos pra sair (ready_to_ship)</div>
+                    {Object.entries(a.ml.por_conta).map(([conta, c]) => (
+                      <div key={conta} style={{ padding: '6px 0', borderTop: `1px solid #f0ece6` }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: palette.accent, textTransform: 'capitalize' }}>{conta} {c.erro ? <span style={{ color: '#c0392b', fontWeight: 400 }}>· {c.erro}</span> : ''}</div>
+                        {linha('⚡ Flex a imprimir', c.no_app.flex, c.no_app.flex === Number(contadores?.flex || 0) || fConta !== 'todas' ? undefined : undefined)}
+                        {linha('🏷 Etiquetas liberadas (ready_to_print)', c.no_app.etiqueta_liberada)}
+                        {linha('⚡ Envios Agora abertos', c.no_app.agora)}
+                        {linha('NF+transporte (ML normal a imprimir)', c.no_app.nf_transporte)}
+                        {linha('Agendadas futuras (esperando o dia)', c.no_app.agendada_futura)}
+                        {linha('Já impressas / coletadas / no hub', Number(c.no_app.ja_impressa || 0) + Number(c.no_app.coletado_ou_painel || 0))}
+                        {c.nao_encontrados_no_app?.length > 0 && (
+                          <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>⚠ {c.nao_encontrados_no_app.length} pronto(s) no ML que o app não tem: {c.nao_encontrados_no_app.map(x => x.pedido_ml).join(', ')}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 6 }}>Chips agora: NF+transporte {contadores?.nf_transporte ?? '—'} · Flex {contadores?.flex ?? '—'} · Agendadas {contadores?.nf_agendada ?? '—'} · Liberadas {contadores?.etiqueta_liberada ?? '—'} · Agora {contadores?.agora ?? '—'} · Cancelados {contadores?.cancelados ?? '—'}</div>
+                <button onClick={() => setAuditoria(null)} style={{ marginTop: 12, width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: palette.ink, color: '#fff', fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Fechar</button>
+              </div>
+            </div>
+          );
+        })()}
         <button onClick={() => setModalCert(true)}
           title="Instalar o certificado do QZ e liberar o Chrome nesta máquina"
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>

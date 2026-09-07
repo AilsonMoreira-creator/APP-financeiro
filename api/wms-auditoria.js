@@ -43,6 +43,8 @@ export default async function handler(req, res) {
     // mesma leitura dos chips da tela (simplificada; a régua oficial é a do wms-etiquetas)
     if (p.ml_ship_status === 'cancelled' || p.status_wms === 'cancelado') return 'cancelados';
     const agendadoFuturo = p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) > hojeBRT;
+    const agendadoChegou = p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) <= hojeBRT;
+    if (agendadoChegou) return p.etiqueta_impressa_em ? 'ja_impressa' : 'agendado_dia_chegou';
     if (p.print_regra === 'MELI_AGENDADO' || agendadoFuturo || p.ml_ship_substatus === 'buffered') return p.nf_agendada_impressa_em ? 'agendada_ja_impressa' : 'nf_agendada';
     if (p.ml_logistic_type === 'fulfillment') return 'full';
     if (p.ml_logistic_type === 'self_service') return 'flex';
@@ -54,7 +56,7 @@ export default async function handler(req, res) {
 
   // ── BLING: notas autorizadas (sit 5) por conta ──
   for (const conta of contas) {
-    const c = { notas_autorizadas_bling: 0, fora_do_wms_sem_loja: 0, no_app: { nf_transporte: 0, nf_agendada: 0, cancelados: 0, ja_impressa: 0, flex: 0, full: 0, meluni: 0, agendada_ja_impressa: 0 }, nao_encontradas_no_app: [], erro: null };
+    const c = { notas_autorizadas_bling: 0, fora_do_wms_sem_loja: 0, no_app: { nf_transporte: 0, nf_agendada: 0, cancelados: 0, ja_impressa: 0, flex: 0, full: 0, meluni: 0, agendada_ja_impressa: 0, agendado_dia_chegou: 0 }, nao_encontradas_no_app: [], por_loja_fora_do_app: {}, erro: null };
     saida.bling.por_conta[conta] = c;
     try {
       const token = await refreshBlingToken(conta);
@@ -68,7 +70,12 @@ export default async function handler(req, res) {
           // nota sem loja (balcao/atacado da Exitus) nunca e do WMS — fica fora do comparavel
           if (!p && !(nf.loja?.id)) { c.fora_do_wms_sem_loja++; continue; }
           c.notas_autorizadas_bling++;
-          if (!p) { c.nao_encontradas_no_app.push({ nf_id: nf.id, numero_nf: nf.numero, loja_id: nf.loja?.id, pedido: nf.numeroPedidoLoja || null, emissao: nf.dataEmissao }); continue; }
+          if (!p) {
+            const lj = String(nf.loja?.id || 'sem_loja');
+            c.por_loja_fora_do_app[lj] = (c.por_loja_fora_do_app[lj] || 0) + 1;
+            if (c.nao_encontradas_no_app.length < 5) c.nao_encontradas_no_app.push({ nf_id: nf.id, numero_nf: nf.numero, loja_id: nf.loja?.id, emissao: nf.dataEmissao });
+            continue;
+          }
           const chip = chipDe(p);
           c.no_app[chip] = (c.no_app[chip] || 0) + 1;
         }
@@ -76,8 +83,8 @@ export default async function handler(req, res) {
         await espera(400);
       }
       saida.bling.total_bling += c.notas_autorizadas_bling;
-      saida.bling.total_app += c.no_app.nf_transporte + c.no_app.nf_agendada + c.no_app.cancelados;
-      for (const x of c.nao_encontradas_no_app) saida.bling.diferencas.push({ conta, ...x, motivo: 'nota autorizada no Bling que o app não tem no espelho' });
+      saida.bling.total_app += c.no_app.nf_transporte + c.no_app.nf_agendada + c.no_app.cancelados + c.no_app.agendado_dia_chegou;
+      for (const [lj, n] of Object.entries(c.por_loja_fora_do_app)) saida.bling.diferencas.push({ conta, loja_id: lj, notas: n, motivo: 'notas autorizadas no Bling que o app não tem no espelho (loja fora do WMS?)' });
       // notas que o app tem em sit 5 mas o Bling nao listou (impressa/cancelada por fora, ou fora da janela)
       for (const p of (peds || [])) {
         if (p.conta !== conta || p.nf_situacao !== 5 || p.etiqueta_impressa_em) continue;
