@@ -74,6 +74,12 @@ export default async function handler(req, res) {
       return res.status(200).json(out);
     }
 
+    // 07/09: ?loja=ID — nome da loja/integracao no Bling (auditoria: "fora do WMS")
+    if (req.query?.loja) {
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/lojas/${req.query.loja}`, headers);
+      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+      return res.status(200).json({ http: r.status, loja: j?.data || j });
+    }
     // 04/09 (34 Shopee "sem etiqueta" com a Shopee dizendo tudo certo):
     // ?etiqueta=1&pedido_id=X — o que o Bling responde HOJE pra esse pedido:
     // detalhe (transporte/volumes) + a rota de etiquetas, cru.
