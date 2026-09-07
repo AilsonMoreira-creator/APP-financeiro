@@ -791,6 +791,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
                           <div style={{ fontSize: 12.5, fontWeight: 800, color: palette.accent, textTransform: 'capitalize' }}>{conta} {c.erro ? <span style={{ color: '#c0392b', fontWeight: 400 }}>· {c.erro}</span> : ''}</div>
                           {linha('No Bling (autorizadas)', c.notas_autorizadas_bling)}
                           {linha('No app: NF+transporte + agendadas + cancelados + liberadas do dia', app, bate)}
+                          {(c.full_fora_do_wms || 0) > 0 && linha('Full (nota contra o ML — fora do WMS)', c.full_fora_do_wms)}
                           {fora > 0 && linha(`Fora do WMS (loja ${Object.keys(c.por_loja_fora_do_app).join(', ')})`, fora)}
                           {!bate && linha('Diferença', c.notas_autorizadas_bling - fora - app, false)}
                         </div>

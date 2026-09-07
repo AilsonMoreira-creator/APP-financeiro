@@ -67,8 +67,12 @@ export default async function handler(req, res) {
         const lista = j?.data || [];
         for (const nf of lista) {
           const p = porNf.get(`${conta}|${nf.id}`);
-          // nota sem loja (balcao/atacado da Exitus) nunca e do WMS — fica fora do comparavel
+          // nota sem loja (balcao/atacado) nunca e do WMS — fica fora do comparavel
           if (!p && !(nf.loja?.id)) { c.fora_do_wms_sem_loja++; continue; }
+          // 07/09: nota emitida CONTRA o Mercado Livre (EBAZAR, CNPJ 03007331) e
+          // venda FULL — o ML despacha do armazem dele; nunca passa pelo WMS
+          const docContato = String(nf.contato?.numeroDocumento || '').replace(/\D/g, '');
+          if (!p && (docContato.startsWith('03007331') || /ebazar/i.test(nf.contato?.nome || ''))) { c.full_fora_do_wms = (c.full_fora_do_wms || 0) + 1; continue; }
           c.notas_autorizadas_bling++;
           if (!p) {
             const lj = String(nf.loja?.id || 'sem_loja');
@@ -118,7 +122,17 @@ export default async function handler(req, res) {
           const p = porLoja.get(`${conta}|${chave}`);
           const { data: ag } = await supabase.from('wms_agora').select('id, atendido_em').eq('conta', conta).eq('numero_loja', chave).maybeSingle();
           if (ag) { c.no_app.agora++; continue; }
-          if (!p) { c.nao_encontrados_no_app.push({ pedido_ml: chave, data: o.date_created, status_envio: o.shipping?.status }); continue; }
+          if (!p) {
+            // 07/09: confere no ML antes de acusar — pack dividido, nao pago,
+            // cancelado e Full nao sao pendencia do WMS
+            const tags = Array.isArray(o.tags) ? o.tags : [];
+            if (tags.includes('not_paid') || o.status === 'cancelled') { c.lixo_ml = (c.lixo_ml || 0) + 1; continue; }
+            let sh = null;
+            try { const rs = await fetch(`https://api.mercadolibre.com/shipments/${o.shipping?.id}`, { headers: h }); sh = rs.ok ? await rs.json() : null; } catch { sh = null; }
+            if (!sh || sh.status === 'cancelled' || sh.logistic_type === 'fulfillment' || sh.substatus === 'pack_splitted') { c.lixo_ml = (c.lixo_ml || 0) + 1; continue; }
+            c.nao_encontrados_no_app.push({ pedido_ml: chave, data: o.date_created, status_envio: sh.status, substatus: sh.substatus, logistica: sh.logistic_type });
+            continue;
+          }
           if (p.etiqueta_impressa_em) { c.no_app.ja_impressa++; continue; }
           const sub = p.ml_ship_substatus || '';
           if (p.ml_logistic_type === 'self_service') c.no_app.flex++;
