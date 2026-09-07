@@ -153,7 +153,8 @@ export async function aplicarShipmentNoEspelho(shipmentId, brand, shipmentJa) {
   // 05/09: tipo de logistica no primeiro sinal — Flex (self_service) vira Flex na hora
   if (sh.logistic_type) upd.ml_logistic_type = sh.logistic_type;
   if (agendado) upd.ml_agendado_em = agendado;
-  if (agendado || sh.substatus === 'buffered') upd.print_regra = 'MELI_AGENDADO';
+  // 07/09 (158551): Full traz data de agendamento interna — nao e agendado nosso
+  if ((agendado || sh.substatus === 'buffered') && sh.logistic_type !== 'fulfillment') upd.print_regra = 'MELI_AGENDADO';
   if (sh.status === 'cancelled') upd.status_wms = 'cancelado';
   const { data } = await supabase.from('wms_pedidos').update(upd).eq('conta', conta).in('numero_loja', numeros).select('pedido_id');
   return { ok: true, atualizados: (data || []).length, agendado, status: sh.status, substatus: sh.substatus };
