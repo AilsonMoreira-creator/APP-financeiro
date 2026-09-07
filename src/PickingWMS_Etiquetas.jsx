@@ -186,16 +186,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       setTimeout(() => setPreparo(null), 6000);
       return;
     }
-    setPreparo({ rodando: true, msg: auto ? 'conferindo se falta preparar alguma etiqueta…' : 'buscando as notas novas no Bling…' });
-    // 02/09 (pedido dele: "preparar procura as lacunas"): o clique manual
-    // tambem dispara, em segundo plano, a checagem dos agendados no ML —
-    // agendado do dia ainda nao liberado e pedido recente sem data vao
-    // primeiro na varredura. Nao segura o preparo; os chips recarregam no
-    // proximo carregar (o sync leva 1-2 min).
-    if (!auto) {
-      fetch(`${API}/wms-ml-agenda-sync?contas=exitus,lumia,muniam&limite=10`, { keepalive: true })
-        .then(() => { try { carregar(); } catch { /* callback antigo */ } }).catch(() => {});
-    }
+    setPreparo({ rodando: true, msg: auto ? 'conferindo se falta preparar alguma etiqueta…' : '1/5 buscando pedidos novos no Bling…' });
     // 18/08: nota gerada à mão no Bling não aparecia até o cron de 10 min
     // rodar. Agora o preparo puxa a cadeia inteira: situação das notas →
     // classificação → busca das etiquetas.
@@ -209,16 +200,25 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       // o pedido novo em ate 2 min — o espelho ja chega pronto. Os crons
       // (bling-cron 20/20min, wms-nf-sync) seguem como rede de seguranca; o
       // botao "Preparar agora" continua podendo varrer sob demanda (auto=false).
+      // 07/09 (pedido dele): o clique e a VARREDURA GERAL — cada etapa e
+      // esperada de verdade (pode levar uns 5 min de manha), pra garantir que
+      // toda nota esta na aba certa e Flex / liberadas / agendadas foram
+      // confirmados na API do ML antes de classificar.
       if (!auto) {
-        setPreparo({ rodando: true, msg: 'buscando pedidos novos no Bling…' });
-        const varredura = Promise.all(['exitus', 'lumia', 'muniam'].map(c =>
-          fetch(`${API}/wms-sync?conta=${c}&dias=2`).catch(() => {})));
-        await Promise.race([varredura, new Promise(r => setTimeout(r, 25000))]);
+        setPreparo({ rodando: true, msg: '1/5 buscando pedidos novos no Bling (3 contas)…' });
+        await Promise.all(['exitus', 'lumia', 'muniam'].map(c => fetch(`${API}/wms-sync?conta=${c}&dias=3`).catch(() => {})));
+        setPreparo({ rodando: true, msg: '2/5 conferindo situação das notas no Bling…' });
+        await fetch(`${API}/wms-nf-sync?dias=3`).catch(() => {});
+        setPreparo({ rodando: true, msg: '3/5 confirmando Flex, liberadas e agendadas na API do Mercado Livre…' });
+        await fetch(`${API}/wms-ml-agenda-sync?contas=exitus,lumia,muniam&limite=150`).catch(() => {});
+        setPreparo({ rodando: true, msg: '4/5 classificando cada pedido na aba certa…' });
+        await fetch(`${API}/wms-classificar`).catch(() => {});
+      } else {
+        await fetch(`${API}/wms-nf-sync?dias=2`);
+        await fetch(`${API}/wms-classificar`);
       }
-      await fetch(`${API}/wms-nf-sync?dias=2`);
-      await fetch(`${API}/wms-classificar`);
     } catch { /* segue: o preparo ainda tenta o que dá */ }
-    setPreparo({ rodando: true, msg: 'preparando etiquetas…' });
+    setPreparo({ rodando: true, msg: auto ? 'preparando etiquetas…' : '5/5 preparando etiquetas…' });
     let voltas = 0, prontos = 0;
     try {
       while (voltas < 6) {
@@ -816,9 +816,9 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           </button>
         )}
         <button onClick={() => prepararLote(false)} disabled={preparo?.rodando}
-          title="Busca agora as etiquetas que ainda não foram preparadas (a Shein só é buscada no clique de imprimir)"
+          title="VARREDURA GERAL (uns 5 min de manhã): pedidos novos no Bling → situação das notas → Flex/liberadas/agendadas confirmados na API do ML → classificação → etiquetas preparadas. Garante que tudo está na aba certa. (A Shein só é buscada no clique de imprimir.)"
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: preparo?.rodando ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700, opacity: preparo?.rodando ? .6 : 1 }}>
-          <RefreshCw size={16} /> Preparar agora
+          <RefreshCw size={16} /> Varredura geral
         </button>
         <button onClick={() => abrirPdf(`${API}/wms-etiquetas?${qs({ previa_pdf: '1' })}`)}
           title="PDF de conferência com a sequência que vai sair (DANFE + etiquetas). Não puxa nada do marketplace: a Shein aparece como página 'Shein logística' e só é buscada na impressão de verdade."
