@@ -74,6 +74,15 @@ export default async function handler(req, res) {
       return res.status(200).json(out);
     }
 
+    // 07/09: ?nf=ID — resumo de uma NF (contato, natureza, loja, pedido) sem itens
+    if (req.query?.nf) {
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${req.query.nf}`, headers);
+      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+      const d = j?.data || {};
+      return res.status(200).json({ http: r.status, numero: d.numero, emissao: d.dataEmissao, situacao: d.situacao, tipo: d.tipo,
+        contato: { nome: d.contato?.nome, documento: d.contato?.numeroDocumento, uf: d.contato?.endereco?.uf }, natureza: d.naturezaOperacao?.id,
+        loja: d.loja, numeroPedidoLoja: d.numeroPedidoLoja, valor: d.valorNota, qtd_itens: (d.itens || []).length, transporte: d.transporte?.transportador?.nome || null });
+    }
     // 07/09: ?loja=ID — nome da loja/integracao no Bling (auditoria: "fora do WMS")
     if (req.query?.loja) {
       const r = await blingFetch(`https://api.bling.com.br/Api/v3/lojas/${req.query.loja}`, headers);
