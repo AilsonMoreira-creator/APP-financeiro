@@ -150,6 +150,22 @@ export default async function handler(req, res) {
     } catch (e) { c.erro = String(e?.message || e); }
   }
 
+  // ── 07/09 (pedido dele): RESUMO por conta + total geral, pronto pra folha A4 ──
+  const resumo = { por_conta: {}, total: { nf_aguardando: 0, nf_transporte: 0, agendadas: 0, cancelados: 0, flex: 0, agora: 0, liberadas: 0, meluni: 0, total: 0 } };
+  for (const conta of contas) {
+    const b = saida.bling.por_conta[conta]?.no_app || {};
+    const m = saida.ml.por_conta[conta]?.no_app || {};
+    const meluni = conta === 'lumia' ? (peds || []).filter(p => p.conta === 'lumia' && p.canal_geral === 'Meluni' && !p.etiqueta_impressa_em && p.status_wms !== 'cancelado' && p.status_wms !== 'finalizado').length : 0;
+    const r = {
+      nf_transporte: b.nf_transporte || 0, agendadas: b.nf_agendada || 0, cancelados: b.cancelados || 0,
+      nf_aguardando: (b.nf_transporte || 0) + (b.nf_agendada || 0) + (b.cancelados || 0),
+      flex: m.flex || 0, agora: m.agora || 0, liberadas: m.etiqueta_liberada || 0, meluni,
+    };
+    r.total = r.nf_aguardando + r.flex + r.agora + r.liberadas + r.meluni;
+    resumo.por_conta[conta] = r;
+    for (const k of Object.keys(resumo.total)) resumo.total[k] += r[k] || 0;
+  }
+  saida.resumo = resumo;
   saida.segundos = Math.round((Date.now() - inicio) / 1000);
   return res.status(200).json(saida);
 }

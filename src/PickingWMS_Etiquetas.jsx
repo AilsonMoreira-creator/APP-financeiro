@@ -65,6 +65,66 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const [comInfo, setComInfo] = useState(true); // 01/09 (pedido dele): folha de informacoes do lote, ligada por padrao
   // 07/09 (pedido dele): auditoria dos chips contra Bling e ML
   const [auditoria, setAuditoria] = useState(null);   // null | 'rodando' | resultado
+  // 07/09 (pedido dele): folha A4 do resumo — abre pra imprimir / salvar em PDF
+  const gerarPdfAuditoria = (a) => {
+    if (!a?.resumo) return;
+    const R = a.resumo, NOME = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
+    const agora = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const bloco = (conta, r) => `
+      <div class="conta">
+        <div class="ct">Bling ${NOME[conta] || conta}</div>
+        <div class="l big"><span>${r.nf_aguardando}</span> pedidos com NF gerada aguardando impressão</div>
+        <div class="sub">(NF + transporte ${r.nf_transporte}) + (Agendadas ${r.agendadas}) + (Canceladas ${r.cancelados})</div>
+        <div class="l"><span>${r.flex}</span> pedidos Flex</div>
+        <div class="l"><span>${r.agora}</span> pedidos Envios Agora</div>
+        <div class="l"><span>${r.liberadas}</span> etiquetas liberadas (agendados do dia)</div>
+        ${conta === 'lumia' ? `<div class="l"><span>${r.meluni}</span> Meluni</div>` : ''}
+        <div class="tot">Total ${NOME[conta] || conta}: <b>${r.total}</b></div>
+      </div>`;
+    const T = R.total;
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Auditoria de impressão — ${agora}</title>
+      <style>
+        @page { size: A4; margin: 14mm; }
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1f2d3a; margin: 0; }
+        h1 { font-size: 20px; margin: 0 0 2px; } .meta { font-size: 11px; color: #6b7c8a; margin-bottom: 12px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .conta { border: 1px solid #d8e2ea; border-radius: 8px; padding: 10px 12px; }
+        .ct { font-size: 14px; font-weight: 800; color: #2c5f8a; margin-bottom: 6px; }
+        .l { font-size: 12px; margin: 3px 0; } .l span { display: inline-block; min-width: 34px; font-weight: 800; font-size: 14px; text-align: right; margin-right: 6px; }
+        .big span { font-size: 18px; } .sub { font-size: 10.5px; color: #6b7c8a; margin: -2px 0 6px 40px; }
+        .tot { border-top: 1px solid #e2e8ee; margin-top: 8px; padding-top: 6px; font-size: 12.5px; }
+        .geral { margin-top: 12px; border: 2px solid #2c5f8a; border-radius: 8px; padding: 10px 14px; }
+        .geral .ct { font-size: 15px; } .geral .row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; border-bottom: 1px dashed #e2e8ee; }
+        .geral .row b { font-size: 15px; } .geral .final { font-size: 16px; font-weight: 900; margin-top: 6px; display: flex; justify-content: space-between; }
+        .leg { margin-top: 12px; font-size: 10.5px; color: #4a5a68; line-height: 1.45; border-top: 1px solid #e2e8ee; padding-top: 8px; }
+        .leg b { color: #1f2d3a; }
+        .ok { color: #1e8e4e; font-weight: 800; } .bad { color: #c0392b; font-weight: 800; }
+      </style></head><body>
+      <h1>🔍 Auditoria de impressão — WMS</h1>
+      <div class="meta">Gerado em ${agora} · Notas autorizadas no Bling desde ${a.janela_desde} · Prontos no Mercado Livre nos últimos 10 dias</div>
+      <div class="grid">${['exitus', 'lumia', 'muniam'].filter(c => R.por_conta[c]).map(c => bloco(c, R.por_conta[c])).join('')}</div>
+      <div class="geral">
+        <div class="ct">Total geral</div>
+        <div class="row"><span>(NF + transporte) + Agendadas + Canceladas — NF gerada aguardando impressão</span><b>${T.nf_aguardando}</b></div>
+        <div class="row"><span>Flex</span><b>${T.flex}</b></div>
+        <div class="row"><span>Envios Agora</span><b>${T.agora}</b></div>
+        <div class="row"><span>Etiquetas liberadas</span><b>${T.liberadas}</b></div>
+        <div class="row"><span>Meluni</span><b>${T.meluni}</b></div>
+        <div class="final"><span>TOTAL A IMPRIMIR</span><span>${T.total}</span></div>
+      </div>
+      <div class="leg">
+        <b>Conferência Bling:</b> ${a.bling?.total_bling ?? '—'} notas autorizadas no Bling × ${a.bling?.total_app ?? '—'} no app —
+        <span class="${(a.bling?.total_bling === a.bling?.total_app) ? 'ok' : 'bad'}">${(a.bling?.total_bling === a.bling?.total_app) ? 'BATE' : 'DIFERENÇA de ' + Math.abs((a.bling?.total_bling || 0) - (a.bling?.total_app || 0))}</span>.
+        Notas do Full (emitidas contra o Mercado Livre) ficam fora: o armazém do ML despacha.<br/>
+        <b>Como conferir no Bling:</b> Notas fiscais → filtro Situação "Autorizada" desde ${a.janela_desde} — o total (menos as do Full) tem que ser igual a NF+transporte + Agendadas + Canceladas + Etiquetas liberadas.<br/>
+        <b>Como conferir no Mercado Livre:</b> Vendas → Envios → "Prontos para enviar": Flex = envios Flex a imprimir; Etiquetas liberadas = agendados do dia com etiqueta liberada; Envios Agora = modalidade de 25 minutos.<br/>
+        <b>NF + transporte</b> sai nota + etiqueta em par. <b>Agendadas</b> sai só a nota (etiqueta no dia, em Liberadas). <b>Canceladas</b> = nota viva de pedido cancelado — cancelar no Bling. <b>Flex / Envios Agora</b> = etiqueta do produto casada com a logística do ML, sem nota. <b>Meluni</b> = fluxo próprio.
+      </div>
+      <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
+      </body></html>`;
+    const w = window.open('', '_blank'); if (!w) { alert('Libere pop-ups pra gerar o PDF.'); return; }
+    w.document.write(html); w.document.close();
+  };
   const auditar = async () => {
     setAuditoria('rodando');
     try { const r = await fetch(`${API}/wms-auditoria?contas=${encodeURIComponent(fConta === 'todas' ? 'exitus,lumia,muniam' : fConta)}`); setAuditoria(await r.json()); }
@@ -818,6 +878,36 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
                     ))}
                   </div>
                 )}
+                {a.resumo && (() => {
+                  const R = a.resumo, T = R.total, NOME = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
+                  const lin = (label, v, forte) => (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: forte ? 13.5 : 12.5, padding: '3px 0', color: palette.ink }}><span>{label}</span><b>{v}</b></div>
+                  );
+                  return (
+                    <div style={{ border: `2px solid ${palette.accent}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink }}>📋 Resumo</div>
+                        <button onClick={() => gerarPdfAuditoria(a)} style={{ marginLeft: 'auto', border: `1px solid ${palette.beige}`, background: '#fff', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 800, color: palette.accent, cursor: 'pointer', fontFamily: FONT }}>📄 Gerar PDF (A4)</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+                        {['exitus', 'lumia', 'muniam'].filter(c => R.por_conta[c]).map(c => { const r = R.por_conta[c]; return (
+                          <div key={c} style={{ border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '8px 10px' }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 800, color: palette.accent, marginBottom: 4 }}>Bling {NOME[c]}</div>
+                            {lin('NF gerada aguardando impressão', r.nf_aguardando, true)}
+                            <div style={{ fontSize: 10.5, color: palette.inkMuted, marginBottom: 4 }}>NF+transporte {r.nf_transporte} · Agendadas {r.agendadas} · Canceladas {r.cancelados}</div>
+                            {lin('Flex', r.flex)}{lin('Envios Agora', r.agora)}{lin('Etiquetas liberadas', r.liberadas)}{c === 'lumia' && lin('Meluni', r.meluni)}
+                            <div style={{ borderTop: `1px solid ${palette.beige}`, marginTop: 4, paddingTop: 4 }}>{lin('Total', r.total, true)}</div>
+                          </div>); })}
+                      </div>
+                      <div style={{ marginTop: 10, background: palette.accentSoft, borderRadius: 8, padding: '8px 12px' }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>Total geral</div>
+                        {lin('(NF + transporte) + Agendadas + Canceladas', T.nf_aguardando, true)}
+                        {lin('Flex', T.flex)}{lin('Envios Agora', T.agora)}{lin('Etiquetas liberadas', T.liberadas)}{lin('Meluni', T.meluni)}
+                        <div style={{ borderTop: `1px solid ${palette.beige}`, marginTop: 4, paddingTop: 4 }}>{lin('TOTAL A IMPRIMIR', T.total, true)}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 6 }}>Chips agora: NF+transporte {contadores?.nf_transporte ?? '—'} · Flex {contadores?.flex ?? '—'} · Agendadas {contadores?.nf_agendada ?? '—'} · Liberadas {contadores?.etiqueta_liberada ?? '—'} · Agora {contadores?.agora ?? '—'} · Cancelados {contadores?.cancelados ?? '—'}</div>
                 <button onClick={() => setAuditoria(null)} style={{ marginTop: 12, width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: palette.ink, color: '#fff', fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Fechar</button>
               </div>
