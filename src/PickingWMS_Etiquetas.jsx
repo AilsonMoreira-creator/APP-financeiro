@@ -127,7 +127,17 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   };
   const auditar = async () => {
     setAuditoria('rodando');
-    try { const r = await fetch(`${API}/wms-auditoria?contas=${encodeURIComponent(fConta === 'todas' ? 'exitus,lumia,muniam' : fConta)}`); setAuditoria(await r.json()); }
+    try {
+      const r = await fetch(`${API}/wms-auditoria?contas=${encodeURIComponent(fConta === 'todas' ? 'exitus,lumia,muniam' : fConta)}`);
+      const j = await r.json();
+      // Meluni: mesma regua do chip da tela (o espelho finaliza quando a nota nasce)
+      if (j?.resumo?.por_conta?.lumia && contadores?.meluni != null) {
+        const antes = j.resumo.por_conta.lumia.meluni || 0, novo = Number(contadores.meluni) || 0;
+        j.resumo.por_conta.lumia.meluni = novo; j.resumo.por_conta.lumia.total += (novo - antes);
+        j.resumo.total.meluni += (novo - antes); j.resumo.total.total += (novo - antes);
+      }
+      setAuditoria(j);
+    }
     catch (e) { setAuditoria({ erro: String(e?.message || e) }); }
   };
   // 03/09 (pedido dele): busca de pedido (nº Bling ou nº marketplace)
