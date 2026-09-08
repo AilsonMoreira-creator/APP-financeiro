@@ -417,12 +417,14 @@ async function handleGerarSugestoes(req, res, auth) {
   // Proxima iteracao: se a IA continuar ignorando, fazer 2a chamada de IA
   // SOMENTE pros obrigatorios esquecidos e SUBSTITUIR as menos urgentes.
   try {
-    const obrigatorios = (clientes || []).filter(c => {
-      const k = kpis[c.id] || {};
-      const j = janela[c.id];
+    // 08/09: lia clientes/kpis/janela/cooldown SEM ctx. — ReferenceError engolido
+    // pelo catch desde maio (o validador nunca rodou). Agora le do ctx.
+    const obrigatorios = (ctx.clientes || []).filter(c => {
+      const k = (ctx.kpis || {})[c.id] || {};
+      const j = (ctx.janela || {})[c.id];
       if (!j?.media_confiavel || !j.media_dias_compras || !k.dias_sem_comprar) return false;
       const pct = k.dias_sem_comprar / j.media_dias_compras;
-      const semCooldown = !clientesEmCooldownGeral.has(c.id);
+      const semCooldown = !(ctx.clientesEmCooldownGeral || new Set()).has(c.id);
       const naoEmGrupo = !c.grupo_id;
       // OPCAO B (Ailson 21/05/2026): 0.8-1.3 + >=5 visitas
       // Antes: 0.7-1.5 + >=4. Mais conservador, menos falsos positivos.
@@ -444,6 +446,21 @@ async function handleGerarSugestoes(req, res, auth) {
   } catch (e) {
     console.warn('[lojas-ia] validador janela perfeita falhou:', e?.message);
   }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // VALIDADOR RODIZIO (Ailson 08/09/2026) — mede e grava em metadados
+  // ═════════════════════════════════════════════════════════════════════════
+  try {
+    // (le do ctx — este handler nao tem essas variaveis no escopo)
+    const ids = linhas.filter(l => l.cliente_id).map(l => l.cliente_id);
+    const ultMap = ctx.ultimaSugestaoPorCliente || {};
+    const nuncaSug = ids.filter(id => !ultMap[id]).length;
+    const novasNoDia = linhas.filter(l => l.tipo === 'followup_nova').length;
+    const semWhats = ids.filter(id => { const c = (ctx.clientes || []).find(x => x.id === id); return c && c.telefone_principal_valido !== true; }).length;
+    const rod = { nunca_sugeridas: nuncaSug, followup_nova: novasNoDia, sem_whatsapp: semWhats, cooldown_dias: ctx.cooldownGeralDias };
+    linhas.forEach(l => { l.metadados_ia = { ...(l.metadados_ia || {}), rodizio_dia: rod }; });
+    console.log('[lojas-ia] RODIZIO', ctx.vendedoraNome, JSON.stringify(rod));
+  } catch (e) { console.warn('[lojas-ia] validador rodizio falhou:', e?.message); }
 
   // ═════════════════════════════════════════════════════════════════════════
   // VALIDADOR SACOLAS (Ailson 21/05/2026)
@@ -906,7 +923,7 @@ async function montarContextoSugestoes(vendedoraId) {
   // Carteira (clientes ativos com KPIs)
   const { data: clientes } = await supabase
     .from('lojas_clientes')
-    .select('id, documento, tipo_documento, razao_social, nome_fantasia, apelido, comprador_nome, telefone_principal, vendedora_id, grupo_id, pular_ate, canal_cadastro')
+    .select('id, documento, tipo_documento, razao_social, nome_fantasia, apelido, comprador_nome, telefone_principal, telefone_principal_valido, vendedora_id, grupo_id, pular_ate, canal_cadastro')
     .eq('vendedora_id', vendedoraId)
     .is('arquivado_em', null);
 
@@ -1135,7 +1152,10 @@ async function montarContextoSugestoes(vendedoraId) {
   // Ailson 28/07/2026: 10d era curto — o cliente expirava e voltava na hora,
   // muitas vezes com a MESMA pauta (reclamacao Cleide/Tamires: repetidos a
   // cada ~10 dias). 14d aumenta a rotacao e ajuda a varrer a carteira toda.
-  const cooldownGeralDias = totalCarteira < 100 ? 7 : 14;
+  // 08/09 (ordem dele: "nunca repetir com menos de 12 dias"): 12 dias pra
+  // TODAS as carteiras. A Fran (84 contataveis / 7 por dia) fica no limite —
+  // o rodizio abaixo (nunca-sugeridas primeiro) e o que varia de verdade.
+  const cooldownGeralDias = 12;
   const dataCooldownGeral = new Date(Date.now() - cooldownGeralDias * 86400000).toISOString().slice(0, 10);
 
   // FIX Ailson 28/07/2026: sugestao de SACOLA tambem conta no cooldown geral.
@@ -1148,6 +1168,21 @@ async function montarContextoSugestoes(vendedoraId) {
     .select('cliente_id, grupo_id, tipo')
     .eq('vendedora_id', vendedoraId)
     .gte('data_geracao', dataCooldownGeral);
+  // 08/09 (rodizio): ULTIMA sugestao por cliente nos ultimos 90 dias — vira
+  // dias_desde_ultima_sugestao no payload (null = nunca). E o sinal que a IA
+  // nao tinha e que a fazia girar sempre nos mesmos: Vanessa tinha 135
+  // clientes com WhatsApp SEM nenhuma sugestao em 60d (92 de 1a compra).
+  const ultimaSugestaoPorCliente = {};
+  try {
+    const d90 = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    const { data: ult } = await supabase.from('lojas_sugestoes_diarias')
+      .select('cliente_id, data_geracao').eq('vendedora_id', vendedoraId)
+      .gte('data_geracao', d90).not('cliente_id', 'is', null);
+    for (const u of (ult || [])) {
+      const atual = ultimaSugestaoPorCliente[u.cliente_id];
+      if (!atual || u.data_geracao > atual) ultimaSugestaoPorCliente[u.cliente_id] = u.data_geracao;
+    }
+  } catch (e) { console.warn('[lojas-ia] ultima sugestao por cliente falhou:', e?.message); }
   // FIX Ailson 21/05/2026: separar Sets pra cliente_id E grupo_id.
   // ANTES o filter so tinha cliente_id e excluia .not('cliente_id','is',null)
   // -> sugestoes de grupo (cliente_id=null, grupo_id=X) passavam INVISIVEIS.
@@ -1510,6 +1545,17 @@ async function montarContextoSugestoes(vendedoraId) {
     ...(produtos || []),
     ...produtosExtras.filter(p => !refsView.has(p.ref)),
   ];
+  // 08/09 (reclamacao: "sugere um modelo e anexa foto de outro"): cada produto
+  // carrega tem_foto (midia da Sofia marcada verao). A IA e instruida a so
+  // sugerir produto_ref COM foto; sem foto, a sugestao sai sem anexo (nunca a
+  // foto de outro modelo). Preferir com foto e o que resolve na raiz.
+  try {
+    const { data: midias } = await supabase.from('lojas_whats_midias').select('ref')
+      .eq('tipo', 'foto').eq('ativa', true).eq('estacao', 'verao').not('ref', 'is', null);
+    const comFoto = new Set((midias || []).map(m => String(m.ref).replace(/^0+/, '')));
+    for (const p of produtosFinal) p.tem_foto = comFoto.has(String(p.ref).replace(/^0+/, ''));
+    console.log('[lojas-ia] produtos com foto de verao:', produtosFinal.filter(p => p.tem_foto).length, '/', produtosFinal.length);
+  } catch (e) { console.warn('[lojas-ia] tem_foto falhou:', e?.message); }
 
   // ─── TOP 3 REFs POR CLIENTE (decisão Ailson 28/04/2026) ───────────────
   // Cliente compra "bem" uma REF se ela está no top 3 dela (score mesclado
@@ -1915,6 +1961,7 @@ async function montarContextoSugestoes(vendedoraId) {
     topRecompra,             // top 10 refs com mais ocorrencias (90d) — Ailson 06/05/2026
     matchesPorRef,           // { ref: [{ref_match, pct, coocorrencias, ...}] } — Ailson 06/05/2026
     clientesEmCooldownGeral, // Set<cliente_id> sugeridos nos ultimos N dias (nao-sacola) — Ailson 06/05/2026
+    ultimaSugestaoPorCliente, // 08/09 (rodizio): { cliente_id: 'YYYY-MM-DD' da ultima sugestao em 90d }
     cooldownGeralDias,       // 7 ou 10 dependendo do tamanho da carteira
     totalCarteira,           // tamanho da carteira da vendedora (pra IA priorizar conversao em carteiras pequenas)
     promocoes: promocoes || [],
@@ -2988,12 +3035,23 @@ function montarMessagesSugestoes(ctx) {
         else perfilCanal = 'misto';
       }
 
+      // 08/09 (rodizio): sinais que a IA nao tinha
+      const ultSug = ctx.ultimaSugestaoPorCliente?.[c.id] || null;
+      const diasDesdeUltimaSugestao = ultSug ? Math.round((Date.now() - new Date(ultSug + 'T12:00:00Z').getTime()) / 86400000) : null;
+      const temWhatsapp = c.telefone_principal_valido === true;
+      const primeiraCompraDias = k.primeira_compra ? Math.round((Date.now() - new Date(String(k.primeira_compra).slice(0, 10) + 'T12:00:00Z').getTime()) / 86400000) : null;
       return {
         id: c.id,
         apelido: c.apelido || c.comprador_nome || c.razao_social?.split(' ').slice(0, 3).join(' '),
         documento_tipo: c.tipo_documento,
         grupo_id: c.grupo_id,
         pular_ate: c.pular_ate,
+        // 08/09 (rodizio) — leia antes de escolher:
+        dias_desde_ultima_sugestao: diasDesdeUltimaSugestao,   // null = NUNCA foi sugerida (prioridade)
+        nunca_sugerida: diasDesdeUltimaSugestao === null,
+        tem_whatsapp: temWhatsapp,                             // false = vendedora nao consegue mandar (evitar)
+        cliente_nova: (k.qtd_compras || 0) === 1 && primeiraCompraDias !== null && primeiraCompraDias <= 90,  // 1a compra ate 90d
+        primeira_compra_ha_dias: primeiraCompraDias,
         kpi_incompleto: kpiIncompleto, // ⚠️ NÃO use pra reativar/atenção/followup se true
         // ATENCAO ESPECIAL — Ailson 06/05/2026.
         // Cliente ATIVO mas com mudanca de comportamento (atrasou ciclo,
@@ -3101,6 +3159,23 @@ function montarMessagesSugestoes(ctx) {
       };
     });
 
+  // 08/09 (rodizio): a carteira vai pra IA ORDENADA — com WhatsApp primeiro,
+  // depois nunca-sugeridas, depois quem esta ha mais tempo sem sugestao. A IA
+  // tende a escolher do topo; o topo agora e quem a vendedora ainda nao viu.
+  carteira.sort((a, b) => {
+    if (a.tem_whatsapp !== b.tem_whatsapp) return a.tem_whatsapp ? -1 : 1;
+    const da = a.dias_desde_ultima_sugestao, db = b.dias_desde_ultima_sugestao;
+    if ((da === null) !== (db === null)) return da === null ? -1 : 1;
+    return (db || 0) - (da || 0);
+  });
+  // Listas de prioridade explicitas (a IA tem que USAR, o backend confere depois)
+  const rodizio = {
+    clientes_novas: carteira.filter(c => c.cliente_nova && c.tem_whatsapp).slice(0, 8).map(c => ({ id: c.id, apelido: c.apelido, primeira_compra_ha_dias: c.primeira_compra_ha_dias, dias_desde_ultima_sugestao: c.dias_desde_ultima_sugestao })),
+    atencao_sem_contato: carteira.filter(c => c.kpi?.status_atual === 'atencao' && c.tem_whatsapp).slice(0, 8).map(c => ({ id: c.id, apelido: c.apelido, dias_desde_ultima_sugestao: c.dias_desde_ultima_sugestao })),
+    nunca_sugeridas_com_whats: carteira.filter(c => c.nunca_sugerida && c.tem_whatsapp).length,
+    total_com_whats: carteira.filter(c => c.tem_whatsapp).length,
+  };
+
   // Classifica produtos uma vez só (usado no payload e na telemetria)
   const produtosClassificados = classificarProdutos(
     ctx.produtos, ctx.curadoria, ctx.bestSellersAuto, ctx.emAltaAuto, ctx.maisVendidos45d
@@ -3110,6 +3185,7 @@ function montarMessagesSugestoes(ctx) {
   const userPayload = {
     data_geracao: new Date().toISOString(),
     vendedora: ctx.vendedora,
+    rodizio,   // 08/09: listas de prioridade (clientes novas / atencao sem contato) — ver regras no system prompt
     carteira,
     grupos: ctx.grupos,
     // ─── TRILHAS WIN-BACK ATIVAS HOJE ───────────────────────────
@@ -3523,6 +3599,7 @@ function classificarProdutos(produtos, curadoria, bestSellersAuto = [], emAltaAu
       nome: p.descricao,
       categoria: p.categoria,
       estoque: p.qtd_estoque,
+      tem_foto: p.tem_foto === true,   // 08/09: so sugerir produto com foto
     };
     const motivo = p.motivo_oferta;
 

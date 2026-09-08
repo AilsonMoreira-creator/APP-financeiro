@@ -2799,7 +2799,12 @@ export const CardDiaScreen = ({
               <span style={{ fontSize: fz(11), color: palette.inkMuted }}>📎 {s.fotos.length} foto{s.fotos.length > 1 ? 's' : ''}</span>
             </div>
           )}
-          {/* Catálogo de promoção no lugar das fotos (Ailson 18/06/2026) */}
+          {(!Array.isArray(sugestao.fotos) || sugestao.fotos.length === 0) && !sugestao.catalogo && sugestao.produto_ref && (
+          <div style={{ background: '#fdf6dd', border: '1px solid #eeda92', borderRadius: 10, padding: '10px 12px', marginBottom: 18, fontSize: fz(12.5), color: '#8a6d1a' }}>
+            📷 Este modelo (REF {refDisplay(sugestao.produto_ref)}) ainda não tem foto de verão nas mídias da Sofia — por isso não anexamos nenhuma. Pode mandar a mensagem e tirar a foto da peça na loja, ou pedir pra cadastrar a mídia.
+          </div>
+        )}
+        {/* Catálogo de promoção no lugar das fotos (Ailson 18/06/2026) */}
           {s.catalogo && s.catalogo.url && (
             <div style={{ display: 'flex', gap: 4, marginTop: 6, alignItems: 'center' }}>
               <span style={{ fontSize: fz(11), color: '#9b59b6', fontWeight: 700 }}>📋 Catálogo de promoção</span>
@@ -3661,14 +3666,14 @@ export const SugestaoScreen = ({
                       width: sz(72), height: sz(92), objectFit: 'cover', borderRadius: 8,
                       border: `1px solid ${palette.beige}`, background: palette.beigeSoft, display: 'block',
                     }} onError={e => { e.target.parentElement.style.display = 'none'; }} />
-                    <div style={{ fontSize: fz(11), color: palette.inkMuted, textAlign: 'center', marginTop: 2 }}>
-                      REF {refDisplay(f.ref)}
+                    <div style={{ fontSize: fz(11), color: f.papel === 'combina' ? '#9b59b6' : palette.inkMuted, textAlign: 'center', marginTop: 2, fontWeight: f.papel === 'combina' ? 700 : 400 }}>
+                      {f.papel === 'combina' ? '✨ combina · ' : ''}REF {refDisplay(f.ref)}
                     </div>
                   </div>
                 ))}
               </div>
               <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 6 }}>
-                As fotos vão junto na hora de enviar a mensagem — dá pra tirar alguma antes de mandar
+                A primeira foto é do modelo da sugestão{sugestao.fotos.some(f => f.papel === 'combina') ? '; as marcadas com ✨ são peças que combinam (opcional mandar junto)' : ''}. Dá pra tirar alguma antes de enviar.
               </div>
             </div>
           </>

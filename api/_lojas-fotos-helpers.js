@@ -78,16 +78,30 @@ export async function resolverFotosSugestoes(supabase, linhas) {
   //    "mínimo 2 fotos" significa refs DIFERENTES, nunca 2 fotos da mesma ref).
   //    Fonte única: mídias da Sofia (verão), foto mais recente por ref. Cap 5.
   //    Se a sugestão só cita 1 ref, vai 1 foto mesmo (não duplica).
+  // 08/09 (reclamacao das vendedoras: "sugere um modelo e anexa foto de
+  // outro"): a foto do PRODUTO PRINCIPAL e obrigatoria — sem ela, a sugestao
+  // fica SEM foto (com aviso), nunca com a foto de outro modelo no lugar.
+  // As fotos das refs de combinacao entram so DEPOIS da principal, rotuladas
+  // papel='combina' pra tela mostrar "combina com".
   linhas.forEach((l, i) => {
     const refs = refsPorLinha[i];
     if (!refs.length) { l.fotos = null; return; }
+    const principal = normRef(l.produto_ref);
     const fotos = [];
+    const fp = principal ? (sofiaPorRef[principal] || [])[0] : null;
+    if (principal && !fp) {
+      l.fotos = null;
+      l.metadados_ia = { ...(l.metadados_ia || {}), sem_foto_principal: principal };
+      return;
+    }
+    if (fp) fotos.push({ url: fp.url, ref: fp.ref, origem: fp.origem, papel: 'principal' });
     for (const rn of refs) {
       if (fotos.length >= 5) break;
+      if (rn === principal) continue;
       const f = (sofiaPorRef[rn] || [])[0];
       if (!f) continue;
       if (fotos.some((x) => x.url === f.url)) continue;
-      fotos.push({ url: f.url, ref: f.ref, origem: f.origem });
+      fotos.push({ url: f.url, ref: f.ref, origem: f.origem, papel: 'combina' });
     }
     l.fotos = fotos.length ? fotos : null;
   });
