@@ -104,7 +104,7 @@ export default async function handler(req, res) {
   const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   try {
     const { data: peds } = await supabase.from('wms_pedidos')
-      .select('pedido_id, conta, canal_geral, canal_detalhe, ml_logistic_type, status_wms, nf_id, nf_situacao, ml_agendado_em, etiqueta_impressa_em, nf_agendada_impressa_em, numero_loja')
+      .select('pedido_id, conta, canal_geral, canal_detalhe, ml_logistic_type, status_wms, nf_id, nf_situacao, ml_agendado_em, etiqueta_impressa_em, nf_agendada_impressa_em, numero_loja, print_regra, print_estado, print_motivo, print_nf, print_etiqueta, ml_ship_status, ml_ship_substatus')
       .neq('status_wms', 'cancelado')
       .gte('criado_em', new Date(Date.now() - 5 * 86400000).toISOString())
       .limit(2000);
@@ -118,9 +118,14 @@ export default async function handler(req, res) {
 
     const contagem = {};
     const porEstado = {};
+    let r_iguais = 0;
     for (const p of (peds || [])) {
       const c = classificar(p, hojeBRT);
       contagem[c.estado] = (contagem[c.estado] || 0) + 1;
+      // 08/09 (banco saturado as 8h40): so grava quem MUDOU — 1.520 updates a
+      // cada 30 min sem mudanca viravam WAL + trabalho do Realtime a toa
+      if (p.print_regra === c.regra && p.print_estado === c.estado && p.print_motivo === c.motivo
+        && p.print_nf === c.nf && p.print_etiqueta === c.etiqueta) { r_iguais = (r_iguais || 0) + 1; continue; }
       const chave = `${c.regra}|${c.nf}|${c.etiqueta}|${c.estado}|${c.motivo}`;
       (porEstado[chave] = porEstado[chave] || []).push(p.pedido_id);
     }
@@ -137,7 +142,7 @@ export default async function handler(req, res) {
         gravados += count || 0;
       }
     }
-    return res.status(200).json({ ok: true, avaliados: (peds || []).length, gravados, por_estado: contagem });
+    return res.status(200).json({ ok: true, avaliados: (peds || []).length, sem_mudanca: r_iguais, gravados, por_estado: contagem });
   } catch (e) {
     return res.status(500).json({ erro: e.message });
   }
