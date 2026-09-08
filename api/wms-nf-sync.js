@@ -124,7 +124,8 @@ export default async function handler(req, res) {
           if (Number(sit) === 6) {
             const { count: c1 } = await supabase.from('wms_pedidos')
               .update({ nf_situacao: 6, nf_checado_em: agoraIso, nf_virou_6_em: agoraIso }, { count: 'exact' })
-              .in('nf_id', fatia).neq('nf_situacao', 6);
+              .in('nf_id', fatia).or('nf_situacao.is.null,nf_situacao.neq.6');   // 08/09 14h: null tambem e "mudou"
+
             // 08/09 (banco saturado): quem ja e 6 nao e regravado — ~600 updates
             // a cada 10 min so pra carimbar nf_checado_em viravam carga inutil
             r.situacoes_gravadas += (c1 || 0);
@@ -132,7 +133,7 @@ export default async function handler(req, res) {
           } else {
             const { count } = await supabase.from('wms_pedidos')
               .update({ nf_situacao: Number(sit), nf_checado_em: agoraIso }, { count: 'exact' })
-              .in('nf_id', fatia).neq('nf_situacao', Number(sit));   // 08/09: so quem mudou
+              .in('nf_id', fatia).or(`nf_situacao.is.null,nf_situacao.neq.${Number(sit)}`);   // 08/09 14h: null tambem e "mudou" (neq com null nao grava)
             r.situacoes_gravadas += count || 0;
           }
         }
