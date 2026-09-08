@@ -2945,9 +2945,9 @@ export const CardDiaScreen = ({
                     <div style={{ width: `${c.pct}%`, height: '100%', background: 'linear-gradient(90deg,#2f6fb0,#4fa3e0)', borderRadius: 999, transition: 'width .6s' }} />
                   </div>
                   <div style={{ fontSize: fz(12.5), color: palette.inkSoft, marginTop: 6, lineHeight: 1.5 }}>
-                    {nome}, você já conversou com <b style={{ color: palette.ink }}>{c.conversadas}</b> das <b style={{ color: palette.ink }}>{c.total_com_whats}</b> clientes com WhatsApp da sua carteira ({c.pct}%)
+                    {nome}, você já se conectou pelo app com <b style={{ color: palette.ink }}>{c.conversadas}</b> das <b style={{ color: palette.ink }}>{c.total_com_whats}</b> clientes com WhatsApp da sua carteira ({c.pct}%)
                     {c.novas_esta_semana > 0 ? <> · <b style={{ color: '#1e8e4e' }}>{c.novas_esta_semana} nova{c.novas_esta_semana > 1 ? 's' : ''} esta semana</b></> : null}
-                    {c.faltam > 0 ? <> · faltam <b style={{ color: palette.ink }}>{c.faltam}</b> pra conhecer todo mundo</> : <> · <b style={{ color: '#1e8e4e' }}>carteira inteira conhecida 🎉</b></>}
+                    {c.faltam > 0 ? <> · faltam <b style={{ color: palette.ink }}>{c.faltam}</b> pra interagir com todo mundo</> : <> · <b style={{ color: '#1e8e4e' }}>você já interagiu com a carteira inteira 🎉</b></>}
                   </div>
                   {progresso.streak?.hoje_completo === false && progresso.streak?.hoje_pendentes > 0 && progresso.streak?.dias > 0 && (
                     <div style={{ fontSize: fz(12), color: '#b3541e', marginTop: 4 }}>Faltam {progresso.streak.hoje_pendentes} de hoje pra manter a sequência 🔥</div>

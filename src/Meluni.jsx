@@ -3041,6 +3041,72 @@ function SecaoDashboard() {
 
   const roas = (gasto && gasto > 0) ? (Number(d.vendas?.soma) || 0) / gasto : null;
 
+  // 08/09 (pedido dele): PDF A4 com tudo da tela, pra mandar pra equipe de
+  // trafego pago. Usa os dados ja carregados; abre a folha e chama imprimir.
+  const gerarPdfDashboard = () => {
+    const vendasQtd = Number(d.vendas?.qtd) || 0, vendasSoma = Number(d.vendas?.soma) || 0;
+    const devSoma = Number(d.devolucoes?.soma) || 0, devQtd = Number(d.devolucoes?.qtd) || 0;
+    const cpa = gasto && vendasQtd ? gasto / vendasQtd : null;
+    const pctDev = vendasSoma ? (devSoma / vendasSoma) * 100 : 0;
+    const totalCli = Number(d.clientes?.total) || 0;
+    const periodoTxt = d.periodo ? `${fmtData(d.periodo.de)} a ${fmtData(d.periodo.ate)}` : '';
+    const agora = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const serie = Array.isArray(d.serie) ? d.serie : [];
+    const maxV = Math.max(1, ...serie.map(x => Number(x.vendas_valor) || 0));
+    const kpi = (label, valor, sub, destaque) => `<div class="kpi${destaque ? ' dst' : ''}"><div class="l">${label}</div><div class="v">${valor}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
+    const linhasSerie = serie.map(x => {
+      const dt = String(x.data || '');
+      const dd = dt.length >= 10 ? `${dt.slice(8, 10)}/${dt.slice(5, 7)}` : dt;
+      const w = Math.round(100 * (Number(x.vendas_valor) || 0) / maxV);
+      return `<tr><td>${dd}</td><td class="n">${Number(x.vendas_qtd) || 0}</td><td class="n">${fmtBRL(x.vendas_valor)}</td><td class="n">${fmtBRL(x.devol_valor)}</td><td class="n">${Number(x.carrinhos_qtd) || 0}</td><td><div class="bar"><div style="width:${w}%"></div></div></td></tr>`;
+    }).join('');
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Meluni · Dashboard · ${periodoTxt}</title>
+      <style>
+        @page { size: A4; margin: 13mm; }
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1f2d3a; margin: 0; }
+        h1 { font-size: 20px; margin: 0; } .meta { font-size: 11px; color: #6b7c8a; margin: 2px 0 12px; }
+        .brand { color: #9b59b6; font-weight: 800; letter-spacing: .04em; font-size: 11px; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .kpi { border: 1px solid #e3e8ee; border-radius: 8px; padding: 8px 10px; } .kpi.dst { border-color: #9b59b6; background: #f6f0f9; }
+        .kpi .l { font-size: 10.5px; color: #6b7c8a; text-transform: uppercase; letter-spacing: .04em; } .kpi .v { font-size: 20px; font-weight: 800; margin-top: 2px; } .kpi .s { font-size: 10.5px; color: #6b7c8a; }
+        h2 { font-size: 13px; margin: 14px 0 6px; color: #9b59b6; }
+        .traf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; } th { text-align: left; color: #6b7c8a; font-weight: 700; border-bottom: 1px solid #e3e8ee; padding: 3px 4px; } td { padding: 3px 4px; border-bottom: 1px dashed #eef1f4; } td.n, th.n { text-align: right; }
+        .bar { height: 8px; background: #ece3f2; border-radius: 4px; width: 100%; } .bar div { height: 100%; background: #9b59b6; border-radius: 4px; }
+        .leg { margin-top: 10px; font-size: 10px; color: #6b7c8a; line-height: 1.45; border-top: 1px solid #e3e8ee; padding-top: 6px; }
+      </style></head><body>
+      <div class="brand">MELUNI · E-COMMERCE</div>
+      <h1>Dashboard de vendas</h1>
+      <div class="meta">Período: <b>${periodoTxt}</b> · gerado em ${agora} · fonte: app Grupo Amícia (Bling + Meta Ads)</div>
+      <div class="grid">
+        ${kpi('Vendas', fmtBRL(vendasSoma), `${vendasQtd} pedidos`)}
+        ${kpi('Devoluções', fmtBRL(devSoma), `${devQtd} devoluções · ${pctDev.toFixed(1)}% do vendido`)}
+        ${kpi('Valor real (vendas − devolução)', fmtBRL(d.valor_real), '', true)}
+        ${kpi('Ticket médio', fmtBRL(d.ticket), '')}
+        ${kpi('Clientes novos', String(d.clientes?.novos ?? 0), totalCli ? `${Math.round(100 * (d.clientes.novos || 0) / totalCli)}% do período` : '')}
+        ${kpi('Clientes recorrentes', String(d.clientes?.recorrentes ?? 0), totalCli ? `${Math.round(100 * (d.clientes.recorrentes || 0) / totalCli)}% já compraram antes` : '', true)}
+        ${kpi('Carrinhos abandonados', String(d.carrinhos?.qtd || 0), d.carrinhos?.conversao_pct != null ? `${d.carrinhos.convertidos} recuperados · ${Math.round(d.carrinhos.conversao_pct)}%` : '')}
+        ${kpi('Gasto Meta Ads', gasto == null ? '—' : fmtBRL(gasto), 'conta Meluni')}
+        ${kpi('ROAS (venda ÷ gasto)', roas == null ? '—' : roas.toFixed(2) + 'x', '', true)}
+      </div>
+      <h2>Para a equipe de tráfego</h2>
+      <div class="traf">
+        ${kpi('CPA (gasto ÷ pedidos)', cpa == null ? '—' : fmtBRL(cpa), 'custo por pedido')}
+        ${kpi('Gasto ÷ venda', (gasto && vendasSoma) ? (100 * gasto / vendasSoma).toFixed(1) + '%' : '—', 'ACOS')}
+        ${kpi('Pedidos / dia', serie.length ? (vendasQtd / serie.length).toFixed(1) : '—', `${serie.length} dias`)}
+        ${kpi('Venda / dia', serie.length ? fmtBRL(vendasSoma / serie.length) : '—', 'média do período')}
+      </div>
+      <h2>Dia a dia</h2>
+      <table><thead><tr><th>Dia</th><th class="n">Pedidos</th><th class="n">Vendas</th><th class="n">Devoluções</th><th class="n">Carrinhos</th><th style="width:34%">Vendas (relativo)</th></tr></thead><tbody>${linhasSerie}</tbody></table>
+      <div class="leg">
+        <b>Como ler:</b> Vendas = pedidos do site Meluni no período (Bling). Valor real = vendas menos devoluções. Clientes novos = primeira compra no período; recorrentes = já tinham comprado antes. Carrinhos = abandonados com telefone; recuperados = converteram após a abordagem da Lara. Gasto Meta Ads = investimento da conta Meluni no mesmo período. ROAS = venda ÷ gasto; CPA = gasto ÷ pedidos.
+      </div>
+      <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
+      </body></html>`;
+    const w = window.open('', '_blank'); if (!w) { alert('Libere pop-ups pra gerar o PDF.'); return; }
+    w.document.write(html); w.document.close();
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
@@ -3053,6 +3119,11 @@ function SecaoDashboard() {
         <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginLeft: 'auto' }}>
           {loading ? 'carregando…' : (d.periodo ? `${fmtData(d.periodo.de)} a ${fmtData(d.periodo.ate)}` : '')}
         </span>
+        <button onClick={gerarPdfDashboard} disabled={loading || !d.periodo}
+          title="Folha A4 com todos os números desta tela (pra mandar pra equipe de tráfego pago)"
+          style={{ border: `1px solid ${palette.beige}`, background: '#fff', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 800, color: MELUNI, cursor: 'pointer', fontFamily: FONT }}>
+          📄 Gerar PDF
+        </button>
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <KpiTile label="Vendas" valor={fmtBRL(d.vendas?.soma)} sub={`${d.vendas?.qtd || 0} pedidos`} />
