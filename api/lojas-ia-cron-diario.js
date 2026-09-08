@@ -77,6 +77,22 @@ export default async function handler(req, res) {
     });
   }
 
+  // 08/09 (regra dele: "elas trabalham seg-sex e nao trabalham feriado"): no
+  // feriado nacional o cron NAO gera — 07/09 gerou 7 pra cada uma e ninguem
+  // trabalhou (virava pendencia falsa e quebrava a sequencia). Admin com
+  // ?force=1 ainda consegue gerar.
+  const FERIADOS_BR = new Set([
+    '2026-01-01', '2026-02-16', '2026-02-17', '2026-04-03', '2026-04-21', '2026-05-01', '2026-06-04',
+    '2026-09-07', '2026-10-12', '2026-11-02', '2026-11-15', '2026-11-20', '2026-12-25',
+    '2027-01-01', '2027-02-08', '2027-02-09', '2027-03-26', '2027-04-21', '2027-05-01', '2027-05-27',
+    '2027-09-07', '2027-10-12', '2027-11-02', '2027-11-15', '2027-11-20', '2027-12-25',
+  ]);
+  const hojeBRTiso = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  if (ehCron && FERIADOS_BR.has(hojeBRTiso) && req.query?.force !== '1') {
+    await finalizar('ok', { pulado: 'feriado nacional ' + hojeBRTiso });
+    return res.status(200).json({ ok: true, pulado: 'feriado nacional', data: hojeBRTiso });
+  }
+
   // Carrega vendedoras ativas (não placeholders)
   const { data: vendedoras, error } = await supabase
     .from('lojas_vendedoras')
