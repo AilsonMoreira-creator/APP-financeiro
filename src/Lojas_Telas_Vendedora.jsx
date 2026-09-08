@@ -2550,6 +2550,15 @@ export const CardDiaScreen = ({
   // trabalhou com capricho na semana anterior (>=10 execucoes e ritmo medio
   // >=2min entre uma e outra). Aparece toda SEGUNDA + janela de estreia
   // 29-31/07/2026 (pra Celia ver ja amanha).
+  // 08/09 (pacote "animar as vendedoras"): carteira em movimento, sequência e reencontros
+  const [progresso, setProgresso] = useState(null);
+  useEffect(() => {
+    if (!vendedora?.id) { setProgresso(null); return; }
+    let vivo = true;
+    fetch(`/api/lojas-progresso?vendedora_id=${encodeURIComponent(vendedora.id)}`, { headers: { 'X-User': state?.userId || '' } })
+      .then(r => r.json()).then(j => { if (vivo && j?.ok) setProgresso(j); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [vendedora?.id, state?.userId, state?.sugestoesHoje?.length, state?.sugestoesHoje?.filter?.(x => x.status !== 'pendente').length]);
   const [parabensSemana, setParabensSemana] = useState(null); // {n}
   useEffect(() => {
     if (!vendedora?.id) { setParabensSemana(null); return; }
@@ -2770,7 +2779,13 @@ export const CardDiaScreen = ({
           {/* Indicador de WhatsApp em TODO card (Ailson 11/06/2026): a vendedora
               vê na lista quem já tem cadastro antes de abrir a sugestão */}
           {cliente && (
-            <div style={{ marginTop: 5 }}>
+            <div style={{ marginTop: 5, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {s.metadados_ia?.primeira_vez && (
+                <span style={{
+                  fontSize: fz(11.5), fontWeight: 800, padding: '1px 7px', borderRadius: 5,
+                  background: 'linear-gradient(90deg,#fff3c4,#ffe08a)', color: '#7a5a00', border: '1px solid #f0c94a',
+                }} title="Esta cliente nunca tinha recebido uma sugestão pelo app — você está abrindo caminho">✨ Primeira vez</span>
+              )}
               {(cliente.telefone_principal || '').trim() ? (
                 <span style={{
                   fontSize: fz(11.5), fontWeight: 700, padding: '1px 7px', borderRadius: 5,
@@ -2910,6 +2925,49 @@ export const CardDiaScreen = ({
                 borderTop: i > 0 ? '1px solid #ddd2f0' : 'none',
               }}>{txt}</div>
             ))}
+          </div>
+        )}
+        {progresso && (progresso.carteira?.total_com_whats > 0 || progresso.streak?.dias > 0 || (progresso.reencontros || []).length > 0) && (
+          <div style={{ marginBottom: 12, display: 'grid', gap: 8 }}>
+            {progresso.carteira?.total_com_whats > 0 && (() => {
+              const c = progresso.carteira; const nome = String(vendedora?.nome || '').split(' ')[0];
+              return (
+                <div style={{ background: 'linear-gradient(135deg,#eef4fb 0%,#f7f4f0 100%)', border: '1px solid #c9dbee', borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: fz(13.5), fontWeight: 800, color: palette.ink }}>🗺️ Sua carteira em movimento</span>
+                    {progresso.streak?.dias > 0 && (
+                      <span style={{ marginLeft: 'auto', fontSize: fz(13), fontWeight: 800, color: '#b3541e', background: '#fff1e6', border: '1px solid #f3cfb3', borderRadius: 999, padding: '2px 10px' }}>
+                        🔥 {progresso.streak.dias} dia{progresso.streak.dias > 1 ? 's' : ''} seguido{progresso.streak.dias > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 8, height: 10, borderRadius: 999, background: '#e6edf5', overflow: 'hidden' }}>
+                    <div style={{ width: `${c.pct}%`, height: '100%', background: 'linear-gradient(90deg,#2f6fb0,#4fa3e0)', borderRadius: 999, transition: 'width .6s' }} />
+                  </div>
+                  <div style={{ fontSize: fz(12.5), color: palette.inkSoft, marginTop: 6, lineHeight: 1.5 }}>
+                    {nome}, você já conversou com <b style={{ color: palette.ink }}>{c.conversadas}</b> das <b style={{ color: palette.ink }}>{c.total_com_whats}</b> clientes com WhatsApp da sua carteira ({c.pct}%)
+                    {c.novas_esta_semana > 0 ? <> · <b style={{ color: '#1e8e4e' }}>{c.novas_esta_semana} nova{c.novas_esta_semana > 1 ? 's' : ''} esta semana</b></> : null}
+                    {c.faltam > 0 ? <> · faltam <b style={{ color: palette.ink }}>{c.faltam}</b> pra conhecer todo mundo</> : <> · <b style={{ color: '#1e8e4e' }}>carteira inteira conhecida 🎉</b></>}
+                  </div>
+                  {progresso.streak?.hoje_completo === false && progresso.streak?.hoje_pendentes > 0 && progresso.streak?.dias > 0 && (
+                    <div style={{ fontSize: fz(12), color: '#b3541e', marginTop: 4 }}>Faltam {progresso.streak.hoje_pendentes} de hoje pra manter a sequência 🔥</div>
+                  )}
+                </div>
+              );
+            })()}
+            {(progresso.reencontros || []).length > 0 && (
+              <div style={{ background: 'linear-gradient(135deg,#eafbf0 0%,#f7f4f0 100%)', border: '1px solid #b8dfc8', borderRadius: 12, padding: '12px 14px' }}>
+                <div style={{ fontSize: fz(13.5), fontWeight: 800, color: '#1e6e42', marginBottom: 4 }}>🎉 Reencontro — sua mensagem virou venda</div>
+                {progresso.reencontros.slice(0, 3).map((r, i) => (
+                  <div key={i} style={{ fontSize: fz(12.5), color: '#1e6e42', lineHeight: 1.5 }}>
+                    <b>{r.cliente}</b> comprou {r.valor > 0 ? `R$ ${r.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''} {r.dias != null ? `${r.dias} dia${r.dias === 1 ? '' : 's'} depois da sua mensagem` : 'depois da sua mensagem'}{r.data_venda ? ` (${String(r.data_venda).slice(8, 10)}/${String(r.data_venda).slice(5, 7)})` : ''}
+                  </div>
+                ))}
+                {progresso.reencontros_30d?.qtd > 0 && (
+                  <div style={{ fontSize: fz(12), color: '#2f7a52', marginTop: 4 }}>Nos últimos 30 dias: {progresso.reencontros_30d.qtd} reencontro{progresso.reencontros_30d.qtd > 1 ? 's' : ''} · R$ {progresso.reencontros_30d.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                )}
+              </div>
+            )}
           </div>
         )}
         {parabensSemana && (

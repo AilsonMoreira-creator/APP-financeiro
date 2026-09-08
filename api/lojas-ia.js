@@ -458,7 +458,8 @@ async function handleGerarSugestoes(req, res, auth) {
     const novasNoDia = linhas.filter(l => l.tipo === 'followup_nova').length;
     const semWhats = ids.filter(id => { const c = (ctx.clientes || []).find(x => x.id === id); return c && c.telefone_principal_valido !== true; }).length;
     const rod = { nunca_sugeridas: nuncaSug, followup_nova: novasNoDia, sem_whatsapp: semWhats, cooldown_dias: ctx.cooldownGeralDias };
-    linhas.forEach(l => { l.metadados_ia = { ...(l.metadados_ia || {}), rodizio_dia: rod }; });
+    // selo "✨ Primeira vez" (08/09): cliente que NUNCA recebeu sugestao pelo app
+    linhas.forEach(l => { l.metadados_ia = { ...(l.metadados_ia || {}), rodizio_dia: rod, primeira_vez: !!(l.cliente_id && !ultMap[l.cliente_id]) }; });
     console.log('[lojas-ia] RODIZIO', ctx.vendedoraNome, JSON.stringify(rod));
   } catch (e) { console.warn('[lojas-ia] validador rodizio falhou:', e?.message); }
 
