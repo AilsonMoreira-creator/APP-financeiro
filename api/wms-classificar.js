@@ -122,10 +122,7 @@ export default async function handler(req, res) {
     for (const p of (peds || [])) {
       const c = classificar(p, hojeBRT);
       contagem[c.estado] = (contagem[c.estado] || 0) + 1;
-      // 08/09 (banco saturado as 8h40): so grava quem MUDOU — 1.520 updates a
-      // cada 30 min sem mudanca viravam WAL + trabalho do Realtime a toa
-      if (p.print_regra === c.regra && p.print_estado === c.estado && p.print_motivo === c.motivo
-        && p.print_nf === c.nf && p.print_etiqueta === c.etiqueta) { r_iguais = (r_iguais || 0) + 1; continue; }
+      // 08/09 15h (revertido a pedido dele): grava todos, como antes.
       const chave = `${c.regra}|${c.nf}|${c.etiqueta}|${c.estado}|${c.motivo}`;
       (porEstado[chave] = porEstado[chave] || []).push(p.pedido_id);
     }

@@ -121,19 +121,23 @@ export default async function handler(req, res) {
           // (transicao real). Quem ja era 6 recebe so o nf_checado_em.
           const fatia = ids.slice(i, i + 200);
           const agoraIso = new Date().toISOString();
+          // 08/09 15h (revertido a pedido dele): GRAVA SEMPRE, como no sabado.
+          // A tentativa de "so gravar o que mudou" deixou notas novas sem
+          // situacao (neq com null nao grava) e as agendadas sumiram da aba.
+          // Unica regra fina que fica: nf_virou_6_em so na TRANSICAO real.
           if (Number(sit) === 6) {
             const { count: c1 } = await supabase.from('wms_pedidos')
               .update({ nf_situacao: 6, nf_checado_em: agoraIso, nf_virou_6_em: agoraIso }, { count: 'exact' })
-              .in('nf_id', fatia).or('nf_situacao.is.null,nf_situacao.neq.6');   // 08/09 14h: null tambem e "mudou"
-
-            // 08/09 (banco saturado): quem ja e 6 nao e regravado — ~600 updates
-            // a cada 10 min so pra carimbar nf_checado_em viravam carga inutil
-            r.situacoes_gravadas += (c1 || 0);
+              .in('nf_id', fatia).or('nf_situacao.is.null,nf_situacao.neq.6');
+            const { count: c2 } = await supabase.from('wms_pedidos')
+              .update({ nf_checado_em: agoraIso }, { count: 'exact' })
+              .in('nf_id', fatia).eq('nf_situacao', 6);
+            r.situacoes_gravadas += (c1 || 0) + (c2 || 0);
             r.viraram_6 = (r.viraram_6 || 0) + (c1 || 0);
           } else {
             const { count } = await supabase.from('wms_pedidos')
               .update({ nf_situacao: Number(sit), nf_checado_em: agoraIso }, { count: 'exact' })
-              .in('nf_id', fatia).or(`nf_situacao.is.null,nf_situacao.neq.${Number(sit)}`);   // 08/09 14h: null tambem e "mudou" (neq com null nao grava)
+              .in('nf_id', fatia);
             r.situacoes_gravadas += count || 0;
           }
         }
