@@ -136,8 +136,10 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                   exp="Só o SEU custo de envio nos pagamentos — a parte que o comprador paga fica fora da conta (nem soma nem subtrai). Média de ~R$ 12-16 por pedido. O frete dos pedidos Flex não aparece aqui: é cobrado na fatura, na linha de tarifas de faturamento." />
                 {(fin.ajustes || 0) <= -1 && <Linha label="Ajustes do pagamento" valor={fin.ajustes} base={fin.venda}
                   exp="Débitos residuais do pagamento ainda não classificados." />}
+                {fin.creditos_pagamento > 0.5 && <Linha label="Reposições do ML (promoções bancadas por ele, cupons)" valor={fin.creditos_pagamento} base={fin.venda} positivo
+                  exp="Dinheiro que o Mercado Livre repõe na sua conta: promoções que ELE bancou (o cliente pagou menos e o ML completa), cupons e afins. A venda acima já é o preço promocional pago, então isto NÃO é dupla contagem — é receita que entrou. Conferido com o painel do ML em 08/09: sem esta linha o app ficava ~3 pontos abaixo do 'você recebeu'." />}
                 <Linha label="Resultado das vendas no Mercado Pago" valor={fin.liquido_vendas} base={fin.venda} positivo forte
-                  exp="O que as vendas rendem de verdade: pago − frete − tarifas − promoções. Os débitos avulsos abaixo saem DEPOIS, e não são custo da venda." />
+                  exp="O que as vendas rendem de verdade: pago − frete − tarifas + reposições do ML. Os débitos avulsos abaixo saem DEPOIS, e não são custo da venda. Bônus Flex fica fora (neutro)." />
                 {fin.debitos_avulsos > 0.5 && <Linha label="Débitos avulsos descontados (crédito/dívidas)" valor={fin.debitos_avulsos} base={fin.venda}
                   exp="Valores que o Mercado Pago abate dos repasses pra quitar outras obrigações (Mercado Crédito, antecipações, dívidas de tarifas). Reduzem o caixa, mas NÃO são custo da venda — por isso ficam fora do resultado final." />}
                 <Linha label="Imposto (11% da venda)" valor={fin.imposto} base={fin.venda}
@@ -152,17 +154,12 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                 )}
                 <Linha label="Custo de operação (R$ 5/un)" valor={fin.custo_operacao || 0} base={fin.venda}
                   exp={`R$ 5 fixos por unidade vendida (${fin.custo_operacao_un || 0} un): embalagem, etiqueta, mão de obra da expedição.`} />
-                {fin.tarifas_faturamento > 0.5 && <Linha label="Serviços faturados (Full e outros) · 2%" valor={fin.tarifas_faturamento} base={fin.venda}
+                {fin.tarifas_faturamento > 0.5 && <Linha label={`Serviços faturados (Full e outros) · ${Object.values(fin.tarifas_faturamento_fonte || {}).includes('real') ? 'real do extrato' : '2%'}`} valor={fin.tarifas_faturamento} base={fin.venda}
                   exp={`Régua fixa de 2% da venda (armazenagem/coleta Full, devoluções e outras tarifas fora do pagamento). Observado no extrato até agora: R$ ${fmt(fin.tarifas_faturamento_det?.observado_extrato || 0)}.`} />}
-                <Linha label="Publicidade (Product Ads) · 6%" valor={fin.publicidade || 0} base={fin.venda}
+                <Linha label={`Publicidade (Product Ads) · ${Object.values(fin.publicidade_fonte || {}).includes('real') ? 'real do extrato' : '6%'}`} valor={fin.publicidade || 0} base={fin.venda}
                   exp={`Régua fixa de 6% da venda. O extrato de faturamento do ML só fecha os gastos recentes por volta do dia 18, então o valor "real" ficava parado por dias.${fin.publicidade_observada > 0.5 ? ` Observado no extrato até agora: R$ ${fmt(fin.publicidade_observada)}.` : ''}`} />
                 <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte
                   exp="O que sobra: líquido do Mercado Pago − imposto − custo da mercadoria − custo de operação − publicidade." />
-                {fin.creditos_pagamento > 0.5 && (
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontFamily: CALIBRI }}>
-                    ℹ Créditos do pagamento (reposições e afins): R$ {fmt(fin.creditos_pagamento)} — fora do resultado.
-                  </div>
-                )}
                 {fin.bonus_flex > 0.5 && (
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontFamily: CALIBRI }}>
                     ℹ Bônus Flex: R$ {fmt(fin.bonus_flex)} repostos pelo ML — neutros (repõem a entrega que você já pagou), fora do resultado.

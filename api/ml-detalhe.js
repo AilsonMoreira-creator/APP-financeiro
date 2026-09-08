@@ -139,8 +139,13 @@ export default async function handler(req, res) {
     // continuam abatendo (conservador)
     fin.creditos_pagamento = r2(Math.max(0, ajustesTotal));
     fin.ajustes = r2(Math.min(0, ajustesTotal));
-    fin.liquido_vendas = r2(fin.liquido_vendas - fin.bonus_flex - fin.creditos_pagamento);
-    fin.liquido_vendas = r2(fin.liquido_vendas);
+    // 08/09 (ordem dele, apos conferencia com o painel do ML — "voce recebeu"
+    // 65,6%): os CREDITOS DE REPOSICAO entram no resultado. A venda aqui ja
+    // e o preco promocional pago pelo cliente; quando o ML repoe a promocao
+    // que ELE bancou, esse dinheiro cai na conta e nao e dupla contagem.
+    // Excluir subestimava o lucro em ~3 pontos. O bonus Flex continua neutro
+    // (regra de 11/08: repoe o motoboy que ele pagou fora do DRE).
+    fin.liquido_vendas = r2(fin.liquido_vendas - fin.bonus_flex);
     fin.imposto = r2(fin.venda * 0.11);
     fin.total_pos_imposto = 0; // recalculado abaixo com o liquido_vendas já neutro
     // o total usa o resultado DAS VENDAS (débitos avulsos não são custo)
@@ -210,9 +215,30 @@ export default async function handler(req, res) {
       // alcança os gastos recentes (teto de 10k registros; só fecha ~dia 18),
       // então o valor "real" ficava travado no mesmo número por dias. O que o
       // extrato mostrar fica de REFERÊNCIA pra ele comparar.
+      // 08/09 (ordem dele): REAL do extrato quando o mes tem valor E ja
+      // fechou (mes anterior); mes corrente e mes sem valor ficam nos 6%.
+      // Como a janela pode pegar so parte de um mes, o real do mes entra na
+      // proporcao da venda desse mes que cai dentro da janela.
+      const mesAtual = hoje.slice(0, 7);
+      const { data: vendaMesTot } = await supabase.rpc('ml_venda_por_mes', { p_meses: Object.keys(vendaPorMes) }).then(x => x, () => ({ data: null }));
+      const totalMes = {};
+      for (const x of (vendaMesTot || [])) totalMes[x.mes] = n(x.venda);
+      fin.publicidade_fonte = {};
       for (const [m, v] of Object.entries(vendaPorMes)) {
-        fin.publicidade += v * 0.06;
-        fin.publicidade_observada += (reais[m] || 0);
+        const real = reais[m] || 0;
+        // trava de plausibilidade: o sync do extrato bate num teto de 10k
+        // registros e chega incompleto (ago/26: R$ 1.163 vs ~R$ 30k reais).
+        // So usa o real se for pelo menos METADE da regua do mes; senao 6%.
+        const usaReal = m !== mesAtual && real > 0 && real >= 0.5 * ((totalMes[m] || v) * 0.06);
+        if (usaReal) {
+          const fracao = totalMes[m] > 0 ? Math.min(1, v / totalMes[m]) : 1;
+          fin.publicidade += real * fracao;
+          fin.publicidade_fonte[m] = 'real';
+        } else {
+          fin.publicidade += v * 0.06;
+          fin.publicidade_fonte[m] = '6%';
+        }
+        fin.publicidade_observada += real;
       }
       fin.publicidade = r2(fin.publicidade);
       fin.publicidade_observada = r2(fin.publicidade_observada);
@@ -233,15 +259,39 @@ export default async function handler(req, res) {
       // payment (provado: CFFE 7,85 do shipment 47653234025 = shp_fulfillment
       // 7,85 no payment do pedido) — somá-los seria dupla contagem
       const { data: bl } = await supabase.from('ml_billing_mensal')
-        .select('tipo, valor').in('mes', [...meses])
+        .select('mes, tipo, valor').in('mes', [...meses])
         .in('tipo', ['full_servicos', 'devolucao', 'outros']);
       let observado = 0;
+      const realPorMes = {};
       for (const b of (bl || [])) {
         observado += n(b.valor);
+        realPorMes[b.mes] = (realPorMes[b.mes] || 0) + n(b.valor);
         fin.tarifas_faturamento_det[b.tipo] = r2((fin.tarifas_faturamento_det[b.tipo] || 0) + n(b.valor));
       }
-      // 11/08 (ordem dele): 2% FIXO da venda; o observado no extrato fica de referência
-      fin.tarifas_faturamento = r2(fin.venda * 0.02);
+      // 08/09 (ordem dele): REAL do extrato de faturamento por mes quando
+      // existir e o mes ja fechou; sem valor (ou mes corrente) cai nos 2%.
+      // Mesma proporcao por venda-do-mes-na-janela dos ads.
+      const mesAtual2 = hoje.slice(0, 7);
+      const vendaPorMes2 = {};
+      for (const r of comMp) { const m = String(r.data_pedido).slice(0, 7); vendaPorMes2[m] = (vendaPorMes2[m] || 0) + n(r.preco_produtos); }
+      const { data: vendaMesTot2 } = await supabase.rpc('ml_venda_por_mes', { p_meses: Object.keys(vendaPorMes2) }).then(x => x, () => ({ data: null }));
+      const totalMes2 = {};
+      for (const x of (vendaMesTot2 || [])) totalMes2[x.mes] = n(x.venda);
+      fin.tarifas_faturamento = 0;
+      fin.tarifas_faturamento_fonte = {};
+      for (const [m, v] of Object.entries(vendaPorMes2)) {
+        const real = realPorMes[m] || 0;
+        // mesma trava: real so se for pelo menos metade da regua de 2%
+        if (m !== mesAtual2 && real > 0 && real >= 0.5 * ((totalMes2[m] || v) * 0.02)) {
+          const fracao = totalMes2[m] > 0 ? Math.min(1, v / totalMes2[m]) : 1;
+          fin.tarifas_faturamento += real * fracao;
+          fin.tarifas_faturamento_fonte[m] = 'real';
+        } else {
+          fin.tarifas_faturamento += v * 0.02;
+          fin.tarifas_faturamento_fonte[m] = '2%';
+        }
+      }
+      fin.tarifas_faturamento = r2(fin.tarifas_faturamento);
       fin.tarifas_faturamento_det.observado_extrato = r2(observado);
     }
     fin.resultado_final = r2(fin.total_pos_imposto - cmv.total - fin.custo_operacao - fin.publicidade - fin.tarifas_faturamento);
