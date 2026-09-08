@@ -142,6 +142,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   };
   // 03/09 (pedido dele): busca de pedido (nº Bling ou nº marketplace)
   const [buscaPed, setBuscaPed] = useState('');
+  const [ajudaOrdem, setAjudaOrdem] = useState(false);   // 08/09: (?) ao lado de "Ordem de impressao"
   const [buscados, setBuscados] = useState(null);   // null = sem busca; [] = nada achado
   const [buscando, setBuscando] = useState(false);
   const [selBuscado, setSelBuscado] = useState(null); // pedido_id marcado
@@ -737,12 +738,6 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          <span style={rotulo}>Período</span>
-          <button onClick={() => setFJanela('todos')} style={btn(fJanela === 'todos')}>Todos</button>
-          <button onClick={() => setFJanela('ate_corte')} style={btn(fJanela === 'ate_corte')}>Até o corte ({corteHora})</button>
-        </div>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <span style={rotulo}>Imprimir</span>
           <button onClick={() => setFTipo('nf_transporte')} style={btn(fTipo === 'nf_transporte')}>NF + transporte<Badge n={contadores?.nf_transporte} /></button>
           <button onClick={() => setFTipo('flex')} style={btn(fTipo === 'flex')}>⚡ Flex<Badge n={contadores?.flex} /></button>
@@ -763,6 +758,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             title="Pedidos cancelados no marketplace com a nota ainda viva. Cancele a nota no Bling e o pedido sai daqui sozinho.">
             🚫 Cancelados<Badge n={contadores?.cancelados} />
           </button>
+        </div>
+
+        {/* 08/09 (pedido dele): opcoes do lote em linha propria, sem misturar com as abas */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <span style={rotulo}>Lote</span>
           <label style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontFamily:"Georgia,serif",color:"#2c3e50",border:"1px solid #d8d2c8",borderRadius:10,padding:"7px 12px",cursor:"pointer",background:comSep?"#eef3f8":"#fff",marginRight:8}}>
             <input type="checkbox" checked={comSep} onChange={e => setComSep(e.target.checked)} style={{accentColor:"#4a7fa5"}} />
             Imprimir com separador
@@ -819,16 +819,6 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           title="VARREDURA GERAL (uns 5 min de manhã): pedidos novos no Bling → situação das notas → Flex/liberadas/agendadas confirmados na API do ML → classificação → etiquetas preparadas. Garante que tudo está na aba certa. (A Shein só é buscada no clique de imprimir.)"
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: preparo?.rodando ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700, opacity: preparo?.rodando ? .6 : 1 }}>
           <RefreshCw size={16} /> Varredura geral
-        </button>
-        <button onClick={() => abrirPdf(`${API}/wms-etiquetas?${qs({ previa_pdf: '1' })}`)}
-          title="PDF de conferência com a sequência que vai sair (DANFE + etiquetas). Não puxa nada do marketplace: a Shein aparece como página 'Shein logística' e só é buscada na impressão de verdade."
-          style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
-          👁 Prévia
-        </button>
-        <button onClick={testarQz}
-          title="Confere a conexão com o QZ Tray e lista as impressoras que ele enxerga"
-          style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
-          <Printer size={16} /> Testar QZ
         </button>
         <button onClick={auditar} disabled={auditoria === 'rodando'}
           title="Confere os chips contra as fontes: Bling (notas autorizadas = NF+transporte + agendadas + cancelados) e Mercado Livre (Flex, liberadas, Envios Agora). Só leitura, ~1 min."
@@ -924,6 +914,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             </div>
           );
         })()}
+        <button onClick={testarQz}
+          title="Confere a conexão com o QZ Tray e lista as impressoras que ele enxerga"
+          style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
+          <Printer size={16} /> Testar QZ
+        </button>
         <button onClick={() => setModalCert(true)}
           title="Instalar o certificado do QZ e liberar o Chrome nesta máquina"
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
@@ -955,7 +950,16 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
 
       {/* grupos na ordem de impressão */}
       <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 13, padding: 14 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 3 }}>Ordem de impressão</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink }}>Ordem de impressão</div>
+          <button onClick={() => setAjudaOrdem(v => !v)} title="Como a impressão é organizada"
+            style={{ width: 22, height: 22, borderRadius: 11, border: `1.5px solid ${palette.beige}`, background: ajudaOrdem ? palette.accentSoft : '#fff', color: palette.accent, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: FONT, lineHeight: 1 }}>?</button>
+        </div>
+        {ajudaOrdem && (
+          <div style={{ fontSize: 12, color: palette.inkSoft, background: '#f7f9fb', border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '8px 11px', marginBottom: 8 }}>
+            Por localização e, dentro dela, as referências de maior quantidade primeiro — cada grupo sai com uma folha separadora antes das etiquetas (NF + transporte).
+          </div>
+        )}
         {/* 03/09: busca de pedido especifico */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0 10px', flexWrap: 'wrap' }}>
           <input value={buscaPed} onChange={e => setBuscaPed(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') buscarPedido(); }}
@@ -996,9 +1000,6 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             })}
           </div>
         )}
-        <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>
-          Por localização e, dentro dela, as referências de maior quantidade primeiro — cada grupo sai com uma folha separadora antes das etiquetas (NF + transporte).
-        </div>
         {ehMeluni && (
           <div style={{ fontSize: 12, color: palette.inkSoft, background: '#e8f6f5', border: '1px solid #bfe0dd', borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
             <b>Meluni (site B2C):</b> aqui <b>não sai NF nem etiqueta</b> — a logística é gerada pela <b>Frenet</b>. Este painel é só visual e segue o Bling: pedido <b>em aberto</b> conta; marcado <b>atendido</b>, some sozinho.
