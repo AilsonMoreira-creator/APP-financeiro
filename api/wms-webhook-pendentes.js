@@ -33,7 +33,7 @@ export default async function handler(req, res) {
 
     const lista = evs || [];
     r.pendentes = lista.length;
-    if (!lista.length) return res.status(200).json({ ok: true, ...r, msg: 'nada pendente' });
+    if (!lista.length) { await vincularNotasSoltas(supabase, r); return res.status(200).json({ ok: true, ...r, msg: 'nada pendente' }); }
 
     // um pedido pode ter vários eventos (created + updated): processa uma vez
     const porRecurso = new Map();
@@ -141,8 +141,72 @@ export default async function handler(req, res) {
       }
     }
 
+    await vincularNotasSoltas(supabase, r);
     return res.status(200).json({ ok: true, ...r });
   } catch (e) {
     return res.status(500).json({ erro: e?.message || 'falhou' });
+  }
+}
+
+
+// ── 08/09 (pedido dele: "assim que a Sthefany gerar a nota, o pedido tem que
+// aparecer na aba certa"): o aviso invoice.* do Bling nao traz o pedido, so a
+// nota. Quem chegou como "nf fora do espelho" e resolvido AQUI, em ate 2 min:
+// detalhe da NF no Bling -> numeroPedidoLoja -> pedido do espelho -> grava
+// nf_id + situacao. Independente do rodizio do nf-sync.
+async function vincularNotasSoltas(supabase, r) {
+  r.notas_vinculadas = 0; r.notas_sem_pedido = 0;
+  const { data: evs } = await supabase
+    .from('bling_webhook_eventos')
+    .select('id, recurso_id, company_id, conta, payload, criado_em, event_id')
+    .eq('aplicado', false)
+    .like('evento', 'invoice.%')
+    .gte('criado_em', new Date(Date.now() - 6 * 3600000).toISOString())
+    .order('criado_em', { ascending: true })
+    .limit(40);
+  const lista = evs || [];
+  if (!lista.length) return;
+  // conta pelo companyId (mesma memoria dos pedidos)
+  const contaDeCompany = new Map();
+  const { data: jaSabidos } = await supabase.from('bling_webhook_eventos').select('company_id, conta').not('conta', 'is', null).limit(200);
+  for (const x of (jaSabidos || [])) if (x.company_id) contaDeCompany.set(x.company_id, x.conta);
+  const { refreshBlingToken, blingFetch } = await import('./_bling-helpers.js');
+  const tokens = {};
+  const vistos = new Set();
+  for (const ev of lista) {
+    const nfId = String(ev.recurso_id || ev.payload?.data?.id || '');
+    if (!nfId || vistos.has(nfId)) { continue; }
+    vistos.add(nfId);
+    const conta = ev.conta || contaDeCompany.get(ev.company_id);
+    try {
+      // ja vinculada no meio tempo?
+      const { data: ja } = await supabase.from('wms_pedidos').select('pedido_id').eq('nf_id', Number(nfId)).limit(1);
+      if (ja?.length) { await supabase.from('bling_webhook_eventos').update({ aplicado: true, conta, detalhe: 'nf ja vinculada' }).eq('id', ev.id); continue; }
+      if (!conta) { continue; }
+      if (!(conta in tokens)) tokens[conta] = await refreshBlingToken(conta).catch(() => null);
+      if (!tokens[conta]) continue;
+      const h = { Authorization: 'Bearer ' + tokens[conta], Accept: 'application/json' };
+      const rr = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, h);
+      const j = typeof rr.json === 'function' ? await rr.json().catch(() => ({})) : {};
+      const d = j?.data || {};
+      const numLoja = d.numeroPedidoLoja ? String(d.numeroPedidoLoja) : null;
+      const sit = d.situacao != null ? Number(d.situacao) : null;
+      let linhas = [];
+      if (numLoja) {
+        const { data } = await supabase.from('wms_pedidos')
+          .update({ nf_id: Number(nfId), ...(sit != null ? { nf_situacao: sit } : {}), nf_checado_em: new Date().toISOString() })
+          .eq('conta', conta).eq('numero_loja', numLoja).is('nf_id', null).select('numero');
+        linhas = data || [];
+      }
+      if (linhas.length) {
+        r.notas_vinculadas++;
+        await supabase.from('bling_webhook_eventos').update({ aplicado: true, conta, detalhe: `nf vinculada ao pedido ${linhas[0].numero} (sit ${sit ?? '?'})` }).eq('id', ev.id);
+      } else {
+        r.notas_sem_pedido++;
+        // balcao / atacado / Full / pedido ainda nao importado: marca pra nao repetir
+        await supabase.from('bling_webhook_eventos').update({ aplicado: true, conta, detalhe: numLoja ? `nf sem pedido no espelho (loja ${numLoja})` : 'nf sem pedido de marketplace (balcao/atacado)' }).eq('id', ev.id);
+      }
+      await new Promise(x => setTimeout(x, 340));
+    } catch (e) { r.erros = (r.erros || 0) + 1; }
   }
 }
