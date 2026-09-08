@@ -984,7 +984,11 @@ function _salvarFotoMem() {
     try { localStorage.setItem(_FOTO_MEM_KEY, JSON.stringify(_fotoMem)); } catch { /* cota */ }
   }, 800);
 }
-function _fotoLembrar(ref, valor) { _fotoMem[ref] = valor; _salvarFotoMem(); }
+// 08/09: 'x' (sem foto) vale por UM dia — foto cadastrada depois aparece no
+// dia seguinte, sem virar tentativa infinita nem marca permanente
+const _hojeFoto = () => new Date().toISOString().slice(0, 10);
+function _fotoLembrar(ref, valor) { _fotoMem[ref] = valor === 'x' ? ('x:' + _hojeFoto()) : valor; _salvarFotoMem(); }
+function _fotoSemFotoHoje(v) { return typeof v === 'string' && v.startsWith('x') && (v === 'x' || v.slice(2) === _hojeFoto()); }
 
 async function _buscarFotoSofia(refNorm) {
   if (_sofiaFotoCache.has(refNorm)) return _sofiaFotoCache.get(refNorm);
@@ -1051,7 +1055,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
   // Sequência de tentativas
   const cb = '?v=' + new Date().toISOString().slice(0, 10);
   const lembrado = _fotoMem[norm];   // nome do arquivo que funcionou, ou 'x' = sem foto
-  const urls = lembrado && lembrado !== 'x'
+  const urls = lembrado && !String(lembrado).startsWith('x')
     ? [lembrado, norm + '.jpg', norm + '.png', norm + '.webp']
     : [norm + '.jpg', norm + '.png', norm + '.webp'];
   if (orig !== norm) urls.push(orig + '.jpg', orig + '.png', orig + '.webp');
@@ -1062,16 +1066,33 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
 
   const onError = (e) => {
     const cur = e.target.src;
+    // 08/09 (5,3 MILHOES de requisicoes ao Storage em 7 dias, 99,9% com erro):
+    // teto de tentativas por imagem. Foto da Sofia que falha voltava pro
+    // inicio da cadeia, a cadeia esgotava, caia na Sofia de novo... infinito;
+    // com o Storage em 429 tudo falhava e o loop acelerava. Agora: no maximo
+    // (variacoes + 2) tentativas; esgotou, esconde e lembra 'x' — nao pede mais.
+    const n = (Number(e.target.dataset.tent) || 0) + 1;
+    e.target.dataset.tent = String(n);
+    const desistir = () => {
+      _fotoLembrar(norm, 'x');
+      e.target.style.display = 'none';
+      const ph = e.target.nextSibling;
+      if (ph) ph.style.display = 'flex';
+    };
+    if (n > urls.length + 2) { desistir(); return; }
     // Foto da Sofia falhou -> fallback no bucket 'produtos' (Ailson 31/07/2026)
+    // — UMA vez so; se ja passou pelo bucket, desiste.
     if (cur.includes('/sofia-midias/')) {
+      if (e.target.dataset.sofiaFalhou === '1') { desistir(); return; }
+      e.target.dataset.sofiaFalhou = '1';
       e.target.src = storageBase + urls[0] + cb;
       return;
     }
     const idx = urls.findIndex(u => cur.includes(u));
     if (idx >= 0 && idx < urls.length - 1) {
       e.target.src = storageBase + urls[idx + 1] + cb;
-    } else if (sofiaUrl) {
-      // Esgotou o bucket 'produtos' e já temos a foto da Sofia: usa ela.
+    } else if (sofiaUrl && e.target.dataset.sofiaFalhou !== '1') {
+      // Esgotou o bucket 'produtos' e já temos a foto da Sofia: usa ela (uma vez).
       e.target.src = sofiaUrl;
     } else {
       // Esgotou 'produtos' e ainda não buscou na Sofia: busca e, se achar, o
@@ -1098,7 +1119,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
 
   // Se já resolvemos a foto da Sofia, começa direto por ela (evita piscar).
   // REF marcada como 'sem foto' e sem mídia da Sofia: nem chama o storage.
-  const semFoto = lembrado === 'x' && !sofiaUrl;
+  const semFoto = _fotoSemFotoHoje(lembrado) && !sofiaUrl;
   const primeiraUrl = sofiaUrl || (semFoto ? null : storageBase + urls[0] + cb);
 
   if (aspectRatio) {
