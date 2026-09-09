@@ -159,7 +159,7 @@ const ProdutosTab = ({ userId }) => {
               )
             ) : <ListaProdutos
               itens={(dadosAba('compras') || data).compras_periodo[primeiraTipo]}
-              metricaLabel="clientes"
+              metricaLabel="sacolas"
               metricaCampo="clientes"
               mostrarPosicao
             />}
@@ -289,14 +289,14 @@ const ModalAjuda = ({ aba, onClose }) => {
       o_que_significa: 'Mostra os produtos com maior giro em volume. Útil pra identificar best-sellers e priorizar estoque.',
     },
     compras: {
-      titulo: '🛒 Compras (primeira do período)',
-      janela: 'Últimos 60 dias',
-      o_que_mostra: 'As 15 referências que mais aparecem na PRIMEIRA compra de cada cliente DENTRO do período.',
-      como_calcula: 'Pra cada cliente que comprou nos últimos 60 dias, identifica a venda mais antiga dentro dessa janela. Lista as refs que estavam nessa venda e conta quantos clientes diferentes tiveram cada ref nessa "primeira compra do período".',
-      atencao: '⚠️ "Primeira compra do período" NÃO significa "primeira da vida". Cliente antigo que voltou após 2 meses entra como se fosse primeira (porque é a primeira dele dentro da janela de 60d).',
-      filtro_loja: 'Quando filtra por loja, considera só vendas daquela loja como "primeira do período".',
-      toggle_vesti: 'Toggle Geral/Vesti: Geral conta todos os canais. Vesti só conta clientes cuja primeira compra do período veio pelo Vesti.',
-      o_que_significa: 'Mostra que produto "abre" relacionamento ou recompra com a loja em geral. Diferente da aba Primeira compra, que filtra só clientes verdadeiramente novos.',
+      titulo: '🛒 Compras no período',
+      janela: 'Últimos 60 dias (ou 30, no botão)',
+      o_que_mostra: 'As 15 referências que apareceram em mais SACOLAS no período. A quantidade é o número de sacolas (pedidos) que tiveram o modelo — incluindo primeira compra e recompra.',
+      como_calcula: 'Conta cada pedido (sacola) do período em que o modelo aparece, uma vez por sacola, mesmo que tenha 2 peças do mesmo modelo. Cliente que comprou o modelo em duas sacolas conta 2. Regra revisada em 09/09/2026 — antes só a primeira sacola de cada cliente no período contava.',
+      atencao: 'Sacolas, não peças: uma sacola com 3 unidades do modelo conta 1 aqui (as peças estão em "Top 30 vendidas").',
+      filtro_loja: 'Quando filtra por loja (BR ou ST), só conta sacolas daquela loja.',
+      toggle_vesti: 'Toggle Geral/Vesti: Geral conta todos os canais. Vesti só conta sacolas que vieram pelo Vesti.',
+      o_que_significa: 'Mostra que modelo entra em mais compras — quantas clientes levaram, não quanto volume saiu.',
     },
     primeira: {
       titulo: '🆕 Primeira compra (cliente novo de verdade)',
@@ -484,7 +484,7 @@ const RankingCores = ({ loja, userId }) => {
           {dados.sem_nome} código{dados.sem_nome > 1 ? 's' : ''} de cor ainda sem nome — {admin ? 'clique no lápis pra nomear (fica salvo).' : 'o admin pode nomear.'} O código é o do cadastro de cores do Miré (3 dígitos do SKU).
         </div>
       )}
-      <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginBottom: 6 }}>Seta: participação nos últimos 15 dias contra os 15 anteriores — <span style={{ color: '#1e8e4e', fontWeight: 800 }}>↑</span> subindo · <span style={{ color: '#c0392b', fontWeight: 800 }}>↓</span> caindo · = estável (menos de 0,5 ponto). Passe o mouse pra ver os números.</div>
+      <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginBottom: 6 }}>A seta (<span style={{ color: '#1e8e4e', fontWeight: 800 }}>↑</span> / <span style={{ color: '#c0392b', fontWeight: 800 }}>↓</span>) marca uma tendência relevante de subida ou declínio: a participação da cor mudou 25% ou mais nos últimos 15 dias em relação aos 15 anteriores. Sem seta = movimento normal.</div>
       {(dados?.ranking || []).map(r => (
         <div key={r.codigo} style={{ display: 'grid', gridTemplateColumns: '18px 150px 1fr 70px 46px 22px', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f0ece6' }}>
           <span style={{ width: 16, height: 16, borderRadius: 8, background: r.hex || '#e6e6e6', border: '1px solid #d6d0c8', display: 'inline-block' }} />
@@ -498,9 +498,9 @@ const RankingCores = ({ loja, userId }) => {
           </div>
           <span style={{ fontSize: 13, fontWeight: 800, fontFamily: FONT, color: palette.ink, textAlign: 'right' }}>{r.pecas.toLocaleString('pt-BR')}</span>
           <span style={{ fontSize: 12, fontFamily: FONT, color: palette.inkMuted, textAlign: 'right' }}>{r.pct}%</span>
-          <span title={`Últimos 15 dias: ${r.pct_15d}% (${r.pecas_15d} pç) · 15 anteriores: ${r.pct_15d_ant}% (${r.pecas_15d_ant} pç) · ${r.delta_pp > 0 ? '+' : ''}${r.delta_pp} pontos`}
-            style={{ fontSize: 15, fontWeight: 900, textAlign: 'center', color: r.tend === 'up' ? '#1e8e4e' : r.tend === 'down' ? '#c0392b' : '#b8b2a8', lineHeight: 1 }}>
-            {r.tend === 'up' ? '↑' : r.tend === 'down' ? '↓' : '='}
+          <span title={r.tend === 'flat' ? '' : `Últimos 15 dias: ${r.pct_15d}% (${r.pecas_15d} pç) · 15 anteriores: ${r.pct_15d_ant}% (${r.pecas_15d_ant} pç) · ${r.var_rel > 0 ? '+' : ''}${r.var_rel}%`}
+            style={{ fontSize: 15, fontWeight: 900, textAlign: 'center', color: r.tend === 'up' ? '#1e8e4e' : r.tend === 'down' ? '#c0392b' : 'transparent', lineHeight: 1 }}>
+            {r.tend === 'up' ? '↑' : r.tend === 'down' ? '↓' : ''}
           </span>
         </div>
       ))}
@@ -531,7 +531,7 @@ const RankingCores = ({ loja, userId }) => {
 const Tabs = ({ aba, setAba }) => {
   const tabs = [
     { id: 'vendidas', label: 'Top 30 vendidas' },
-    { id: 'compras', label: 'Compras' },
+    { id: 'compras', label: 'Compras no período' },
     { id: 'primeira', label: 'Primeira compra' },
     { id: 'recompra', label: 'Recompra' },
     { id: 'matches', label: 'Top matches' },

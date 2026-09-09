@@ -78,7 +78,13 @@ export default async function handler(req, res) {
       const pr = totRec ? 100 * (rec[cod] || 0) / totRec : 0;
       const pa = totAnt ? 100 * (ant[cod] || 0) / totAnt : 0;
       const delta = Math.round((pr - pa) * 10) / 10;
-      return { tend: delta >= 0.5 ? 'up' : delta <= -0.5 ? 'down' : 'flat', delta_pp: delta, pct_15d: Math.round(pr * 10) / 10, pct_15d_ant: Math.round(pa * 10) / 10, pecas_15d: rec[cod] || 0, pecas_15d_ant: ant[cod] || 0 };
+      // 09/09 (ordem dele): seta SO em mudanca grande — participacao variou
+      // 25% ou mais (relativo) e com volume minimo (>= 8 pecas numa das
+      // quinzenas) pra nao acender por 2 pecas de diferenca.
+      const varRel = pa > 0 ? Math.round(1000 * (pr - pa) / pa) / 10 : (pr > 0 ? 100 : 0);
+      const volumeOk = Math.max(rec[cod] || 0, ant[cod] || 0) >= 8;
+      const tend = !volumeOk ? 'flat' : varRel >= 25 ? 'up' : varRel <= -25 ? 'down' : 'flat';
+      return { tend, delta_pp: delta, var_rel: varRel, pct_15d: Math.round(pr * 10) / 10, pct_15d_ant: Math.round(pa * 10) / 10, pecas_15d: rec[cod] || 0, pecas_15d_ant: ant[cod] || 0 };
     };
 
     const porCor = {};
