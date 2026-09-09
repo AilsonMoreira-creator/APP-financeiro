@@ -47,15 +47,19 @@ export default async function handler(req, res) {
       itens.push(...(data || []));
       if (!data || data.length < 1000) break;
     }
-    const { data: nomes } = await supabase.from('lojas_cores_codigo').select('codigo, nome, hex');
+    const { data: nomes } = await supabase.from('lojas_cores_codigo').select('codigo, nome, hex, agrupar_em');
     const mapa = {}; for (const c of (nomes || [])) mapa[c.codigo] = c;
+    // 09/09 (ordem dele): cores fundidas — o codigo secundario soma no principal
+    // (Branco->Off-white, Manteiga->Amarelo, Rosa->Rosa Claro, Salmao->Coral, Bege->Areia)
+    const alvo = (cod) => { let c = cod; for (let i = 0; i < 3 && mapa[c]?.agrupar_em; i++) c = mapa[c].agrupar_em; return c; };
 
     const porCor = {};
     let totalPecas = 0, semCodigo = 0;
     for (const it of itens) {
-      const cod = codCor(it.sku);
+      const cod0 = codCor(it.sku);
       const qtd = Number(it.qtd) || 0;
-      if (!cod) { semCodigo += qtd; continue; }
+      if (!cod0) { semCodigo += qtd; continue; }
+      const cod = alvo(cod0);
       totalPecas += qtd;
       porCor[cod] = porCor[cod] || { codigo: cod, pecas: 0, valor: 0, refs: new Set(), por_loja: {} };
       porCor[cod].pecas += qtd;
@@ -68,7 +72,7 @@ export default async function handler(req, res) {
       pecas: c.pecas, valor: Math.round(c.valor * 100) / 100, refs: c.refs.size,
       pct: totalPecas ? Math.round(1000 * c.pecas / totalPecas) / 10 : 0,
       bom_retiro: c.por_loja[LOJA_BR] || 0, silva_teles: c.por_loja[LOJA_ST] || 0,
-    })).sort((a, b) => b.pecas - a.pecas);
+    })).sort((a, b) => b.pecas - a.pecas).slice(0, Math.min(50, parseInt(req.query?.top, 10) || 20));   // 09/09: top 20 por padrao
     return res.status(200).json({ ok: true, dias, loja: lojaFiltro, desde, total_pecas: totalPecas, sem_codigo: semCodigo,
       cores: ranking.length, sem_nome: ranking.filter(r => !r.nome).length, ranking });
   } catch (e) {
