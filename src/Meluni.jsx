@@ -3043,7 +3043,12 @@ function SecaoDashboard() {
 
   // 08/09 (pedido dele): PDF A4 com tudo da tela, pra mandar pra equipe de
   // trafego pago. Usa os dados ja carregados; abre a folha e chama imprimir.
-  const gerarPdfDashboard = () => {
+  // 08/09 (pedido dele): relatório A4 com tudo da tela. Abre como CAMADA DENTRO
+  // DO APP (no iPhone, window.open prendia numa aba sem "voltar") — com botões
+  // Imprimir/Salvar PDF e Fechar; a impressão sai só o relatório, ocupando a
+  // folha inteira, sem título "equipe de tráfego" nem instruções.
+  const [pdfAberto, setPdfAberto] = useState(false);
+  const htmlRelatorio = () => {
     const vendasQtd = Number(d.vendas?.qtd) || 0, vendasSoma = Number(d.vendas?.soma) || 0;
     const devSoma = Number(d.devolucoes?.soma) || 0, devQtd = Number(d.devolucoes?.qtd) || 0;
     const cpa = gasto && vendasQtd ? gasto / vendasQtd : null;
@@ -3060,24 +3065,10 @@ function SecaoDashboard() {
       const w = Math.round(100 * (Number(x.vendas_valor) || 0) / maxV);
       return `<tr><td>${dd}</td><td class="n">${Number(x.vendas_qtd) || 0}</td><td class="n">${fmtBRL(x.vendas_valor)}</td><td class="n">${fmtBRL(x.devol_valor)}</td><td class="n">${Number(x.carrinhos_qtd) || 0}</td><td><div class="bar"><div style="width:${w}%"></div></div></td></tr>`;
     }).join('');
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Meluni · Dashboard · ${periodoTxt}</title>
-      <style>
-        @page { size: A4; margin: 13mm; }
-        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1f2d3a; margin: 0; }
-        h1 { font-size: 20px; margin: 0; } .meta { font-size: 11px; color: #6b7c8a; margin: 2px 0 12px; }
-        .brand { color: #9b59b6; font-weight: 800; letter-spacing: .04em; font-size: 11px; }
-        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-        .kpi { border: 1px solid #e3e8ee; border-radius: 8px; padding: 8px 10px; } .kpi.dst { border-color: #9b59b6; background: #f6f0f9; }
-        .kpi .l { font-size: 10.5px; color: #6b7c8a; text-transform: uppercase; letter-spacing: .04em; } .kpi .v { font-size: 20px; font-weight: 800; margin-top: 2px; } .kpi .s { font-size: 10.5px; color: #6b7c8a; }
-        h2 { font-size: 13px; margin: 14px 0 6px; color: #9b59b6; }
-        .traf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-        table { width: 100%; border-collapse: collapse; font-size: 11px; } th { text-align: left; color: #6b7c8a; font-weight: 700; border-bottom: 1px solid #e3e8ee; padding: 3px 4px; } td { padding: 3px 4px; border-bottom: 1px dashed #eef1f4; } td.n, th.n { text-align: right; }
-        .bar { height: 8px; background: #ece3f2; border-radius: 4px; width: 100%; } .bar div { height: 100%; background: #9b59b6; border-radius: 4px; }
-        .leg { margin-top: 10px; font-size: 10px; color: #6b7c8a; line-height: 1.45; border-top: 1px solid #e3e8ee; padding-top: 6px; }
-      </style></head><body>
+    return `
       <div class="brand">MELUNI · E-COMMERCE</div>
       <h1>Dashboard de vendas</h1>
-      <div class="meta">Período: <b>${periodoTxt}</b> · gerado em ${agora} · fonte: app Grupo Amícia (Bling + Meta Ads)</div>
+      <div class="meta">Período: <b>${periodoTxt}</b> · gerado em ${agora}</div>
       <div class="grid">
         ${kpi('Vendas', fmtBRL(vendasSoma), `${vendasQtd} pedidos`)}
         ${kpi('Devoluções', fmtBRL(devSoma), `${devQtd} devoluções · ${pctDev.toFixed(1)}% do vendido`)}
@@ -3088,24 +3079,32 @@ function SecaoDashboard() {
         ${kpi('Carrinhos abandonados', String(d.carrinhos?.qtd || 0), d.carrinhos?.conversao_pct != null ? `${d.carrinhos.convertidos} recuperados · ${Math.round(d.carrinhos.conversao_pct)}%` : '')}
         ${kpi('Gasto Meta Ads', gasto == null ? '—' : fmtBRL(gasto), 'conta Meluni')}
         ${kpi('ROAS (venda ÷ gasto)', roas == null ? '—' : roas.toFixed(2) + 'x', '', true)}
-      </div>
-      <h2>Para a equipe de tráfego</h2>
-      <div class="traf">
         ${kpi('CPA (gasto ÷ pedidos)', cpa == null ? '—' : fmtBRL(cpa), 'custo por pedido')}
-        ${kpi('Gasto ÷ venda', (gasto && vendasSoma) ? (100 * gasto / vendasSoma).toFixed(1) + '%' : '—', 'ACOS')}
-        ${kpi('Pedidos / dia', serie.length ? (vendasQtd / serie.length).toFixed(1) : '—', `${serie.length} dias`)}
-        ${kpi('Venda / dia', serie.length ? fmtBRL(vendasSoma / serie.length) : '—', 'média do período')}
+        ${kpi('Gasto ÷ venda (ACOS)', (gasto && vendasSoma) ? (100 * gasto / vendasSoma).toFixed(1) + '%' : '—', '')}
+        ${kpi('Média por dia', serie.length ? `${(vendasQtd / serie.length).toFixed(1)} pedidos · ${fmtBRL(vendasSoma / serie.length)}` : '—', `${serie.length} dias`)}
       </div>
       <h2>Dia a dia</h2>
-      <table><thead><tr><th>Dia</th><th class="n">Pedidos</th><th class="n">Vendas</th><th class="n">Devoluções</th><th class="n">Carrinhos</th><th style="width:34%">Vendas (relativo)</th></tr></thead><tbody>${linhasSerie}</tbody></table>
-      <div class="leg">
-        <b>Como ler:</b> Vendas = pedidos do site Meluni no período (Bling). Valor real = vendas menos devoluções. Clientes novos = primeira compra no período; recorrentes = já tinham comprado antes. Carrinhos = abandonados com telefone; recuperados = converteram após a abordagem da Lara. Gasto Meta Ads = investimento da conta Meluni no mesmo período. ROAS = venda ÷ gasto; CPA = gasto ÷ pedidos.
-      </div>
-      <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
-      </body></html>`;
-    const w = window.open('', '_blank'); if (!w) { alert('Libere pop-ups pra gerar o PDF.'); return; }
-    w.document.write(html); w.document.close();
+      <table><thead><tr><th>Dia</th><th class="n">Pedidos</th><th class="n">Vendas</th><th class="n">Devoluções</th><th class="n">Carrinhos</th><th style="width:34%">Vendas (relativo)</th></tr></thead><tbody>${linhasSerie}</tbody></table>`;
   };
+  const CSS_RELATORIO = `
+    #relatorio-meluni { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1f2d3a; }
+    #relatorio-meluni h1 { font-size: 26px; margin: 0; } #relatorio-meluni .meta { font-size: 13px; color: #6b7c8a; margin: 4px 0 16px; }
+    #relatorio-meluni .brand { color: #9b59b6; font-weight: 800; letter-spacing: .06em; font-size: 12px; }
+    #relatorio-meluni .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    #relatorio-meluni .kpi { border: 1px solid #e3e8ee; border-radius: 10px; padding: 14px 16px; min-height: 84px; } #relatorio-meluni .kpi.dst { border-color: #9b59b6; background: #f6f0f9; }
+    #relatorio-meluni .kpi .l { font-size: 11.5px; color: #6b7c8a; text-transform: uppercase; letter-spacing: .05em; } #relatorio-meluni .kpi .v { font-size: 26px; font-weight: 800; margin-top: 4px; } #relatorio-meluni .kpi .s { font-size: 12px; color: #6b7c8a; margin-top: 2px; }
+    #relatorio-meluni h2 { font-size: 16px; margin: 20px 0 8px; color: #9b59b6; }
+    #relatorio-meluni table { width: 100%; border-collapse: collapse; font-size: 13.5px; } #relatorio-meluni th { text-align: left; color: #6b7c8a; font-weight: 700; border-bottom: 1px solid #e3e8ee; padding: 7px 6px; } #relatorio-meluni td { padding: 7px 6px; border-bottom: 1px dashed #eef1f4; } #relatorio-meluni td.n, #relatorio-meluni th.n { text-align: right; }
+    #relatorio-meluni .bar { height: 12px; background: #ece3f2; border-radius: 6px; width: 100%; } #relatorio-meluni .bar div { height: 100%; background: #9b59b6; border-radius: 6px; }
+    @media print {
+      @page { size: A4; margin: 12mm; }
+      body * { visibility: hidden !important; }
+      #relatorio-meluni, #relatorio-meluni * { visibility: visible !important; }
+      #relatorio-meluni { position: absolute !important; left: 0; top: 0; width: 100%; padding: 0 !important; background: #fff; }
+      .no-print { display: none !important; }
+    }
+  `;
+  const gerarPdfDashboard = () => setPdfAberto(true);
 
   return (
     <div>
@@ -3140,6 +3139,16 @@ function SecaoDashboard() {
         <KpiTile label="ROAS (venda ÷ gasto)" valor={loadingGasto ? '…' : (roas == null ? '—' : roas.toFixed(2) + 'x')} destaque />
       </div>
       <MiniBarras serie={d.serie || []} />
+      {pdfAberto && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100000, background: '#fff', overflow: 'auto' }}>
+          <style>{CSS_RELATORIO}</style>
+          <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 2, display: 'flex', gap: 8, padding: '10px 14px', background: '#fff', borderBottom: `1px solid ${palette.beige}`, alignItems: 'center' }}>
+            <button onClick={() => setPdfAberto(false)} style={{ border: `1px solid ${palette.beige}`, background: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: palette.ink, cursor: 'pointer', fontFamily: FONT }}>← Voltar</button>
+            <button onClick={() => window.print()} style={{ marginLeft: 'auto', border: 'none', background: MELUNI, color: '#fff', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>📄 Imprimir / Salvar PDF</button>
+          </div>
+          <div id="relatorio-meluni" style={{ padding: '18px 22px', maxWidth: 900, margin: '0 auto' }} dangerouslySetInnerHTML={{ __html: htmlRelatorio() }} />
+        </div>
+      )}
     </div>
   );
 }
