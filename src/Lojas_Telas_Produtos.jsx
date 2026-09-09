@@ -214,6 +214,7 @@ const ProdutosTab = ({ userId }) => {
             />}
           </>
         )}
+        {aba === 'cores' && <RankingCores loja={loja} userId={userId} />}
         {aba === 'matches' && (
           <>
             <SubtitleJanela
@@ -441,6 +442,86 @@ const Header = ({ loja, setLoja }) => {
   );
 };
 
+// ─── Ranking de cores das lojas físicas (Ailson 09/09/2026) ─────────────
+// Igual ao "Vendas por Cor" do Bling, mas com a planilha do Miré (soma das 2
+// lojas ou uma). A cor vem dos 3 dígitos do SKU; código sem nome aparece como
+// "cor NNN" com um lápis pro admin nomear na hora (fica salvo pra sempre).
+const RankingCores = ({ loja, userId }) => {
+  const [dias, setDias] = useState(30);
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [editando, setEditando] = useState(null);   // { codigo, nome, hex }
+  const admin = String(userId || '') === 'ailson';
+  const carregar = () => {
+    setErro(null);
+    fetch(`/api/lojas-ranking-cores?loja=${loja}&dias=${dias}`, { headers: { 'X-User': userId || 'ailson' } })
+      .then(r => r.json()).then(d => { if (d?.ok) setDados(d); else setErro(d?.error || 'erro'); })
+      .catch(e => setErro(String(e?.message || e)));
+  };
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [loja, dias, userId]);
+  const salvar = async () => {
+    if (!editando) return;
+    await fetch('/api/lojas-ranking-cores', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User': userId || 'ailson' }, body: JSON.stringify(editando) });
+    setEditando(null); carregar();
+  };
+  const max = Math.max(1, ...((dados?.ranking || []).map(r => r.pecas)));
+  const chip = (ativo) => ({ padding: '5px 12px', borderRadius: 999, border: `1px solid ${ativo ? palette.accent : palette.beige}`, background: ativo ? palette.accent : '#fff', color: ativo ? '#fff' : palette.inkSoft, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT });
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
+          🎨 Peças vendidas por cor · {loja === 'todas' ? 'Bom Retiro + Silva Teles' : loja === 'BR' ? 'Bom Retiro' : 'Silva Teles'}
+          {dados ? ` · ${dados.total_pecas.toLocaleString('pt-BR')} peças · ${dados.cores} cores` : ''}
+        </span>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button onClick={() => setDias(30)} style={chip(dias === 30)}>30 dias</button>
+          <button onClick={() => setDias(60)} style={chip(dias === 60)}>60 dias</button>
+        </span>
+      </div>
+      {erro && <div style={{ color: '#c0392b', fontSize: 13 }}>⚠ {erro}</div>}
+      {dados?.sem_nome > 0 && (
+        <div style={{ fontSize: 12, color: '#8a6d1a', background: '#fdf6dd', border: '1px solid #eeda92', borderRadius: 8, padding: '8px 11px', marginBottom: 10, fontFamily: FONT }}>
+          {dados.sem_nome} código{dados.sem_nome > 1 ? 's' : ''} de cor ainda sem nome — {admin ? 'clique no lápis pra nomear (fica salvo).' : 'o admin pode nomear.'} O código é o do cadastro de cores do Miré (3 dígitos do SKU).
+        </div>
+      )}
+      {(dados?.ranking || []).map(r => (
+        <div key={r.codigo} style={{ display: 'grid', gridTemplateColumns: '18px 150px 1fr 70px 46px', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f0ece6' }}>
+          <span style={{ width: 16, height: 16, borderRadius: 8, background: r.hex || '#e6e6e6', border: '1px solid #d6d0c8', display: 'inline-block' }} />
+          <span style={{ fontSize: 13, fontFamily: FONT, color: r.nome ? palette.ink : palette.inkMuted, fontStyle: r.nome ? 'normal' : 'italic', display: 'flex', alignItems: 'center', gap: 6 }}
+            title={`código ${r.codigo} · ${r.refs} ref${r.refs > 1 ? 's' : ''} · Bom Retiro ${r.bom_retiro} · Silva Teles ${r.silva_teles}`}>
+            {r.nome || `cor ${r.codigo}`}
+            {admin && <button onClick={() => setEditando({ codigo: r.codigo, nome: r.nome || '', hex: r.hex || '#cccccc' })} title="nomear / editar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: palette.inkMuted }}>✏️</button>}
+          </span>
+          <div style={{ height: 10, background: '#f0ece6', borderRadius: 5, overflow: 'hidden' }}>
+            <div style={{ width: `${Math.round(100 * r.pecas / max)}%`, height: '100%', background: r.hex || palette.accent, borderRadius: 5, opacity: r.nome ? 1 : 0.5 }} />
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 800, fontFamily: FONT, color: palette.ink, textAlign: 'right' }}>{r.pecas.toLocaleString('pt-BR')}</span>
+          <span style={{ fontSize: 12, fontFamily: FONT, color: palette.inkMuted, textAlign: 'right' }}>{r.pct}%</span>
+        </div>
+      ))}
+      {editando && (
+        <div onClick={() => setEditando(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, width: 'min(360px, 94vw)', fontFamily: FONT }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: palette.ink, marginBottom: 10 }}>Cor · código {editando.codigo}</div>
+            <label style={{ fontSize: 12, color: palette.inkMuted }}>Nome</label>
+            <input autoFocus value={editando.nome} onChange={e => setEditando({ ...editando, nome: e.target.value })} placeholder="ex: Verde Sálvia"
+              style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 8, border: `1.5px solid ${palette.beige}`, fontSize: 14, fontFamily: FONT, marginBottom: 10 }} />
+            <label style={{ fontSize: 12, color: palette.inkMuted }}>Cor (bolinha e barra)</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14 }}>
+              <input type="color" value={editando.hex} onChange={e => setEditando({ ...editando, hex: e.target.value })} style={{ width: 44, height: 32, border: 'none', background: 'none' }} />
+              <span style={{ fontSize: 12, color: palette.inkMuted }}>{editando.hex}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setEditando(null)} style={{ flex: 1, padding: 10, borderRadius: 8, border: `1px solid ${palette.beige}`, background: '#fff', fontFamily: FONT, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={salvar} style={{ flex: 1, padding: 10, borderRadius: 8, border: 'none', background: palette.accent, color: '#fff', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Tabs (4 paineis) ──────────────────────────────────────────────────────
 const Tabs = ({ aba, setAba }) => {
   const tabs = [
@@ -449,6 +530,7 @@ const Tabs = ({ aba, setAba }) => {
     { id: 'primeira', label: 'Primeira compra' },
     { id: 'recompra', label: 'Recompra' },
     { id: 'matches', label: 'Top matches' },
+    { id: 'cores', label: 'Ranking de cores' },
   ];
   return (
     <div style={{
