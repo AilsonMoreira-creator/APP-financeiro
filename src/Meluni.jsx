@@ -3101,10 +3101,20 @@ function SecaoDashboard() {
     #relatorio-meluni table { width: 100%; border-collapse: collapse; font-size: 13.5px; } #relatorio-meluni th { text-align: left; color: #6b7c8a; font-weight: 700; border-bottom: 1px solid #e3e8ee; padding: 7px 6px; } #relatorio-meluni td { padding: 7px 6px; border-bottom: 1px dashed #eef1f4; } #relatorio-meluni td.n, #relatorio-meluni th.n { text-align: right; }
     #relatorio-meluni .bar { height: 12px; background: #ece3f2; border-radius: 6px; width: 100%; } #relatorio-meluni .bar div { height: 100%; background: #9b59b6; border-radius: 6px; }
     @media print {
-      @page { size: A4; margin: 12mm; }
+      /* margem 0 tira o cabeçalho/rodapé que o navegador imprime (URL, data, página);
+         a margem da folha vira padding do relatório */
+      @page { size: A4; margin: 0; }
+      html, body { height: auto !important; overflow: visible !important; }
       body * { visibility: hidden !important; }
       #relatorio-meluni, #relatorio-meluni * { visibility: visible !important; }
-      #relatorio-meluni { position: absolute !important; left: 0; top: 0; width: 100%; padding: 0 !important; background: #fff; }
+      /* o overlay é fixed+overflow:auto — na impressão isso corta na 1ª página; vira fluxo normal */
+      #overlay-meluni { position: static !important; overflow: visible !important; height: auto !important; inset: auto !important; }
+      #relatorio-meluni { position: static !important; width: auto !important; max-width: none !important; padding: 12mm 12mm 10mm !important; background: #fff; }
+      #relatorio-meluni .grid { grid-template-columns: 1fr 1fr !important; gap: 6px 12px !important; }
+      #relatorio-meluni .kpi { min-height: 46px !important; padding: 8px 12px !important; break-inside: avoid; }
+      #relatorio-meluni .kpi .v { font-size: 18px !important; }
+      #relatorio-meluni table { font-size: 12px !important; } #relatorio-meluni td, #relatorio-meluni th { padding: 5px 6px !important; }
+      #relatorio-meluni tr { break-inside: avoid; }
       .no-print { display: none !important; }
     }
   `;
@@ -3144,7 +3154,7 @@ function SecaoDashboard() {
       </div>
       <MiniBarras serie={d.serie || []} />
       {pdfAberto && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100000, background: '#fff', overflow: 'auto' }}>
+        <div id="overlay-meluni" style={{ position: 'fixed', inset: 0, zIndex: 100000, background: '#fff', overflow: 'auto' }}>
           <style>{CSS_RELATORIO}</style>
           <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 2, display: 'flex', gap: 8, padding: '10px 14px', background: '#fff', borderBottom: `1px solid ${palette.beige}`, alignItems: 'center' }}>
             <button onClick={() => setPdfAberto(false)} style={{ border: `1px solid ${palette.beige}`, background: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: palette.ink, cursor: 'pointer', fontFamily: FONT }}>← Voltar</button>
