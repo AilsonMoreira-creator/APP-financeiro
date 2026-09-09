@@ -3169,6 +3169,28 @@ function montarMessagesSugestoes(ctx) {
     if ((da === null) !== (db === null)) return da === null ? -1 : 1;
     return (db || 0) - (da || 0);
   });
+  // 09/09 (auditoria do 1o dia: Joelma 5/7 e Cleide 4/6 SEM WhatsApp; Vanessa
+  // com 3 "primeira vez" em vez de 4+): regra no prompt a IA cumpre em parte.
+  // Agora o BACKEND decide a oferta: (1) so clientes com WhatsApp — sem
+  // telefone entra so se os contataveis nao chegarem a 14; (2) quando ha
+  // nunca-sugeridas de sobra (>= 20), a carteira enviada e dominada por elas:
+  // nunca-sugeridas + as faixas obrigatorias (inativo/semAtividade/atencao/novas),
+  // e no maximo 10 "ja vistas" pra dar contexto.
+  const comWhatsTodos = carteira.filter(c => c.tem_whatsapp);
+  const semWhatsTodos = carteira.filter(c => !c.tem_whatsapp);
+  let oferta = comWhatsTodos.length >= 14 ? comWhatsTodos : [...comWhatsTodos, ...semWhatsTodos];
+  const nuncaSugeridas = oferta.filter(c => c.nunca_sugerida);
+  if (nuncaSugeridas.length >= 20) {
+    const faixaObrigatoria = (c) => ['inativo', 'semAtividade', 'atencao'].includes(c.kpi?.status_atual) || c.cliente_nova;
+    const jaVistas = oferta.filter(c => !c.nunca_sugerida);
+    const jaVistasEssenciais = jaVistas.filter(faixaObrigatoria);
+    const jaVistasContexto = jaVistas.filter(c => !faixaObrigatoria(c)).slice(0, 10);
+    oferta = [...nuncaSugeridas, ...jaVistasEssenciais, ...jaVistasContexto];
+  }
+  const carteiraOriginalTamanho = carteira.length;
+  carteira.length = 0; carteira.push(...oferta);
+  console.log('[lojas-ia] oferta pra IA:', carteira.length, 'de', carteiraOriginalTamanho, '| com whats:', comWhatsTodos.length, '| nunca sugeridas:', nuncaSugeridas.length);
+
   // Listas de prioridade explicitas (a IA tem que USAR, o backend confere depois)
   const rodizio = {
     clientes_novas: carteira.filter(c => c.cliente_nova && c.tem_whatsapp).slice(0, 8).map(c => ({ id: c.id, apelido: c.apelido, primeira_compra_ha_dias: c.primeira_compra_ha_dias, dias_desde_ultima_sugestao: c.dias_desde_ultima_sugestao })),
