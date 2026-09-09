@@ -2814,12 +2814,7 @@ export const CardDiaScreen = ({
               <span style={{ fontSize: fz(11), color: palette.inkMuted }}>📎 {s.fotos.length} foto{s.fotos.length > 1 ? 's' : ''}</span>
             </div>
           )}
-          {(!Array.isArray(sugestao.fotos) || sugestao.fotos.length === 0) && !sugestao.catalogo && sugestao.produto_ref && (
-          <div style={{ background: '#fdf6dd', border: '1px solid #eeda92', borderRadius: 10, padding: '10px 12px', marginBottom: 18, fontSize: fz(12.5), color: '#8a6d1a' }}>
-            📷 Este modelo (REF {refDisplay(sugestao.produto_ref)}) ainda não tem foto de verão nas mídias da Sofia — por isso não anexamos nenhuma. Pode mandar a mensagem e tirar a foto da peça na loja, ou pedir pra cadastrar a mídia.
-          </div>
-        )}
-        {/* Catálogo de promoção no lugar das fotos (Ailson 18/06/2026) */}
+          {/* Catálogo de promoção no lugar das fotos (Ailson 18/06/2026) */}
           {s.catalogo && s.catalogo.url && (
             <div style={{ display: 'flex', gap: 4, marginTop: 6, alignItems: 'center' }}>
               <span style={{ fontSize: fz(11), color: '#9b59b6', fontWeight: 700 }}>📋 Catálogo de promoção</span>
@@ -3737,6 +3732,11 @@ export const SugestaoScreen = ({
           </>
         )}
 
+        {(!Array.isArray(sugestao.fotos) || sugestao.fotos.length === 0) && !sugestao.catalogo && sugestao.produto_ref && (
+          <div style={{ background: '#fdf6dd', border: '1px solid #eeda92', borderRadius: 10, padding: '10px 12px', marginBottom: 18, fontSize: fz(12.5), color: '#8a6d1a' }}>
+            📷 Este modelo (REF {refDisplay(sugestao.produto_ref)}) ainda não tem foto de verão nas mídias da Sofia — por isso não anexamos nenhuma. Pode mandar a mensagem e tirar a foto da peça na loja, ou pedir pra cadastrar a mídia.
+          </div>
+        )}
         {/* Catálogo de promoção no lugar das fotos (Ailson 18/06/2026) */}
         {sugestao.catalogo && sugestao.catalogo.url && (
           <>
