@@ -143,7 +143,7 @@ const ProdutosTab = ({ userId }) => {
         {aba === 'compras' && (
           <>
             <SubtitleJanela
-              texto={`📅 Últimos ${em30('compras') ? 30 : 60} dias · top 15 refs ${primeiraTipo === 'vesti' ? '(canal Vesti)' : '(todos canais)'} · primeira compra do período (cliente pode ser antigo)`}
+              texto={`📅 Últimos ${em30('compras') ? 30 : 60} dias · top 15 refs ${primeiraTipo === 'vesti' ? '(canal Vesti)' : '(todos canais)'} · número de sacolas em que o modelo apareceu (primeira compra e recompra contam)`}
               onAjuda={() => setAjudaAberta('compras')}
               extra={<Toggle30 id="compras" padrao="60 dias" />}
             />

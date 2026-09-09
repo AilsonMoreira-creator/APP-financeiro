@@ -82,8 +82,11 @@ export default async function handler(req, res) {
       .slice(0, 30)
       .map((r, i) => ({ ...r, posicao: i + 1 }));
 
-    // ─── 2. COMPRAS DO PERIODO (60d) — antiga 'primeira compra' ────────
-    // Pra cada cliente, primeira venda DENTRO da janela. Cliente pode ser antigo.
+    // ─── 2. COMPRAS NO PERIODO (60d/30d) ────────────────────────────────
+    // 09/09 (ordem dele): numero de SACOLAS (pedidos) em que o modelo apareceu,
+    // incluindo primeira compra e recompra. A view devolve isso no campo
+    // `clientes` (nome mantido por compatibilidade) — NAO e mais "primeira
+    // venda do cliente no periodo".
     let qComp = supabase.from(`vw_lojas_compras_periodo_${sufV}`)
       .select('ref, canal_origem, loja, clientes, pecas');
     qComp = aplicarFiltroLoja(qComp, lojaFiltro);
