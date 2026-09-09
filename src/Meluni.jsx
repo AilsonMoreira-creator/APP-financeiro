@@ -3043,82 +3043,29 @@ function SecaoDashboard() {
 
   // 08/09 (pedido dele): PDF A4 com tudo da tela, pra mandar pra equipe de
   // trafego pago. Usa os dados ja carregados; abre a folha e chama imprimir.
-  // 08/09 (pedido dele): relatório A4 com tudo da tela. Abre como CAMADA DENTRO
-  // DO APP (no iPhone, window.open prendia numa aba sem "voltar") — com botões
-  // Imprimir/Salvar PDF e Fechar; a impressão sai só o relatório, ocupando a
-  // folha inteira, sem título "equipe de tráfego" nem instruções.
-  const [pdfAberto, setPdfAberto] = useState(false);
-  const htmlRelatorio = () => {
-    const vendasQtd = Number(d.vendas?.qtd) || 0, vendasSoma = Number(d.vendas?.soma) || 0;
-    const devSoma = Number(d.devolucoes?.soma) || 0, devQtd = Number(d.devolucoes?.qtd) || 0;
-    const cpa = gasto && vendasQtd ? gasto / vendasQtd : null;
-    const pctDev = vendasSoma ? (devSoma / vendasSoma) * 100 : 0;
-    const totalCli = Number(d.clientes?.total) || 0;
-    const periodoTxt = d.periodo ? `${fmtData(d.periodo.de)} a ${fmtData(d.periodo.ate)}` : '';
-    const agora = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const serie = Array.isArray(d.serie) ? d.serie : [];
-    const maxV = Math.max(1, ...serie.map(x => Number(x.vendas_valor) || 0));
-    // 08/09 (pedido dele): cards HORIZONTAIS — rótulo e detalhe à esquerda, valor à direita
-    const kpi = (label, valor, sub, destaque) => `<div class="kpi${destaque ? ' dst' : ''}"><div class="t"><div class="l">${label}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div><div class="v">${valor}</div></div>`;
-    const linhasSerie = serie.map(x => {
-      const dt = String(x.data || '');
-      const dd = dt.length >= 10 ? `${dt.slice(8, 10)}/${dt.slice(5, 7)}` : dt;
-      const w = Math.round(100 * (Number(x.vendas_valor) || 0) / maxV);
-      return `<tr><td>${dd}</td><td class="n">${Number(x.vendas_qtd) || 0}</td><td class="n">${fmtBRL(x.vendas_valor)}</td><td class="n">${fmtBRL(x.devol_valor)}</td><td class="n">${Number(x.carrinhos_qtd) || 0}</td><td><div class="bar"><div style="width:${w}%"></div></div></td></tr>`;
-    }).join('');
-    return `
-      <div class="brand">MELUNI · E-COMMERCE</div>
-      <h1>Dashboard de vendas</h1>
-      <div class="meta">Período: <b>${periodoTxt}</b> · gerado em ${agora}</div>
-      <div class="grid">
-        ${kpi('Vendas', fmtBRL(vendasSoma), `${vendasQtd} pedidos`)}
-        ${kpi('Devoluções', fmtBRL(devSoma), `${devQtd} devoluções · ${pctDev.toFixed(1)}% do vendido`)}
-        ${kpi('Valor real (vendas − devolução)', fmtBRL(d.valor_real), '', true)}
-        ${kpi('Ticket médio', fmtBRL(d.ticket), '')}
-        ${kpi('Clientes novos', String(d.clientes?.novos ?? 0), totalCli ? `${Math.round(100 * (d.clientes.novos || 0) / totalCli)}% do período` : '')}
-        ${kpi('Clientes recorrentes', String(d.clientes?.recorrentes ?? 0), totalCli ? `${Math.round(100 * (d.clientes.recorrentes || 0) / totalCli)}% já compraram antes` : '', true)}
-        ${kpi('Carrinhos abandonados', String(d.carrinhos?.qtd || 0), d.carrinhos?.conversao_pct != null ? `${d.carrinhos.convertidos} recuperados · ${Math.round(d.carrinhos.conversao_pct)}%` : '')}
-        ${kpi('Gasto Meta Ads', gasto == null ? '—' : fmtBRL(gasto), 'conta Meluni')}
-        ${kpi('ROAS (venda ÷ gasto)', roas == null ? '—' : roas.toFixed(2) + 'x', '', true)}
-        ${kpi('CPA (gasto ÷ pedidos)', cpa == null ? '—' : fmtBRL(cpa), 'custo por pedido')}
-        ${kpi('Gasto ÷ venda (ACOS)', (gasto && vendasSoma) ? (100 * gasto / vendasSoma).toFixed(1) + '%' : '—', '')}
-        ${kpi('Pedidos por dia', serie.length ? (vendasQtd / serie.length).toFixed(1) : '—', `${serie.length} dias no período`)}
-        ${kpi('Venda por dia', serie.length ? fmtBRL(vendasSoma / serie.length) : '—', 'média do período')}
-      </div>
-      <h2>Dia a dia</h2>
-      <table><thead><tr><th>Dia</th><th class="n">Pedidos</th><th class="n">Vendas</th><th class="n">Devoluções</th><th class="n">Carrinhos</th><th style="width:34%">Vendas (relativo)</th></tr></thead><tbody>${linhasSerie}</tbody></table>`;
+  // 08/09 (pedido dele): PDF DE VERDADE gerado no servidor (pdfkit). No iPhone
+  // abre a folha de compartilhar (WhatsApp/e-mail direto); no computador baixa.
+  // (A impressão do Safari prendia numa aba, cortava a 2ª página e saiu em branco.)
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const gerarPdfDashboard = async () => {
+    if (!d?.periodo) return;
+    setGerandoPdf(true);
+    try {
+      const periodoTxt = `${fmtData(d.periodo.de)} a ${fmtData(d.periodo.ate)}`;
+      const r = await fetch('/api/meluni-dashboard-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ d, gasto, periodoTxt }) });
+      if (!r.ok) throw new Error('falha ao gerar (' + r.status + ')');
+      const blob = await r.blob();
+      const nome = `meluni-dashboard-${periodoTxt.replace(/[^0-9]+/g, '-').replace(/^-|-$/g, '')}.pdf`;
+      const file = new File([blob], nome, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: 'Meluni · Dashboard' }); return; } catch (e) { if (e?.name === 'AbortError') return; }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = nome; a.target = '_blank'; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { alert('Não consegui gerar o PDF: ' + (e?.message || e)); }
+    finally { setGerandoPdf(false); }
   };
-  const CSS_RELATORIO = `
-    #relatorio-meluni { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1f2d3a; }
-    #relatorio-meluni h1 { font-size: 24px; margin: 0; color: #1f2d3a; } #relatorio-meluni .meta { font-size: 13px; color: #6b7c8a; margin: 4px 0 14px; }
-    #relatorio-meluni .brand { color: #9b59b6; font-weight: 800; letter-spacing: .06em; font-size: 12px; }
-    #relatorio-meluni .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
-    #relatorio-meluni .kpi { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #e3e8ee; border-radius: 10px; padding: 10px 14px; min-height: 54px; } #relatorio-meluni .kpi.dst { border-color: #9b59b6; background: #f6f0f9; }
-    #relatorio-meluni .kpi .t { min-width: 0; } #relatorio-meluni .kpi .l { font-size: 12px; color: #4a5a68; font-weight: 700; } #relatorio-meluni .kpi .s { font-size: 11.5px; color: #6b7c8a; margin-top: 1px; }
-    #relatorio-meluni .kpi .v { font-size: 20px; font-weight: 800; white-space: nowrap; text-align: right; }
-    @media (max-width: 640px) { #relatorio-meluni .grid { grid-template-columns: 1fr; } #relatorio-meluni .kpi .v { font-size: 18px; } #relatorio-meluni h1 { font-size: 20px; } }
-    #relatorio-meluni h2 { font-size: 16px; margin: 20px 0 8px; color: #9b59b6; }
-    #relatorio-meluni table { width: 100%; border-collapse: collapse; font-size: 13.5px; } #relatorio-meluni th { text-align: left; color: #6b7c8a; font-weight: 700; border-bottom: 1px solid #e3e8ee; padding: 7px 6px; } #relatorio-meluni td { padding: 7px 6px; border-bottom: 1px dashed #eef1f4; } #relatorio-meluni td.n, #relatorio-meluni th.n { text-align: right; }
-    #relatorio-meluni .bar { height: 12px; background: #ece3f2; border-radius: 6px; width: 100%; } #relatorio-meluni .bar div { height: 100%; background: #9b59b6; border-radius: 6px; }
-    @media print {
-      /* margem 0 tira o cabeçalho/rodapé que o navegador imprime (URL, data, página);
-         a margem da folha vira padding do relatório */
-      @page { size: A4; margin: 0; }
-      html, body { height: auto !important; overflow: visible !important; }
-      body * { visibility: hidden !important; }
-      #relatorio-meluni, #relatorio-meluni * { visibility: visible !important; }
-      /* o overlay é fixed+overflow:auto — na impressão isso corta na 1ª página; vira fluxo normal */
-      #overlay-meluni { position: static !important; overflow: visible !important; height: auto !important; inset: auto !important; }
-      #relatorio-meluni { position: static !important; width: auto !important; max-width: none !important; padding: 12mm 12mm 10mm !important; background: #fff; }
-      #relatorio-meluni .grid { grid-template-columns: 1fr 1fr !important; gap: 6px 12px !important; }
-      #relatorio-meluni .kpi { min-height: 46px !important; padding: 8px 12px !important; break-inside: avoid; }
-      #relatorio-meluni .kpi .v { font-size: 18px !important; }
-      #relatorio-meluni table { font-size: 12px !important; } #relatorio-meluni td, #relatorio-meluni th { padding: 5px 6px !important; }
-      #relatorio-meluni tr { break-inside: avoid; }
-      .no-print { display: none !important; }
-    }
-  `;
-  const gerarPdfDashboard = () => setPdfAberto(true);
 
   return (
     <div>
@@ -3132,10 +3079,10 @@ function SecaoDashboard() {
         <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginLeft: 'auto' }}>
           {loading ? 'carregando…' : (d.periodo ? `${fmtData(d.periodo.de)} a ${fmtData(d.periodo.ate)}` : '')}
         </span>
-        <button onClick={gerarPdfDashboard} disabled={loading || !d.periodo}
-          title="Folha A4 com todos os números desta tela (pra mandar pra equipe de tráfego pago)"
+        <button onClick={gerarPdfDashboard} disabled={loading || gerandoPdf || !d.periodo}
+          title="Gera o PDF desta tela e abre pra compartilhar (celular) ou baixa (computador)"
           style={{ border: `1px solid ${palette.beige}`, background: '#fff', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 800, color: MELUNI, cursor: 'pointer', fontFamily: FONT }}>
-          📄 Gerar PDF
+          📄 {gerandoPdf ? 'Gerando…' : 'Gerar PDF'}
         </button>
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -3153,16 +3100,6 @@ function SecaoDashboard() {
         <KpiTile label="ROAS (venda ÷ gasto)" valor={loadingGasto ? '…' : (roas == null ? '—' : roas.toFixed(2) + 'x')} destaque />
       </div>
       <MiniBarras serie={d.serie || []} />
-      {pdfAberto && (
-        <div id="overlay-meluni" style={{ position: 'fixed', inset: 0, zIndex: 100000, background: '#fff', overflow: 'auto' }}>
-          <style>{CSS_RELATORIO}</style>
-          <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 2, display: 'flex', gap: 8, padding: '10px 14px', background: '#fff', borderBottom: `1px solid ${palette.beige}`, alignItems: 'center' }}>
-            <button onClick={() => setPdfAberto(false)} style={{ border: `1px solid ${palette.beige}`, background: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: palette.ink, cursor: 'pointer', fontFamily: FONT }}>← Voltar</button>
-            <button onClick={() => window.print()} style={{ marginLeft: 'auto', border: 'none', background: MELUNI, color: '#fff', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>📄 Imprimir / Salvar PDF</button>
-          </div>
-          <div id="relatorio-meluni" style={{ padding: '14px 14px 30px', maxWidth: 900, margin: '0 auto' }} dangerouslySetInnerHTML={{ __html: htmlRelatorio() }} />
-        </div>
-      )}
     </div>
   );
 }
