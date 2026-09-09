@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   const lojaFiltro = ['todas', 'BR', 'ST'].includes(req.query?.loja) ? req.query.loja : 'todas';
   const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
   try {
-    let q = supabase.from('lojas_vendas_itens').select('sku, ref, qtd, liquido_unit, loja').gte('data_venda', desde).not('sku', 'is', null);
+    let q = supabase.from('lojas_vendas_itens').select('sku, ref, qtd, liquido_unit, loja, data_venda').gte('data_venda', desde).not('sku', 'is', null);
     if (lojaFiltro === 'BR') q = q.eq('loja', LOJA_BR);
     if (lojaFiltro === 'ST') q = q.eq('loja', LOJA_ST);
     const itens = [];
@@ -52,6 +52,34 @@ export default async function handler(req, res) {
     // 09/09 (ordem dele): cores fundidas — o codigo secundario soma no principal
     // (Branco->Off-white, Manteiga->Amarelo, Rosa->Rosa Claro, Salmao->Coral, Bege->Areia)
     const alvo = (cod) => { let c = cod; for (let i = 0; i < 3 && mapa[c]?.agrupar_em; i++) c = mapa[c].agrupar_em; return c; };
+
+    // 09/09 (pedido dele): TENDENCIA — participacao da cor nos ultimos 15 dias
+    // vs os 15 anteriores (independente da janela escolhida). Seta verde/vermelha.
+    const d15 = new Date(Date.now() - 15 * 86400000).toISOString().slice(0, 10);
+    const d30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    let itens30 = itens;
+    if (dias < 30) {
+      let q2 = supabase.from('lojas_vendas_itens').select('sku, qtd, data_venda, loja').gte('data_venda', d30).not('sku', 'is', null);
+      if (lojaFiltro === 'BR') q2 = q2.eq('loja', LOJA_BR);
+      if (lojaFiltro === 'ST') q2 = q2.eq('loja', LOJA_ST);
+      const acc = [];
+      for (let off = 0; off < 20000; off += 1000) { const { data } = await q2.range(off, off + 999); acc.push(...(data || [])); if (!data || data.length < 1000) break; }
+      itens30 = acc;
+    }
+    const rec = {}, ant = {}; let totRec = 0, totAnt = 0;
+    for (const it of itens30) {
+      const cod0 = codCor(it.sku); if (!cod0) continue;
+      const cod = alvo(cod0); const qtd = Number(it.qtd) || 0;
+      const dv = String(it.data_venda || '').slice(0, 10);
+      if (dv >= d15) { rec[cod] = (rec[cod] || 0) + qtd; totRec += qtd; }
+      else if (dv >= d30) { ant[cod] = (ant[cod] || 0) + qtd; totAnt += qtd; }
+    }
+    const tendencia = (cod) => {
+      const pr = totRec ? 100 * (rec[cod] || 0) / totRec : 0;
+      const pa = totAnt ? 100 * (ant[cod] || 0) / totAnt : 0;
+      const delta = Math.round((pr - pa) * 10) / 10;
+      return { tend: delta >= 0.5 ? 'up' : delta <= -0.5 ? 'down' : 'flat', delta_pp: delta, pct_15d: Math.round(pr * 10) / 10, pct_15d_ant: Math.round(pa * 10) / 10, pecas_15d: rec[cod] || 0, pecas_15d_ant: ant[cod] || 0 };
+    };
 
     const porCor = {};
     let totalPecas = 0, semCodigo = 0;
@@ -72,6 +100,7 @@ export default async function handler(req, res) {
       pecas: c.pecas, valor: Math.round(c.valor * 100) / 100, refs: c.refs.size,
       pct: totalPecas ? Math.round(1000 * c.pecas / totalPecas) / 10 : 0,
       bom_retiro: c.por_loja[LOJA_BR] || 0, silva_teles: c.por_loja[LOJA_ST] || 0,
+      ...tendencia(c.codigo),
     })).sort((a, b) => b.pecas - a.pecas).slice(0, Math.min(50, parseInt(req.query?.top, 10) || 20));   // 09/09: top 20 por padrao
     return res.status(200).json({ ok: true, dias, loja: lojaFiltro, desde, total_pecas: totalPecas, sem_codigo: semCodigo,
       cores: ranking.length, sem_nome: ranking.filter(r => !r.nome).length, ranking });

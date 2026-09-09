@@ -484,8 +484,9 @@ const RankingCores = ({ loja, userId }) => {
           {dados.sem_nome} código{dados.sem_nome > 1 ? 's' : ''} de cor ainda sem nome — {admin ? 'clique no lápis pra nomear (fica salvo).' : 'o admin pode nomear.'} O código é o do cadastro de cores do Miré (3 dígitos do SKU).
         </div>
       )}
+      <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginBottom: 6 }}>Seta: participação nos últimos 15 dias contra os 15 anteriores — <span style={{ color: '#1e8e4e', fontWeight: 800 }}>↑</span> subindo · <span style={{ color: '#c0392b', fontWeight: 800 }}>↓</span> caindo · = estável (menos de 0,5 ponto). Passe o mouse pra ver os números.</div>
       {(dados?.ranking || []).map(r => (
-        <div key={r.codigo} style={{ display: 'grid', gridTemplateColumns: '18px 150px 1fr 70px 46px', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f0ece6' }}>
+        <div key={r.codigo} style={{ display: 'grid', gridTemplateColumns: '18px 150px 1fr 70px 46px 22px', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f0ece6' }}>
           <span style={{ width: 16, height: 16, borderRadius: 8, background: r.hex || '#e6e6e6', border: '1px solid #d6d0c8', display: 'inline-block' }} />
           <span style={{ fontSize: 13, fontFamily: FONT, color: r.nome ? palette.ink : palette.inkMuted, fontStyle: r.nome ? 'normal' : 'italic', display: 'flex', alignItems: 'center', gap: 6 }}
             title={`código ${r.codigo} · ${r.refs} ref${r.refs > 1 ? 's' : ''} · Bom Retiro ${r.bom_retiro} · Silva Teles ${r.silva_teles}`}>
@@ -497,6 +498,10 @@ const RankingCores = ({ loja, userId }) => {
           </div>
           <span style={{ fontSize: 13, fontWeight: 800, fontFamily: FONT, color: palette.ink, textAlign: 'right' }}>{r.pecas.toLocaleString('pt-BR')}</span>
           <span style={{ fontSize: 12, fontFamily: FONT, color: palette.inkMuted, textAlign: 'right' }}>{r.pct}%</span>
+          <span title={`Últimos 15 dias: ${r.pct_15d}% (${r.pecas_15d} pç) · 15 anteriores: ${r.pct_15d_ant}% (${r.pecas_15d_ant} pç) · ${r.delta_pp > 0 ? '+' : ''}${r.delta_pp} pontos`}
+            style={{ fontSize: 15, fontWeight: 900, textAlign: 'center', color: r.tend === 'up' ? '#1e8e4e' : r.tend === 'down' ? '#c0392b' : '#b8b2a8', lineHeight: 1 }}>
+            {r.tend === 'up' ? '↑' : r.tend === 'down' ? '↓' : '='}
+          </span>
         </div>
       ))}
       {editando && (
