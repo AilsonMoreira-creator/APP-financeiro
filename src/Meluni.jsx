@@ -3058,7 +3058,8 @@ function SecaoDashboard() {
     const agora = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const serie = Array.isArray(d.serie) ? d.serie : [];
     const maxV = Math.max(1, ...serie.map(x => Number(x.vendas_valor) || 0));
-    const kpi = (label, valor, sub, destaque) => `<div class="kpi${destaque ? ' dst' : ''}"><div class="l">${label}</div><div class="v">${valor}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
+    // 08/09 (pedido dele): cards HORIZONTAIS — rótulo e detalhe à esquerda, valor à direita
+    const kpi = (label, valor, sub, destaque) => `<div class="kpi${destaque ? ' dst' : ''}"><div class="t"><div class="l">${label}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div><div class="v">${valor}</div></div>`;
     const linhasSerie = serie.map(x => {
       const dt = String(x.data || '');
       const dd = dt.length >= 10 ? `${dt.slice(8, 10)}/${dt.slice(5, 7)}` : dt;
@@ -3081,18 +3082,21 @@ function SecaoDashboard() {
         ${kpi('ROAS (venda ÷ gasto)', roas == null ? '—' : roas.toFixed(2) + 'x', '', true)}
         ${kpi('CPA (gasto ÷ pedidos)', cpa == null ? '—' : fmtBRL(cpa), 'custo por pedido')}
         ${kpi('Gasto ÷ venda (ACOS)', (gasto && vendasSoma) ? (100 * gasto / vendasSoma).toFixed(1) + '%' : '—', '')}
-        ${kpi('Média por dia', serie.length ? `${(vendasQtd / serie.length).toFixed(1)} pedidos · ${fmtBRL(vendasSoma / serie.length)}` : '—', `${serie.length} dias`)}
+        ${kpi('Pedidos por dia', serie.length ? (vendasQtd / serie.length).toFixed(1) : '—', `${serie.length} dias no período`)}
+        ${kpi('Venda por dia', serie.length ? fmtBRL(vendasSoma / serie.length) : '—', 'média do período')}
       </div>
       <h2>Dia a dia</h2>
       <table><thead><tr><th>Dia</th><th class="n">Pedidos</th><th class="n">Vendas</th><th class="n">Devoluções</th><th class="n">Carrinhos</th><th style="width:34%">Vendas (relativo)</th></tr></thead><tbody>${linhasSerie}</tbody></table>`;
   };
   const CSS_RELATORIO = `
     #relatorio-meluni { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1f2d3a; }
-    #relatorio-meluni h1 { font-size: 26px; margin: 0; } #relatorio-meluni .meta { font-size: 13px; color: #6b7c8a; margin: 4px 0 16px; }
+    #relatorio-meluni h1 { font-size: 24px; margin: 0; color: #1f2d3a; } #relatorio-meluni .meta { font-size: 13px; color: #6b7c8a; margin: 4px 0 14px; }
     #relatorio-meluni .brand { color: #9b59b6; font-weight: 800; letter-spacing: .06em; font-size: 12px; }
-    #relatorio-meluni .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-    #relatorio-meluni .kpi { border: 1px solid #e3e8ee; border-radius: 10px; padding: 14px 16px; min-height: 84px; } #relatorio-meluni .kpi.dst { border-color: #9b59b6; background: #f6f0f9; }
-    #relatorio-meluni .kpi .l { font-size: 11.5px; color: #6b7c8a; text-transform: uppercase; letter-spacing: .05em; } #relatorio-meluni .kpi .v { font-size: 26px; font-weight: 800; margin-top: 4px; } #relatorio-meluni .kpi .s { font-size: 12px; color: #6b7c8a; margin-top: 2px; }
+    #relatorio-meluni .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+    #relatorio-meluni .kpi { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #e3e8ee; border-radius: 10px; padding: 10px 14px; min-height: 54px; } #relatorio-meluni .kpi.dst { border-color: #9b59b6; background: #f6f0f9; }
+    #relatorio-meluni .kpi .t { min-width: 0; } #relatorio-meluni .kpi .l { font-size: 12px; color: #4a5a68; font-weight: 700; } #relatorio-meluni .kpi .s { font-size: 11.5px; color: #6b7c8a; margin-top: 1px; }
+    #relatorio-meluni .kpi .v { font-size: 20px; font-weight: 800; white-space: nowrap; text-align: right; }
+    @media (max-width: 640px) { #relatorio-meluni .grid { grid-template-columns: 1fr; } #relatorio-meluni .kpi .v { font-size: 18px; } #relatorio-meluni h1 { font-size: 20px; } }
     #relatorio-meluni h2 { font-size: 16px; margin: 20px 0 8px; color: #9b59b6; }
     #relatorio-meluni table { width: 100%; border-collapse: collapse; font-size: 13.5px; } #relatorio-meluni th { text-align: left; color: #6b7c8a; font-weight: 700; border-bottom: 1px solid #e3e8ee; padding: 7px 6px; } #relatorio-meluni td { padding: 7px 6px; border-bottom: 1px dashed #eef1f4; } #relatorio-meluni td.n, #relatorio-meluni th.n { text-align: right; }
     #relatorio-meluni .bar { height: 12px; background: #ece3f2; border-radius: 6px; width: 100%; } #relatorio-meluni .bar div { height: 100%; background: #9b59b6; border-radius: 6px; }
@@ -3146,7 +3150,7 @@ function SecaoDashboard() {
             <button onClick={() => setPdfAberto(false)} style={{ border: `1px solid ${palette.beige}`, background: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: palette.ink, cursor: 'pointer', fontFamily: FONT }}>← Voltar</button>
             <button onClick={() => window.print()} style={{ marginLeft: 'auto', border: 'none', background: MELUNI, color: '#fff', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>📄 Imprimir / Salvar PDF</button>
           </div>
-          <div id="relatorio-meluni" style={{ padding: '18px 22px', maxWidth: 900, margin: '0 auto' }} dangerouslySetInnerHTML={{ __html: htmlRelatorio() }} />
+          <div id="relatorio-meluni" style={{ padding: '14px 14px 30px', maxWidth: 900, margin: '0 auto' }} dangerouslySetInnerHTML={{ __html: htmlRelatorio() }} />
         </div>
       )}
     </div>
