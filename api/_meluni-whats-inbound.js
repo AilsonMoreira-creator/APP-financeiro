@@ -94,7 +94,11 @@ function conteudoMsg(msg) {
       const i = msg.interactive || {};
       return { tipo: 'text', texto: i.button_reply?.title || i.list_reply?.title || '', midiaId: null };
     }
-    default:         return { tipo: 'outro',    texto: '',                                                midiaId: null };
+    // 09/09 (badge "1" eterno na aba Clientes): reacao com emoji chega como
+    // type 'reaction' — nao e resposta, e um 👍 na mensagem. Registra o emoji
+    // como texto pra aparecer no chat, mas NAO vira pendencia (ver abaixo).
+    case 'reaction': return { tipo: 'reaction', texto: msg.reaction?.emoji ? `reagiu com ${msg.reaction.emoji}` : 'reagiu', midiaId: null, semPendencia: true };
+    default:         return { tipo: 'outro',    texto: '',                                                midiaId: null, semPendencia: true };
   }
 }
 
@@ -193,6 +197,12 @@ export async function processarMensagemMeluni(msg, value) {
     }
 
     // atualiza a conversa + arma o debounce pro cron-responder da Lara (S2)
+    // 09/09: reacao/'outro' sem texto NAO vira pendencia (nao muda direcao,
+    // nao arma a Lara, nao acende badge) — so registra a mensagem no historico.
+    if (c.semPendencia) {
+      await supabase.from('meluni_conversas').update({ ...(nome ? { nome_cliente: nome } : {}) }).eq('id', conversaId);
+      return;
+    }
     await supabase.from('meluni_conversas').update({
       ultima_msg_direcao: 'entrada',
       ultima_msg_em: new Date().toISOString(),
