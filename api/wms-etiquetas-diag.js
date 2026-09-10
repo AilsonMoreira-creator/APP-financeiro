@@ -74,6 +74,41 @@ export default async function handler(req, res) {
       return res.status(200).json(out);
     }
 
+    // 10/09 (TikTok amostra): ?amostra_nf=PEDIDO_ID — monta a NF de remessa de
+    // amostra (natureza "Amostra") a partir do pedido. Sem executar=1 so DEVOLVE
+    // o payload. Com executar=1 cria a nota como RASCUNHO (POST /nfe) — NAO
+    // transmite pra SEFAZ (isso e outro comando, /nfe/{id}/enviar).
+    if (req.query?.amostra_nf) {
+      const pid = String(req.query.amostra_nf);
+      const detR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, headers);
+      const det = typeof detR.json === 'function' ? await detR.json().catch(() => ({})) : {};
+      const d = det?.data || {};
+      if (!d.id) return res.status(200).json({ ok: false, erro: 'pedido nao lido', http: detR.status });
+      const natR = await blingFetch('https://api.bling.com.br/Api/v3/naturezas-operacoes?limite=100', headers);
+      const natJ = typeof natR.json === 'function' ? await natR.json().catch(() => ({})) : {};
+      const nat = (natJ?.data || []).find(n => /^amostra$/i.test(String(n.descricao || '').trim()));
+      if (!nat) return res.status(200).json({ ok: false, erro: 'natureza "Amostra" nao encontrada nesta conta' });
+      const payload = {
+        tipo: 1,
+        dataOperacao: new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 19).replace('T', ' '),
+        contato: { id: d.contato?.id },
+        naturezaOperacao: { id: nat.id },
+        loja: d.loja?.id ? { id: d.loja.id } : undefined,
+        numeroPedidoLoja: d.numeroLoja || undefined,
+        finalidade: 1,
+        itens: (d.itens || []).map(i => ({
+          codigo: i.codigo, descricao: i.descricao, unidade: i.unidade || 'UN', quantidade: i.quantidade, valor: i.valor,
+          ...(i.produto?.id ? { produto: { id: i.produto.id } } : {}),
+        })),
+        transporte: { fretePorConta: 3, frete: 0 },   // 3 = sem frete (remessa)
+        observacoes: `Remessa de amostra gratis - pedido ${d.numeroLoja || d.numero} (TikTok). Sem valor comercial.`,
+      };
+      const executar = req.query?.executar === '1';
+      if (!executar) return res.status(200).json({ ok: true, modo: 'so_montagem', natureza: nat, pedido: { id: d.id, numero: d.numero, numeroLoja: d.numeroLoja, contato: d.contato?.nome }, payload });
+      const cr = await fetch('https://api.bling.com.br/Api/v3/nfe', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const cj = await cr.json().catch(() => ({}));
+      return res.status(200).json({ ok: cr.ok, http: cr.status, modo: 'rascunho_criado_NAO_transmitido', resposta: cj });
+    }
     // 10/09 (TikTok amostra): ?naturezas=1 — naturezas de operacao cadastradas
     // no Bling desta conta (procurando a de remessa de amostra, CFOP 5911/6911)
     if (req.query?.naturezas === '1') {
