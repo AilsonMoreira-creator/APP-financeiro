@@ -106,8 +106,26 @@ export default async function handler(req, res) {
   const limite = Math.min(parseInt(req.query?.limite) || 120, 300);
   const contas = String(req.query?.contas || 'exitus,lumia,muniam').split(',').map(c => c.trim());
   const incluirShein = req.query?.incluir_shein === '1';
+  // 10/09 (15 min de "preparando" na abertura da tela): quem revisita os
+  // AGUARDA_LOGISTICA (28 links no Bling que ainda nao existem, 3 min, zero
+  // resultado) sao os CRONS e a Varredura geral (?revisitar=1). A abertura da
+  // tela so pega PRONTO sem documento.
+  const revisitar = req.query?.revisitar === '1' || (req.headers['user-agent'] || '').includes('vercel-cron');
   const inicio = Date.now();
   const r = { preparados: 0, ja_tinham: 0, sem_etiqueta: 0, erros: 0, por_conta: {}, shein_de_fora: 0 };
+
+  // 10/09: LOCK — dois preparos ao mesmo tempo (duas pessoas abrindo a tela)
+  // so brigam pelo limite do Bling (429) e preparam menos. Se ha um preparo
+  // rodando ha menos de 4 min, este responde "ocupado" e o front espera.
+  try {
+    const { data: cfgLock } = await supabase.from('wms_config').select('valor').eq('chave', 'preparo_lock_em').maybeSingle();
+    const lockEm = Number(cfgLock?.valor) || 0;
+    if (lockEm && Date.now() - lockEm < 4 * 60000 && req.query?.force !== '1') {
+      return res.status(200).json({ ocupado: true, desde_segundos: Math.round((Date.now() - lockEm) / 1000), preparados: 0, faltam: 0 });
+    }
+    await supabase.from('wms_config').upsert({ chave: 'preparo_lock_em', valor: String(Date.now()) }, { onConflict: 'chave' });
+  } catch { /* sem lock, segue */ }
+  const soltarLock = async () => { try { await supabase.from('wms_config').upsert({ chave: 'preparo_lock_em', valor: '0' }, { onConflict: 'chave' }); } catch { /* ok */ } };
 
   try {
     // quem precisa de etiqueta e está PRONTO
@@ -115,7 +133,7 @@ export default async function handler(req, res) {
       .select('pedido_id, conta, numero, numero_loja, canal_geral, ml_logistic_type, print_estado, print_etiqueta')
       // 04/09 (38 presos: "etiqueta ainda nao gerada no Bling"): AGUARDA_LOGISTICA
       // e revisitado a cada preparo — quando o Bling libera a etiqueta, volta PRONTO
-      .in('print_estado', ['PRONTO', 'AGUARDA_LOGISTICA']).eq('print_etiqueta', true)
+      .in('print_estado', revisitar ? ['PRONTO', 'AGUARDA_LOGISTICA'] : ['PRONTO']).eq('print_etiqueta', true)
       .in('conta', contas)
       .is('etiqueta_impressa_em', null)
       .order('data_pedido', { ascending: true }).limit(600);
@@ -148,13 +166,17 @@ export default async function handler(req, res) {
       else if (formatoDe[k] === 'ZPL' && !temPrevia.has(k)) guardados.delete(k);
     }
 
+    // 10/09: conta Shein e "ja tinham" em TODOS os candidatos antes de cortar a
+    // fila — senao `faltam` saia inflado e o front ficava em loop de voltas.
     const fila = [];
+    let elegiveis = 0;
     for (const p of (candidatos || [])) {
       if (guardados.has(String(p.pedido_id))) { r.ja_tinham++; continue; }
       if (!incluirShein && /shein/i.test(p.canal_geral || '')) { r.shein_de_fora++; continue; }
-      fila.push(p);
-      if (fila.length >= limite) break;
+      elegiveis++;
+      if (fila.length < limite) fila.push(p);
     }
+    r.elegiveis = elegiveis;
 
     // as 3 contas em PARALELO (tokens e limites independentes)
     const porConta = {};
@@ -258,7 +280,10 @@ export default async function handler(req, res) {
     }));
 
     r.segundos = Math.round((Date.now() - inicio) / 1000);
-    r.faltam = Math.max(0, (candidatos || []).length - r.ja_tinham - r.preparados - r.sem_etiqueta - r.shein_de_fora);
+    // faltam = elegiveis que NAO couberam nesta fila (os sem_etiqueta ja foram
+    // tentados e nao voltam nesta rodada)
+    r.faltam = Math.max(0, r.elegiveis - fila.length);
+    await soltarLock();
     return res.status(200).json(r);
   } catch (e) {
     return res.status(500).json({ erro: e.message, parcial: r });
