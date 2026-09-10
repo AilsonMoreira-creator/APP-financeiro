@@ -37,6 +37,67 @@ zh3mLwIIqB7dRe2RCm1Lr3Vqqugs/0e1gSTwt6wZWgMGrl3PD8H5eGLsqzFItg4v
 fLPE8QepakxMu9EEprDLysaVQbS0hlvBIza2fPjC7pT+8CAjfM8XWGn0oA==
 -----END CERTIFICATE-----`;
 
+// ── 10/09 (pedido dele): MOTOR EM SEGUNDO PLANO do preparo / varredura ──
+// Vive fora da tela: mudar de tela ou voltar nao interrompe nem reinicia — a
+// tela so se INSCREVE pra mostrar o progresso. Um preparo por vez.
+const wmsBg = {
+  rodando: false, msg: '', auto: false, iniciadoEm: 0, resultado: null,
+  listeners: new Set(),
+  set(p) { Object.assign(this, p); for (const f of this.listeners) { try { f({ rodando: this.rodando, msg: this.msg }); } catch { /* ok */ } } },
+  inscrever(f) { this.listeners.add(f); f({ rodando: this.rodando, msg: this.msg }); return () => this.listeners.delete(f); },
+};
+async function executarPreparoBg(API, auto, aoConcluir) {
+  if (wmsBg.rodando) {
+    // ja tem um rodando (mesmo que iniciado em outra tela): so avisa, nao duplica
+    if (!auto) wmsBg.set({ msg: wmsBg.msg + ' (já em andamento)' });
+    return;
+  }
+  // 18/08: automatico so roda se fizer mais de 10 min desde o ultimo concluido
+  const ultimo = Number(localStorage.getItem('wms_preparo_em') || 0);
+  if (auto && Date.now() - ultimo < 10 * 60 * 1000) {
+    const min = Math.max(1, Math.round((Date.now() - ultimo) / 60000));
+    wmsBg.set({ rodando: false, msg: `etiquetas preparadas há ${min} min` });
+    setTimeout(() => { if (!wmsBg.rodando) wmsBg.set({ msg: '' }); }, 6000);
+    return;
+  }
+  wmsBg.set({ rodando: true, auto, iniciadoEm: Date.now(), msg: auto ? 'conferindo se falta preparar alguma etiqueta…' : '1/5 buscando pedidos novos no Bling (3 contas)…' });
+  try {
+    if (!auto) {
+      await Promise.all(['exitus', 'lumia', 'muniam'].map(c => fetch(`${API}/wms-sync?conta=${c}&dias=3`).catch(() => {})));
+      wmsBg.set({ msg: '2/5 conferindo situação das notas no Bling…' });
+      await fetch(`${API}/wms-nf-sync?dias=3`).catch(() => {});
+      wmsBg.set({ msg: '3/5 confirmando Flex, liberadas e agendadas na API do Mercado Livre…' });
+      await fetch(`${API}/wms-ml-agenda-sync?contas=exitus,lumia,muniam&limite=150`).catch(() => {});
+      wmsBg.set({ msg: '4/5 classificando cada pedido na aba certa…' });
+      await fetch(`${API}/wms-classificar`).catch(() => {});
+    } else {
+      await fetch(`${API}/wms-nf-sync?dias=2`).catch(() => {});
+      await fetch(`${API}/wms-classificar`).catch(() => {});
+    }
+  } catch { /* segue: o preparo ainda tenta o que da */ }
+  wmsBg.set({ msg: auto ? 'preparando etiquetas…' : '5/5 preparando etiquetas…' });
+  let voltas = 0, prontos = 0;
+  try {
+    const maxVoltas = auto ? 1 : 6;
+    while (voltas < maxVoltas) {
+      voltas++;
+      const r = await fetch(`${API}/wms-preparar-lote?limite=${auto ? 80 : 150}${auto ? '' : '&revisitar=1'}`);
+      const j = await r.json();
+      if (j.ocupado) { wmsBg.set({ msg: `outra tela já está preparando (há ${j.desde_segundos || 0}s) — a lista atualiza sozinha` }); break; }
+      prontos += j.preparados || 0;
+      const faltam = j.faltam || 0;
+      wmsBg.set({ msg: faltam > 0 && !auto ? `preparando… ${prontos} prontas, faltam ${faltam}` : (prontos > 0 ? `${prontos} etiqueta(s) preparadas` : `nada novo pra preparar — ${j.ja_tinham || 0} já estavam prontas`) });
+      if (!faltam || auto) break;
+    }
+  } catch {
+    wmsBg.set({ msg: 'não consegui preparar agora — dá pra imprimir mesmo assim' });
+  }
+  localStorage.setItem('wms_preparo_em', String(Date.now()));
+  wmsBg.set({ rodando: false });
+  try { aoConcluir && aoConcluir(); } catch { /* ok */ }
+  setTimeout(() => { if (!wmsBg.rodando) wmsBg.set({ msg: '' }); }, 12000);
+}
+
 const CONTAS = ['exitus', 'lumia', 'muniam'];
 const NOME_CONTA = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 const LOJAS = ['Mercado Livre', 'Shein', 'Shopee', 'TikTok', 'Magalu'];
@@ -175,75 +236,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const [impressoraSel, setImpressoraSel] = useState(
     (typeof localStorage !== 'undefined' && localStorage.getItem('wms_impressora')) || '');
 
-  const prepararLote = useCallback(async (auto = false) => {
-    // 18/08 (ele perguntou): não repetir o preparo a cada abertura. O que já
-    // está guardado nunca é rebuscado, mas a varredura toda vez passava a
-    // impressão de retrabalho. Agora o automático só roda se fizer mais de
-    // 10 min desde o último — o botão "Preparar agora" ignora essa trava.
-    const ultimo = Number(localStorage.getItem('wms_preparo_em') || 0);
-    if (auto && Date.now() - ultimo < 10 * 60 * 1000) {
-      const min = Math.max(1, Math.round((Date.now() - ultimo) / 60000));
-      setPreparo({ rodando: false, msg: `etiquetas preparadas há ${min} min` });
-      setTimeout(() => setPreparo(null), 6000);
-      return;
-    }
-    setPreparo({ rodando: true, msg: auto ? 'conferindo se falta preparar alguma etiqueta…' : '1/5 buscando pedidos novos no Bling…' });
-    // 18/08: nota gerada à mão no Bling não aparecia até o cron de 10 min
-    // rodar. Agora o preparo puxa a cadeia inteira: situação das notas →
-    // classificação → busca das etiquetas.
-    try {
-      // 27/08 (ele apontou: pedidos 156192/156208 nao apareciam): a cadeia
-      // comecava na NF e pulava a VARREDURA — pedido que o cron ainda nao
-      // trouxe do Bling nem existia no espelho, entao nao havia o que
-      // preparar e a fila saia incompleta sem avisar. Agora busca primeiro.
-      // 27/08 (webhooks do Bling no ar): a VARREDURA SAIU DA ABERTURA. Agora o
-      // Bling avisa cada pedido/nota na hora e o wms-webhook-pendentes completa
-      // o pedido novo em ate 2 min — o espelho ja chega pronto. Os crons
-      // (bling-cron 20/20min, wms-nf-sync) seguem como rede de seguranca; o
-      // botao "Preparar agora" continua podendo varrer sob demanda (auto=false).
-      // 07/09 (pedido dele): o clique e a VARREDURA GERAL — cada etapa e
-      // esperada de verdade (pode levar uns 5 min de manha), pra garantir que
-      // toda nota esta na aba certa e Flex / liberadas / agendadas foram
-      // confirmados na API do ML antes de classificar.
-      if (!auto) {
-        setPreparo({ rodando: true, msg: '1/5 buscando pedidos novos no Bling (3 contas)…' });
-        await Promise.all(['exitus', 'lumia', 'muniam'].map(c => fetch(`${API}/wms-sync?conta=${c}&dias=3`).catch(() => {})));
-        setPreparo({ rodando: true, msg: '2/5 conferindo situação das notas no Bling…' });
-        await fetch(`${API}/wms-nf-sync?dias=3`).catch(() => {});
-        setPreparo({ rodando: true, msg: '3/5 confirmando Flex, liberadas e agendadas na API do Mercado Livre…' });
-        await fetch(`${API}/wms-ml-agenda-sync?contas=exitus,lumia,muniam&limite=150`).catch(() => {});
-        setPreparo({ rodando: true, msg: '4/5 classificando cada pedido na aba certa…' });
-        await fetch(`${API}/wms-classificar`).catch(() => {});
-      } else {
-        await fetch(`${API}/wms-nf-sync?dias=2`);
-        await fetch(`${API}/wms-classificar`);
-      }
-    } catch { /* segue: o preparo ainda tenta o que dá */ }
-    setPreparo({ rodando: true, msg: auto ? 'preparando etiquetas…' : '5/5 preparando etiquetas…' });
-    let voltas = 0, prontos = 0;
-    try {
-      while (voltas < 6) {
-        voltas++;
-        const r = await fetch(`${API}/wms-preparar-lote?limite=120`);
-        const j = await r.json();
-        prontos += j.preparados || 0;
-        setPreparo({
-          rodando: (j.faltam || 0) > 0,
-          msg: (j.faltam || 0) > 0
-            ? `preparando… ${prontos} prontas, faltam ${j.faltam}`
-            : (prontos > 0
-              ? `${prontos} etiqueta(s) preparadas`
-              : `nada novo pra preparar — ${j.ja_tinham || 0} já estavam prontas`),
-        });
-        if (!j.faltam) break;
-      }
-    } catch (e) {
-      setPreparo({ rodando: false, msg: 'não consegui preparar agora — dá pra imprimir mesmo assim' });
-    }
-    localStorage.setItem('wms_preparo_em', String(Date.now()));
-    carregar();
-    setTimeout(() => setPreparo(p => (p && !p.rodando ? null : p)), 12000);
-  }, []);
+  // 10/09: delega ao motor em segundo plano (wmsBg) — a tela so acompanha
+  // (carregar e declarado mais abaixo — so pode ser referenciado dentro da closure, em runtime)
+  const prepararLote = useCallback((auto = false) => { executarPreparoBg(API, auto, () => { try { carregar(); } catch { /* ok */ } }); }, [API]);   // eslint-disable-line
+  useEffect(() => wmsBg.inscrever((e) => setPreparo(e.msg ? e : null)), []);
 
   // QZ Tray (já instalado na máquina da expedição): carrega a lib sob demanda
   // abrir o PDF: window.open depois de um await costuma ser BLOQUEADO pelo
