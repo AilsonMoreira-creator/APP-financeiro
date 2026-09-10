@@ -74,6 +74,13 @@ export default async function handler(req, res) {
       return res.status(200).json(out);
     }
 
+    // 10/09 (TikTok amostra): ?naturezas=1 — naturezas de operacao cadastradas
+    // no Bling desta conta (procurando a de remessa de amostra, CFOP 5911/6911)
+    if (req.query?.naturezas === '1') {
+      const r = await blingFetch('https://api.bling.com.br/Api/v3/naturezas-operacoes?limite=100', headers);
+      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+      return res.status(200).json({ http: r.status, naturezas: (j?.data || []).map(n => ({ id: n.id, descricao: n.descricao, situacao: n.situacao, padrao: n.padrao })) });
+    }
     // 10/09 (TikTok amostra): ?pedido=ID — detalhe do pedido no Bling: valores,
     // observacoes, itens com preco — pra descobrir como a amostra se apresenta
     if (req.query?.pedido) {
