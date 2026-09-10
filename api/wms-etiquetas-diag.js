@@ -74,6 +74,18 @@ export default async function handler(req, res) {
       return res.status(200).json(out);
     }
 
+    // 10/09 (TikTok amostra): ?pedido=ID — detalhe do pedido no Bling: valores,
+    // observacoes, itens com preco — pra descobrir como a amostra se apresenta
+    if (req.query?.pedido) {
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${req.query.pedido}`, headers);
+      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+      const d = j?.data || {};
+      return res.status(200).json({ http: r.status, numero: d.numero, numeroLoja: d.numeroLoja, loja: d.loja, situacao: d.situacao,
+        total: d.total, totalProdutos: d.totalProdutos, desconto: d.desconto, observacoes: d.observacoes, observacoesInternas: d.observacoesInternas,
+        contato: { nome: d.contato?.nome, doc: d.contato?.numeroDocumento },
+        itens: (d.itens || []).map(i => ({ codigo: i.codigo, descricao: (i.descricao || '').slice(0, 60), qtd: i.quantidade, valor: i.valor, desconto: i.desconto })),
+        transporte: { frete: d.transporte?.frete, fretePorConta: d.transporte?.fretePorConta }, outrasDespesas: d.outrasDespesas, tributacao: d.tributacao });
+    }
     // 07/09: ?nf=ID — resumo de uma NF (contato, natureza, loja, pedido) sem itens
     if (req.query?.nf) {
       const r = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${req.query.nf}`, headers);
