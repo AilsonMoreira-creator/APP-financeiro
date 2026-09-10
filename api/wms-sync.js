@@ -347,5 +347,23 @@ export default async function handler(req, res) {
     flex = { pulado: 'sem tempo na rodada' };
   }
 
-  return res.status(200).json({ ok: true, dias, resumo, flex });
+  // 10/09 (pedido "aberto" que a Cris nao achou): pedidos FORA da janela de
+  // dias ficavam presos como abertos mesmo ja atendidos (situacao 9 e
+  // enviado/impresso) ou cancelados (12) no Bling. Saneamento local, sem
+  // chamar o Bling — usa a situacao que o proprio sync/webhook ja gravou.
+  let saneamento = { finalizados: 0, cancelados: 0 };
+  try {
+    const { data: f } = await supabase.from('wms_pedidos')
+      .update({ status_wms: 'finalizado', finalizado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() })
+      .in('status_wms', ['aberto', 'em_separacao']).eq('situacao_bling', 9)
+      .or('ml_ship_status.in.(shipped,delivered),nf_situacao.eq.6,print_estado.eq.IMPRESSO')
+      .select('pedido_id');
+    saneamento.finalizados = (f || []).length;
+    const { data: c } = await supabase.from('wms_pedidos')
+      .update({ status_wms: 'cancelado', atualizado_em: new Date().toISOString() })
+      .in('status_wms', ['aberto', 'em_separacao']).eq('situacao_bling', 12)
+      .select('pedido_id');
+    saneamento.cancelados = (c || []).length;
+  } catch (e) { saneamento.erro = String(e?.message || e); }
+  return res.status(200).json({ ok: true, dias, resumo, flex, saneamento });
 }
