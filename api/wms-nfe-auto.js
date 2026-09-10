@@ -125,6 +125,17 @@ export default async function handler(req, res) {
           await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'checagem', http: detR.status, resultado: 'erro', mensagem: 'detalhe do pedido ilegível — nada gerado' });
           continue;
         }
+        // 10/09 (TikTok "amostra gratis", pedido dele): o Bling marca
+        // observacoesInternas "Pedido de amostra". Amostra NAO e venda — a nota
+        // tem natureza propria (remessa de amostra) e a esteira nao pode gerar
+        // uma NF de venda por cima. Marca no espelho e deixa pra emissao manual.
+        const obsInt = String(det.data?.observacoesInternas || '') + ' ' + String(det.data?.observacoes || '');
+        if (/amostra/i.test(obsInt)) {
+          await supabase.from('wms_pedidos').update({ amostra: true, print_motivo: 'AMOSTRA — nota de remessa de amostra (emitir à mão)' }).eq('pedido_id', p.pedido_id);
+          await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'checagem', resultado: 'pulado', mensagem: 'pedido de amostra — NF de venda não gerada (emitir remessa de amostra à mão)' });
+          resumo.pulados++; resumo.amostras = (resumo.amostras || 0) + 1;
+          continue;
+        }
         const jaTem = det.data?.notaFiscal?.id;
         if (jaTem) {
           resumo.ja_tinham++;

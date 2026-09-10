@@ -82,7 +82,7 @@ async function pedidosFiltrados(q) {
   // mais de 3 dias e caso resolvido por fora (ex: etiqueta impressa direto no
   // Seller Center da Shopee, que nao deixa sinal) — sai da fila de impressao
   const desde3 = new Date(Date.now() - 3 * 86400000 - 3 * 3600000).toISOString().slice(0, 10); // data pura BRT — o dia-limite (3 dias atras) ainda entra
-  const COLS = 'conta, pedido_id, numero, numero_loja, cliente_nome, nf_virou_6_em, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
+  const COLS = 'conta, pedido_id, numero, numero_loja, cliente_nome, nf_virou_6_em, amostra, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
 
   // 24/08 (caso dele: chip 3 × previa 2 persistente): o limit(500) numa janela
   // de 7 dias com ~2.500 pedidos-com-NF CORTAVA a fila em silencio — pendencia
@@ -984,6 +984,9 @@ export default async function handler(req, res) {
             return '^FO30,1136^FB752,1,0,C^A0N,30,30^FD' + tPc + '^FS'
                  + '^FO31,1137^FB752,1,0,C^A0N,30,30^FD' + tPc + '^FS';
           })() : '')
+          // 10/09 (pedido explicito dele): pedido de AMOSTRA (TikTok) leva o
+          // aviso em faixa invertida no rodape, na mesma linha do canal
+          + (info.amostra ? '^FO30,1128^GB752,42,42^FS^FO30,1134^FR^FB752,1,0,C^A0N,32,32^FD*** AMOSTRA GRATIS ***^FS' : '')
           + (info.agendadoEm ? (() => {
             const dAg = String(info.agendadoEm).slice(0, 10).split('-').reverse().join('/');
             const tAg = 'ENVIAR ' + dAg;
@@ -1031,6 +1034,7 @@ export default async function handler(req, res) {
                     // na DANFE pra conferencia do par na bancada.
                     pedidoCanal: String(p.canal_geral || '').toLowerCase().includes('shein') && p.numero_loja
                       ? 'PEDIDO SHEIN ' + String(p.numero_loja) : null,
+                    amostra: p.amostra === true,   // 10/09
                   });
                   await supabase.from('wms_documentos').upsert({
                     pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'ZPL',

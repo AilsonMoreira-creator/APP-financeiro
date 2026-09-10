@@ -83,6 +83,8 @@ export function classificar(p, hojeBRT) {
   // etiqueta — tem que contar como AGUARDANDO, não sumir da tela.
   if (!temNf) return { regra: 'SEM_NF', nf: true, etiqueta: true, estado: 'AGUARDA_NF', motivo: 'sem nota fiscal ainda' };
 
+  // 10/09 (TikTok amostra): sem nota ainda = aguarda a remessa de amostra manual
+  if (p.amostra && !temNf) return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'AGUARDA_NF', motivo: 'AMOSTRA — nota de remessa de amostra (emitir à mão)' };
   if (nfMorta) return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'ERRO', motivo: rotuloMorta };
   if (nfImpressa || p.etiqueta_impressa_em) {
     return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'IMPRESSO', motivo: 'já impresso' };
@@ -104,7 +106,7 @@ export default async function handler(req, res) {
   const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   try {
     const { data: peds } = await supabase.from('wms_pedidos')
-      .select('pedido_id, conta, canal_geral, canal_detalhe, ml_logistic_type, status_wms, nf_id, nf_situacao, ml_agendado_em, etiqueta_impressa_em, nf_agendada_impressa_em, numero_loja, print_regra, print_estado, print_motivo, print_nf, print_etiqueta, ml_ship_status, ml_ship_substatus')
+      .select('pedido_id, conta, canal_geral, canal_detalhe, ml_logistic_type, status_wms, nf_id, nf_situacao, ml_agendado_em, etiqueta_impressa_em, nf_agendada_impressa_em, numero_loja, print_regra, print_estado, print_motivo, print_nf, print_etiqueta, ml_ship_status, ml_ship_substatus, amostra')
       .neq('status_wms', 'cancelado')
       .gte('criado_em', new Date(Date.now() - 5 * 86400000).toISOString())
       .limit(2000);
