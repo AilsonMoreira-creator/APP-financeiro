@@ -107,8 +107,13 @@ export default async function handler(req, res) {
           valor: i.valor, tipo: 'P', cfop, ...fiscal,
           impostos: { icms: { st: 0, origem: fiscal.origem ?? 0, modalidade: 0, aliquota: 0, valor: 0 } } });
       }
+      // 11/09: o Bling exige dataOperacao (e dataEmissao) no formato
+      // 'YYYY-MM-DD HH:MM:SS' em horario de Brasilia — sem isso: "Data de
+      // operacao invalida".
+      const agoraBrt = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
       const payload = {
         tipo: 1, serie: MODELO.serie,
+        dataOperacao: agoraBrt, dataEmissao: agoraBrt,
         naturezaOperacao: { id: MODELO.naturezaId },
         loja: d.loja?.id ? { id: d.loja.id } : { id: MODELO.lojaId },
         contato: { id: d.contato?.id },
