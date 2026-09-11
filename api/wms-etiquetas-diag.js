@@ -183,6 +183,9 @@ export default async function handler(req, res) {
       if (nf.situacao !== 1) return res.status(200).json({ ok: false, erro: `nota nao esta em rascunho (situacao ${nf.situacao})` });
       const corpo = { ...nf, naturezaOperacao: { id: natId } };
       delete corpo.xml; delete corpo.linkDanfe; delete corpo.linkPDF; delete corpo.chaveAcesso;
+      // 11/09: sem numero/serie — a natureza nova tem serie propria e o Bling
+      // precisa renumerar ("Ja existe uma nota com este numero" se mandarmos)
+      delete corpo.numero; delete corpo.serie; delete corpo.id;
       const pR = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, { method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
       const pTxt = (await pR.text()).slice(0, 250);
