@@ -3176,9 +3176,21 @@ function montarMessagesSugestoes(ctx) {
   // nunca-sugeridas de sobra (>= 20), a carteira enviada e dominada por elas:
   // nunca-sugeridas + as faixas obrigatorias (inativo/semAtividade/atencao/novas),
   // e no maximo 10 "ja vistas" pra dar contexto.
+  // 11/09 (regra dele, ajustada): as SEM TELEFONE continuam entrando — servem
+  // de cobranca pra vendedora cadastrar o contato — mas no MAXIMO 2 por dia, e
+  // so depois de esgotadas as contataveis. O Bras (Joelma 32 com whats em 198,
+  // Tamires 30 em 112) e o caso que isso atende.
+  const MAX_SEM_WHATS = 2;
   const comWhatsTodos = carteira.filter(c => c.tem_whatsapp);
   const semWhatsTodos = carteira.filter(c => !c.tem_whatsapp);
-  let oferta = comWhatsTodos.length >= 14 ? comWhatsTodos : [...comWhatsTodos, ...semWhatsTodos];
+  // quantas sem-telefone a IA pode receber: so o que faltar pra fechar as 7,
+  // limitado a 2 (se ha 5 contataveis, oferece 2; se ha 7+, oferece 0)
+  const faltamPra7 = Math.max(0, 7 - comWhatsTodos.length);
+  const cotaSemWhats = Math.min(MAX_SEM_WHATS, faltamPra7);
+  let oferta = cotaSemWhats > 0
+    ? [...comWhatsTodos, ...semWhatsTodos.slice(0, cotaSemWhats)]
+    : comWhatsTodos;
+  console.log('[lojas-ia] contataveis:', comWhatsTodos.length, '| sem telefone oferecidas:', cotaSemWhats);
   const nuncaSugeridas = oferta.filter(c => c.nunca_sugerida);
   if (nuncaSugeridas.length >= 20) {
     const faixaObrigatoria = (c) => ['inativo', 'semAtividade', 'atencao'].includes(c.kpi?.status_atual) || c.cliente_nova;

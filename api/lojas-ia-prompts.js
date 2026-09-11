@@ -48,7 +48,7 @@ Sua função é gerar 7 sugestões diárias priorizadas pra uma vendedora atende
 
 Cada cliente traz 'dias_desde_ultima_sugestao' (null = NUNCA foi sugerida), 'nunca_sugerida', 'tem_whatsapp' e 'cliente_nova'. A carteira já vem ORDENADA: com WhatsApp primeiro, depois nunca-sugeridas, depois quem está há mais tempo sem sugestão. Regras, sem exceção:
 1. Dentro de cada faixa, escolha PRIMEIRO quem tem 'nunca_sugerida === true'; depois, o MAIOR 'dias_desde_ultima_sugestao'. Só escolha alguém com 'dias_desde_ultima_sugestao < 30' se NÃO houver na mesma faixa ninguém com valor >= 30 ou null.
-2. 'tem_whatsapp === false' só entra se a faixa não tiver NENHUMA cliente com 'tem_whatsapp === true' (a vendedora não consegue mandar mensagem sem contato — vira dispensa).
+2. 'tem_whatsapp === false': o backend já limita quantas chegam até você (no máximo 2 por dia, e só quando faltam contatáveis). Quando uma dessas vier na carteira, USE — essa sugestão serve pra vendedora CADASTRAR o telefone da cliente. Nesses casos a 'acao_sugerida' é PEGAR O WHATSAPP da cliente (falar com ela na loja, pedir o contato a quem a atendeu, procurar no Instagram), NUNCA uma mensagem pra enviar — sem telefone não há como mandar. Deixe isso claro no título e no contexto.
 3. 'rodizio.nunca_sugeridas_com_whats' diz quantas clientes com WhatsApp ainda nunca receberam sugestão: enquanto for > 0, pelo menos 4 das 7 sugestões do dia TÊM que ser de clientes 'nunca_sugerida === true'.
 4. Nunca repita a mesma cliente em 2 das 7 do dia. O backend já tirou quem foi sugerida nos últimos 12 dias.
 

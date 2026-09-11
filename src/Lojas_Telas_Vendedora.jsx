@@ -2795,7 +2795,7 @@ export const CardDiaScreen = ({
                 <span style={{
                   fontSize: fz(11.5), fontWeight: 700, padding: '1px 7px', borderRadius: 5,
                   background: '#fdeaea', color: '#c0392b', border: '1px solid #f4b8b8',
-                }}>⚠️ sem WhatsApp</span>
+                }}>📇 pegar o WhatsApp</span>
               )}
             </div>
           )}
@@ -3732,6 +3732,11 @@ export const SugestaoScreen = ({
           </>
         )}
 
+        {clienteEfetivo && !(clienteEfetivo.telefone_principal || '').trim() && (
+          <div style={{ background: '#eef4fb', border: '1px solid #c9dbee', borderRadius: 10, padding: '11px 13px', marginBottom: 16, fontSize: fz(13), color: '#2f6fb0', lineHeight: 1.5 }}>
+            📇 <b>Esta cliente ainda não tem WhatsApp cadastrado.</b> A tarefa de hoje com ela é <b>conseguir o contato</b> — na loja, com quem a atendeu ou pelo Instagram. Assim que cadastrar (botão de editar telefone), ela entra no rodízio e você consegue mandar mensagem.
+          </div>
+        )}
         {(!Array.isArray(sugestao.fotos) || sugestao.fotos.length === 0) && !sugestao.catalogo && sugestao.produto_ref && (
           <div style={{ background: '#fdf6dd', border: '1px solid #eeda92', borderRadius: 10, padding: '10px 12px', marginBottom: 18, fontSize: fz(12.5), color: '#8a6d1a' }}>
             📷 Este modelo (REF {refDisplay(sugestao.produto_ref)}) ainda não tem foto de verão nas mídias da Sofia — por isso não anexamos nenhuma. Pode mandar a mensagem e tirar a foto da peça na loja, ou pedir pra cadastrar a mídia.
