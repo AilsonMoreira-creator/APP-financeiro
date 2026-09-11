@@ -3555,8 +3555,15 @@ const OFICINAS_CAD_INICIAL=PRESTADORES_INICIAL["Oficinas Costura"].map((p,i)=>({
 const STATUS_COR={amarelo:"#f0b429",vermelho:"#c0392b",azul:"#4a7fa5",verde:"#27ae60"};
 const STATUS_BG={amarelo:"#fffbea",vermelho:"#fdeaea",azul:"#eaf3fb",verde:"#eafbf0"};
 const STATUS_LABEL={amarelo:"Na oficina",vermelho:"Atrasado",azul:"Entregue",verde:"Pago"};
-const getStatusCorte=(c)=>{if(c.pago)return"verde";if(c.entregue)return"azul";const dias=Math.floor((Date.now()-new Date(c.data))/(86400000));return dias>=30?"vermelho":"amarelo";};
-const getDias=(c)=>Math.floor((Date.now()-new Date(c.data))/(86400000));
+
+// 11/09/2026 (Ailson: "coloco 11.09 e grava 10.09"): "2026-09-11" em new Date()
+// vira meia-noite UTC = 21h do dia 10 em Brasilia. Estes helpers tratam a data
+// como DIA CIVIL: exibicao e diferenca de dias sem passar por fuso.
+const diaBR = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || '')); return m ? `${m[3]}/${m[2]}/${m[1]}` : (v ? new Date(v).toLocaleDateString("pt-BR") : ''); };
+const diaMs = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || '')); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : new Date(v).getTime(); };
+const hojeMs = () => { const h = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10); return diaMs(h); };
+const getStatusCorte=(c)=>{if(c.pago)return"verde";if(c.entregue)return"azul";const dias=Math.floor((hojeMs()-diaMs(c.data))/(86400000));return dias>=30?"vermelho":"amarelo";};
+const getDias=(c)=>Math.floor((hojeMs()-diaMs(c.data))/(86400000));
 const ORDEM_STATUS={amarelo:0,vermelho:1,azul:2,verde:3};
 const EstrelaScore=({n})=>(<span style={{color:"#f0b429",fontSize:12}}>{[1,2,3,4,5].map(i=><span key={i} style={{opacity:i<=n?1:0.25}}>★</span>)}</span>);
 
@@ -3780,7 +3787,7 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
           <div>
             <div style={{fontSize:10,color:C.blue,letterSpacing:2,textTransform:"uppercase"}}>Detalhes do corte</div>
             <div style={{fontSize:17,color:C.navy,fontWeight:600,marginTop:2}}>REF {corte.ref} · {corte.descricao}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{corte.oficina} · {new Date(corte.data).toLocaleDateString("pt-BR")} · Qtd manual: <strong>{qtdManual}</strong></div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{corte.oficina} · {diaBR(corte.data)} · Qtd manual: <strong>{qtdManual}</strong></div>
           </div>
           <span onClick={onClose} style={{fontSize:22,color:C.muted,cursor:"pointer",padding:6,lineHeight:1}}>×</span>
         </div>
@@ -4199,7 +4206,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
     const totalEntregues=cs.reduce((s,c)=>s+(c.qtdEntregue||c.qtd),0);
     const totalValor=cs.filter(c=>c.pago).reduce((s,c)=>s+(c.qtdEntregue||c.qtd)*c.valorUnit,0);
     const entregues=cs.filter(c=>c.entregue||c.pago);
-    const prazos=entregues.filter(c=>c.dataEntrega).map(c=>Math.floor((new Date(c.dataEntrega.split("/").reverse().join("-"))-new Date(c.data))/86400000));
+    const prazos=entregues.filter(c=>c.dataEntrega).map(c=>Math.floor((diaMs(c.dataEntrega.split("/").reverse().join("-"))-diaMs(c.data))/86400000));
     const prazoMedio=prazos.length>0?Math.round(prazos.reduce((a,v)=>a+v,0)/prazos.length):null;
     const pontualidade=entregues.length>0?Math.round(entregues.filter(c=>{const d=getDias(c);return d<=30;}).length/entregues.length*100):null;
     const perda=totalEnviadas>0?Math.round((totalEnviadas-totalEntregues)/totalEnviadas*100):0;
@@ -4407,7 +4414,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
                       <div style={{padding:"5px 8px",fontSize:15,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.qtd}</div>
                       <div style={{padding:"5px 8px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.valorUnit!=null?"R$ "+Number(c.valorUnit).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>
                       <div style={{padding:"5px 8px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{fmt(c.valorTotal)}</div>
-                      <div style={{padding:"5px 8px",fontSize:11,color:"#6b7c8a"}}>{new Date(c.data).toLocaleDateString("pt-BR")}</div>
+                      <div style={{padding:"5px 8px",fontSize:11,color:"#6b7c8a"}}>{diaBR(c.data)}</div>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><div onClick={()=>!c.pago&&toggleEntregue(c.id)} style={{width:18,height:18,borderRadius:4,background:c.entregue||c.pago?"#4a7fa5":"#fff",border:c.entregue||c.pago?"none":"1px solid #c0d0dc",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{(c.entregue||c.pago)&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}</div></div>
                       <div/>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><div onClick={()=>c.entregue&&togglePago(c.id)} style={{width:18,height:18,borderRadius:4,background:c.pago?"#27ae60":"#fff",border:c.pago?"none":"1px solid #c0d0dc",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{c.pago&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}</div></div>
@@ -7865,7 +7872,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     }catch(e){alert(String(e?.message||e));}
     finally{setCarregandoPonte(false);}
   };
-  const pendentes=cortesSala.filter(c=>c.status==="pendente").sort((a,b)=>new Date(a.data)-new Date(b.data));
+  const pendentes=cortesSala.filter(c=>c.status==="pendente").sort((a,b)=>diaMs(a.data)-diaMs(b.data));
   const hoje=new Date();
   const parados=pendentes.filter(c=>{const d=new Date(c.data+"T12:00:00");return(hoje-d)/(1000*60*60*24)>3;});
   const buscarProd=(ref)=>produtos.find(p=>p.ref===String(ref).trim());
