@@ -7118,10 +7118,34 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
   // FIX 08/05/2026 (Ailson): memoiza pra nao rodar state.clientes.find()
   // a cada keystroke do input apelido (causava lentidao perceptivel em
   // carteiras grandes — search linear em ~6k clientes a cada render).
-  const clienteEfetivo = useMemo(
-    () => cliente || (sugestao ? state.clientes.find(c => c.id === sugestao.cliente_id) : null),
-    [cliente, sugestao, state.clientes]
-  );
+  // 11/09 (Celia: "clico em enviar e nao abre o WhatsApp, sem erro"): se a
+  // carteira (state.clientes) ainda nao carregou ou falhou, o find devolvia
+  // undefined e o envio saia em silencio no `if (!clienteEfetivo) return`.
+  // Agora cai num cliente MINIMO montado com o que a propria sugestao traz.
+  const clienteEfetivo = useMemo(() => {
+    const achado = cliente || (sugestao ? state.clientes.find(c => c.id === sugestao.cliente_id) : null);
+    if (achado) return achado;
+    if (sugestao?.cliente) return { ...sugestao.cliente, _daSugestao: true };
+    // 11/09 (causa do "clico em enviar e nao acontece nada" da Celia):
+    // sugestao de GRUPO vem com cliente_id NULO e grupo_id preenchido — a tela
+    // so sabia lidar com cliente individual e o envio saia mudo. Usa o
+    // integrante do grupo com telefone (o dono da rede recebe a mensagem).
+    if (sugestao?.grupo_id) {
+      const doGrupo = state.clientes.filter(c => c.grupo_id === sugestao.grupo_id);
+      const comTel = doGrupo.find(c => (c.telefone_principal || '').trim()) || doGrupo[0];
+      if (comTel) return { ...comTel, _doGrupo: true };
+    }
+    if (sugestao?.cliente_id) {
+      return {
+        id: sugestao.cliente_id,
+        apelido: sugestao.alvo_nome_display || '',
+        comprador_nome: sugestao.alvo_nome_display || '',
+        telefone_principal: '',
+        _parcial: true,   // sem telefone: o fluxo pede cadastro
+      };
+    }
+    return null;
+  }, [cliente, sugestao, state.clientes]);
   const apelidoInicial = clienteEfetivo?.apelido || '';
 
   const [step, setStep] = useState(apelidoInicial ? 'gerando' : 'apelido');
@@ -7464,7 +7488,11 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
   // Abre WhatsApp Business COM mensagem pre-preenchida + marca enviada.
   // Se cliente nao tem telefone, abre modal pra cadastrar primeiro.
   const abrirWhatsAppComMsg = async (opts = {}) => {
-    if (!clienteEfetivo) return;
+    if (!clienteEfetivo) {
+      // 11/09: antes era um `return` mudo — a vendedora clicava e nada acontecia
+      alert('Não consegui identificar a cliente desta sugestão. Puxe a tela pra baixo pra recarregar a carteira e tente de novo.');
+      return;
+    }
     const tel = (clienteEfetivo.telefone_principal || '').trim();
     if (!tel) {
       setTelInput('');

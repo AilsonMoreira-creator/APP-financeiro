@@ -685,10 +685,13 @@ async function salvarLinksVesti(vendedoraId, { link_1, link_2, link_3, link_ativ
 
 async function loadSugestoesHoje(vendedoraId) {
   if (!vendedoraId) return [];
-  const hoje = new Date().toISOString().slice(0, 10);
+  // 11/09: data em BRT (UTC virava o dia seguinte depois das 21h) e a sugestao
+  // ja traz os dados da CLIENTE — assim o envio pelo WhatsApp nao depende da
+  // carteira ter carregado (Celia: "clico em enviar e nao acontece nada").
+  const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   const { data, error } = await supabase
     .from('lojas_sugestoes_diarias')
-    .select('*')
+    .select('*, cliente:lojas_clientes(id, apelido, comprador_nome, razao_social, telefone_principal, telefone_principal_valido)')
     .eq('vendedora_id', vendedoraId)
     .eq('data_geracao', hoje)
     .order('prioridade');
