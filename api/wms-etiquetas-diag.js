@@ -163,6 +163,34 @@ export default async function handler(req, res) {
     // 11/09 (amostra TikTok): ?nf_numero=138840 — acha a NF pelo NUMERO e
     // devolve o JSON COMPLETO, pra copiar exatamente os campos do modelo dele
     // 11/09: ?rejeicao=NF_ID — motivo exato da rejeicao da SEFAZ
+    // 11/09: ?vincular=1&pedido_id=&nf_id= — tenta (1) gravar o numero do
+    // pedido da loja na NF e (2) amarrar a NF ao pedido de venda, pra ele nao
+    // ficar "em aberto" no Bling.
+    if (req.query?.vincular === '1' && req.query?.pedido_id && req.query?.nf_id) {
+      const out = { passos: [] };
+      const pid = String(req.query.pedido_id), nfId = String(req.query.nf_id);
+      const pR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, headers);
+      const pJ = typeof pR.json === 'function' ? await pR.json().catch(() => ({})) : {};
+      const ped = pJ?.data || {};
+      out.passos.push({ passo: 'pedido', numero: ped.numero, numeroLoja: ped.numeroLoja, situacao: ped.situacao?.id, nf_atual: ped.notaFiscal?.id || null });
+      // (1) numeroPedidoLoja na NF — PUT na nota
+      const nR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+      const nJ = typeof nR.json === 'function' ? await nR.json().catch(() => ({})) : {};
+      const nf = nJ?.data || {};
+      const putNf = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, { method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...nf, numeroPedidoLoja: ped.numeroLoja || '' }) });
+      out.passos.push({ passo: 'nf-numeroPedidoLoja', http: putNf.status, resposta: (await putNf.text()).slice(0, 200) });
+      // (2) vincular a NF ao pedido
+      const putPed = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, { method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...ped, notaFiscal: { id: Number(nfId) } }) });
+      out.passos.push({ passo: 'pedido-notaFiscal', http: putPed.status, resposta: (await putPed.text()).slice(0, 200) });
+      const vR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, headers);
+      const vJ = typeof vR.json === 'function' ? await vR.json().catch(() => ({})) : {};
+      out.passos.push({ passo: 'conferencia', nf_no_pedido: vJ?.data?.notaFiscal?.id || null, situacao: vJ?.data?.situacao?.id });
+      return res.status(200).json(out);
+    }
     if (req.query?.rejeicao) {
       const r = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${req.query.rejeicao}`, headers);
       const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
