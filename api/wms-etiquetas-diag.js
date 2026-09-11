@@ -129,6 +129,17 @@ export default async function handler(req, res) {
         transporte: { frete: d.transporte?.frete, fretePorConta: d.transporte?.fretePorConta }, outrasDespesas: d.outrasDespesas, tributacao: d.tributacao });
     }
     // 07/09: ?nf=ID — resumo de uma NF (contato, natureza, loja, pedido) sem itens
+    // 11/09 (amostra TikTok): ?nf_numero=138840 — acha a NF pelo NUMERO e
+    // devolve o JSON COMPLETO, pra copiar exatamente os campos do modelo dele
+    if (req.query?.nf_numero) {
+      const lr = await blingFetch(`https://api.bling.com.br/Api/v3/nfe?numero=${encodeURIComponent(req.query.nf_numero)}&limite=5`, headers);
+      const lj = typeof lr.json === 'function' ? await lr.json().catch(() => ({})) : {};
+      const achada = (lj?.data || [])[0];
+      if (!achada) return res.status(200).json({ http: lr.status, achou: false, resposta: lj });
+      const dr = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${achada.id}`, headers);
+      const dj = typeof dr.json === 'function' ? await dr.json().catch(() => ({})) : {};
+      return res.status(200).json({ http: dr.status, id: achada.id, completa: dj?.data || dj });
+    }
     if (req.query?.nf) {
       const r = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${req.query.nf}`, headers);
       const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
