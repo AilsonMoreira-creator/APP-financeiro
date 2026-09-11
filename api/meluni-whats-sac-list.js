@@ -8,6 +8,8 @@
 import { supabase } from './_meluni-whats-helpers.js';
 import { anexarTags } from './_meluni-tags-anexar.js';
 
+export const config = { maxDuration: 30 };   // 11/09: rota de tela — nao segura conexao por 5 min
+
 const DIAS_FRIO = 3;
 
 export default async function handler(req, res) {

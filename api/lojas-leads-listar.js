@@ -28,6 +28,8 @@
  */
 import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 
+export const config = { maxDuration: 30 };   // 11/09: rota de tela — nao segura conexao por 5 min
+
 const ESCOPOS_VALIDOS = ['cnpj_publico', 'cpf_aguardando', 'cpf_atribuidos', 'meus_carrinhos'];
 
 export default async function handler(req, res) {

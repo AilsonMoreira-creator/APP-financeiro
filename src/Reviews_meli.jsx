@@ -52,7 +52,7 @@ function FotoRef({ sbUrl, refProd, size = 80 }) {
   const orig = String(refProd).toUpperCase();
   const norm = orig.replace(/^0+/, '');
   const storageBase = sbUrl ? `${sbUrl}/storage/v1/object/public/produtos/` : '';
-  const cb = '?v=' + new Date().toISOString().slice(0, 10);
+  const cb = '?v=' + (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10); })();
   if (!storageBase) {
     return (
       <div style={{

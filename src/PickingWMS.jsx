@@ -34,7 +34,7 @@ function FotoRef({ refProd, size = 54 }) {
   if (orig !== norm) urls.push(orig + '.jpg', orig + '.png', orig + '.webp');
   const p4 = norm.padStart(4, '0');
   if (p4 !== norm) urls.push(p4 + '.jpg', p4 + '.png', p4 + '.webp');
-  const cb = '?v=' + new Date().toISOString().slice(0, 10);
+  const cb = '?v=' + (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10); })();
   return (
     <img src={base + urls[0] + cb} alt={`REF ${refProd}`} loading="lazy"
       style={{ width: size, height: Math.round(size * 1.27), borderRadius: 6, objectFit: 'cover', border: '1px solid #e8e2da', flexShrink: 0, background: '#f4f0ea' }}

@@ -1053,7 +1053,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
   }
 
   // Sequência de tentativas
-  const cb = '?v=' + new Date().toISOString().slice(0, 10);
+  const cb = '?v=' + (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10); })();
   const lembrado = _fotoMem[norm];   // nome do arquivo que funcionou, ou 'x' = sem foto
   const urls = lembrado && !String(lembrado).startsWith('x')
     ? [lembrado, norm + '.jpg', norm + '.png', norm + '.webp']

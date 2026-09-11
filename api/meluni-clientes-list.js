@@ -11,6 +11,8 @@
 import { supabase } from './_bling-helpers.js';
 import { anexarTags } from './_meluni-tags-anexar.js';
 
+export const config = { maxDuration: 30 };   // 11/09: rota de tela — nao segura conexao por 5 min
+
 const diaISO = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
 
 export default async function handler(req, res) {

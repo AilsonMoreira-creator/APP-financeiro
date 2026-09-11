@@ -23,7 +23,7 @@ import { etiquetasDoMl } from './_wms-ml-etiquetas.js';
 
 const hashDoc = (b) => crypto.createHash('sha256').update(b).digest('hex').slice(0, 32);
 
-export const config = { maxDuration: 300 };
+export const config = { maxDuration: 180 };
 
 const BRAND = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 const n = (v) => Number(v) || 0;

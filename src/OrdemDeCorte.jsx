@@ -57,7 +57,7 @@ function FotoOrdem({ refProd }) {
   if (fotoSemFoto(norm)) return placeholder;
   const conhecida = fotoUrlConhecida(norm);
   const urls = conhecida ? [] : candidatosFoto(refProd, true);
-  const cb = '?v=' + new Date().toISOString().slice(0, 10);
+  const cb = '?v=' + (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10); })();
   return (
     <div style={{ position: 'relative', width: 52, height: 66, flexShrink: 0 }}>
       <img

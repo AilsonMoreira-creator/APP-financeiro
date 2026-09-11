@@ -16,6 +16,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
+export const config = { maxDuration: 20 };   // 11/09: rota de tela — nao segura conexao por 5 min
+
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY);
 
 function resumoAparelho(ua) {

@@ -5010,7 +5010,7 @@ const FotoProd=({sbUrl,refProd,onZoom})=>{
   const orig=String(refProd).toUpperCase();
   const norm=orig.replace(/^0+/,'');
   const storageBase=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/`:'';
-  const cb='?v='+new Date().toISOString().slice(0,10);
+  const cb='?v='+(()=>{const d=new Date();d.setDate(d.getDate()-d.getDay());return d.toISOString().slice(0,10);})();
   if(!storageBase)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
   // Sequência: norm → orig (se diferente) → zero-padded (4 e 5 dígitos) → placeholder
   // 11/09: memoria compartilhada — REF sem foto (por dia) nao tenta de novo; REF resolvida vai direto na URL boa
@@ -5027,7 +5027,7 @@ const FotoProdLarge=({sbUrl,refProd,onZoom})=>{
   const orig=String(refProd).toUpperCase();
   const norm=orig.replace(/^0+/,'');
   const storageBase=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/`:'';
-  const cb='?v='+new Date().toISOString().slice(0,10);
+  const cb='?v='+(()=>{const d=new Date();d.setDate(d.getDate()-d.getDay());return d.toISOString().slice(0,10);})();
   if(!storageBase)return <div style={{width:"100%",aspectRatio:"3/4",background:"linear-gradient(135deg,#f0ebe3,#e8e2da)",display:"flex",alignItems:"center",justifyContent:"center",color:"#c0b8b0",fontSize:10,fontFamily:"Georgia,serif",fontStyle:"italic"}}>foto ref {String(refProd)}</div>;
   const conhecida=fotoUrlConhecida(norm);
   const urls=conhecida?[]:(fotoSemFoto(norm)?[]:candidatosFoto(refProd,true));

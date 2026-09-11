@@ -491,7 +491,7 @@ function FotoPassadoria({ refProd, w = 44, h = 56 }) {
   if (fotoSemFoto(norm)) return ph;
   const conhecida = fotoUrlConhecida(norm);
   const urls = conhecida ? [] : candidatosFoto(refProd, true);
-  const cb = '?v=' + new Date().toISOString().slice(0, 10);
+  const cb = '?v=' + (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10); })();
   return (
     <div style={{ position: 'relative', width: w, height: h, flexShrink: 0 }}>
       <img src={conhecida || (base + urls[0] + cb)} onLoad={(e) => marcarFotoOk(norm, e.target.src)} alt={`REF ${refProd}`}

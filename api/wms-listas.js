@@ -10,6 +10,8 @@
  */
 import { supabase } from './_bling-helpers.js';
 
+export const config = { maxDuration: 30 };   // 11/09: rota de tela — nao segura conexao por 5 min
+
 // Config do módulo (amicia_data user_id='wms-config')
 export const WMS_CONFIG_DEFAULT = {
   situacoes_aberto: ['em aberto', 'em andamento'],
