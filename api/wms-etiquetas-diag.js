@@ -166,6 +166,34 @@ export default async function handler(req, res) {
     // 11/09: ?vincular=1&pedido_id=&nf_id= — tenta (1) gravar o numero do
     // pedido da loja na NF e (2) amarrar a NF ao pedido de venda, pra ele nao
     // ficar "em aberto" no Bling.
+    // 11/09 (pedido dele): gerar a NF PELO PEDIDO — e o caminho que a Sthefany
+    // usa na tela: o Bling vincula a nota ao pedido, preenche "numero da loja
+    // virtual" e a origem (TikTok, nao "API"). Testa se aceita a natureza
+    // "Amostra" no corpo. NAO transmite: so cria e mostra o que saiu.
+    if (req.query?.gerar_pelo_pedido === '1' && req.query?.pedido_id) {
+      const pid = String(req.query.pedido_id);
+      const natId = Number(req.query?.natureza) || 15107671335;
+      const out = { pedido_id: pid, natureza_pedida: natId, passos: [] };
+      const body = JSON.stringify({ naturezaOperacao: { id: natId } });
+      const gR = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}/gerar-nfe`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body });
+      const gJ = await gR.json().catch(() => ({}));
+      out.passos.push({ passo: 'gerar-nfe', http: gR.status, resposta: JSON.stringify(gJ).slice(0, 300) });
+      const nfId = gJ?.data?.id;
+      if (!nfId) return res.status(200).json(out);
+      await new Promise(r => setTimeout(r, 2000));
+      const nR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+      const nJ = typeof nR.json === 'function' ? await nR.json().catch(() => ({})) : {};
+      const nf = nJ?.data || {};
+      out.nota = { id: nfId, numero: nf.numero, serie: nf.serie, situacao: nf.situacao,
+        natureza: nf.naturezaOperacao?.id, numeroPedidoLoja: nf.numeroPedidoLoja,
+        contato: nf.contato?.nome, valor: nf.valorNota, loja: nf.loja?.id };
+      await new Promise(r => setTimeout(r, 1500));
+      const pR2 = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, headers);
+      const pJ2 = typeof pR2.json === 'function' ? await pR2.json().catch(() => ({})) : {};
+      out.pedido_depois = { nf_vinculada: pJ2?.data?.notaFiscal?.id || null, situacao: pJ2?.data?.situacao?.id };
+      return res.status(200).json(out);
+    }
     if (req.query?.vincular === '1' && req.query?.pedido_id && req.query?.nf_id) {
       const out = { passos: [] };
       const pid = String(req.query.pedido_id), nfId = String(req.query.nf_id);
