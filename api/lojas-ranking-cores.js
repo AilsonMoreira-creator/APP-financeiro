@@ -10,6 +10,12 @@
 
 import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 
+// 11/09 (ordem dele): os basicos 0050 e 0020 sao mais baratos e vendem em
+// volume muito acima do resto — mascaravam a leitura de cor. Ficam FORA das
+// somas do ranking (a tela avisa). ?incluir_basicos=1 traz de volta.
+const REFS_BASICAS = ['50', '20'];
+const ehBasica = (ref) => REFS_BASICAS.includes(String(ref || '').replace(/^0+/, ''));
+
 const LOJA_BR = 'Bom Retiro';
 const LOJA_ST = 'Silva Teles';
 const codCor = (sku) => { const s = String(sku || '').replace(/\D/g, ''); return s.length >= 9 ? s.slice(-5, -2) : null; };
@@ -34,6 +40,7 @@ export default async function handler(req, res) {
   }
 
   const dias = Math.min(180, parseInt(req.query?.dias, 10) || 30);
+  const incluirBasicos = req.query?.incluir_basicos === '1';
   const lojaFiltro = ['todas', 'BR', 'ST'].includes(req.query?.loja) ? req.query.loja : 'todas';
   const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
   try {
@@ -59,7 +66,7 @@ export default async function handler(req, res) {
     const d30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
     let itens30 = itens;
     if (dias < 30) {
-      let q2 = supabase.from('lojas_vendas_itens').select('sku, qtd, data_venda, loja').gte('data_venda', d30).not('sku', 'is', null);
+      let q2 = supabase.from('lojas_vendas_itens').select('sku, ref, qtd, data_venda, loja').gte('data_venda', d30).not('sku', 'is', null);
       if (lojaFiltro === 'BR') q2 = q2.eq('loja', LOJA_BR);
       if (lojaFiltro === 'ST') q2 = q2.eq('loja', LOJA_ST);
       const acc = [];
@@ -69,6 +76,7 @@ export default async function handler(req, res) {
     const rec = {}, ant = {}; let totRec = 0, totAnt = 0;
     for (const it of itens30) {
       const cod0 = codCor(it.sku); if (!cod0) continue;
+      if (!incluirBasicos && ehBasica(it.ref)) continue;   // 11/09: mesma exclusao na tendencia
       const cod = alvo(cod0); const qtd = Number(it.qtd) || 0;
       const dv = String(it.data_venda || '').slice(0, 10);
       if (dv >= d15) { rec[cod] = (rec[cod] || 0) + qtd; totRec += qtd; }
@@ -88,11 +96,12 @@ export default async function handler(req, res) {
     };
 
     const porCor = {};
-    let totalPecas = 0, semCodigo = 0;
+    let totalPecas = 0, semCodigo = 0, pecasBasicas = 0;
     for (const it of itens) {
       const cod0 = codCor(it.sku);
       const qtd = Number(it.qtd) || 0;
       if (!cod0) { semCodigo += qtd; continue; }
+      if (!incluirBasicos && ehBasica(it.ref)) { pecasBasicas += qtd; continue; }
       const cod = alvo(cod0);
       totalPecas += qtd;
       porCor[cod] = porCor[cod] || { codigo: cod, pecas: 0, valor: 0, refs: new Set(), por_loja: {} };
@@ -109,6 +118,7 @@ export default async function handler(req, res) {
       ...tendencia(c.codigo),
     })).sort((a, b) => b.pecas - a.pecas).slice(0, Math.min(50, parseInt(req.query?.top, 10) || 20));   // 09/09: top 20 por padrao
     return res.status(200).json({ ok: true, dias, loja: lojaFiltro, desde, total_pecas: totalPecas, sem_codigo: semCodigo,
+      basicas_fora: incluirBasicos ? 0 : pecasBasicas, refs_basicas: incluirBasicos ? [] : REFS_BASICAS.map(r => r.padStart(4, '0')),
       cores: ranking.length, sem_nome: ranking.filter(r => !r.nome).length, ranking });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });

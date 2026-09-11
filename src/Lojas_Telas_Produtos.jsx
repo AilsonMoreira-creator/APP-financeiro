@@ -472,6 +472,7 @@ const RankingCores = ({ loja, userId }) => {
         <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
           🎨 Peças vendidas por cor · {loja === 'todas' ? 'Bom Retiro + Silva Teles' : loja === 'BR' ? 'Bom Retiro' : 'Silva Teles'}
           {dados ? ` · ${dados.total_pecas.toLocaleString('pt-BR')} peças · ${dados.cores} cores` : ''}
+          {dados?.basicas_fora > 0 ? ` · sem as básicas ${dados.refs_basicas.join(' e ')} (${dados.basicas_fora.toLocaleString('pt-BR')} peças fora)` : ''}
         </span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button onClick={() => setDias(30)} style={chip(dias === 30)}>30 dias</button>
