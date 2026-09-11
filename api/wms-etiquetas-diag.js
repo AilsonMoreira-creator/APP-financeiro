@@ -94,7 +94,7 @@ export default async function handler(req, res) {
       // ?natureza=ID permite testar qual natureza traz a serie 2.
       const MODELO = { naturezaId: Number(req.query?.natureza) || 15103262184, serie: 2, lojaId: 205414310, intermediadorCnpj: '27415911000136' };
       const ufDest = String(d.contato?.endereco?.uf || d.transporte?.etiqueta?.uf || '').toUpperCase();
-      const cfop = ufDest && ufDest !== 'SP' ? '6912' : '5912';   // fora do estado : dentro
+      const cfop = ufDest && ufDest !== 'SP' ? '6910' : '5910';   // (so informativo: o CFOP vem da natureza)
       // detalhe fiscal de cada produto (NCM/CEST/origem/peso) vem do cadastro
       const itens = [];
       for (const i of (d.itens || [])) {
@@ -106,9 +106,13 @@ export default async function handler(req, res) {
           fiscal = { classificacaoFiscal: pd.tributacao?.ncm || '', cest: pd.tributacao?.cest || '', origem: pd.tributacao?.origem ?? 0,
                      pesoBruto: pd.pesoBruto ?? undefined, pesoLiquido: pd.pesoLiquido ?? undefined };
         }
+        // 11/09: NAO enviar bloco `impostos` nem `cest` — deixa o CALCULO
+        // AUTOMATICO do Bling aplicar a regra da natureza (CSOSN 400 + CFOP
+        // 5910/6910). Enviar imposto manual congelava o CSOSN errado e a SEFAZ
+        // rejeitava (600 - CSOSN incompativel com nao contribuinte).
+        const { cest, ...fiscalSemCest } = fiscal;
         itens.push({ codigo: i.codigo, descricao: i.descricao, unidade: i.unidade || 'UN', quantidade: i.quantidade,
-          valor: i.valor, tipo: 'P', cfop, ...fiscal,
-          impostos: { icms: { st: 0, origem: fiscal.origem ?? 0, modalidade: 0, aliquota: 0, valor: 0 } } });
+          valor: i.valor, tipo: 'P', ...fiscalSemCest });
       }
       // 11/09: o Bling exige dataOperacao (e dataEmissao) no formato
       // 'YYYY-MM-DD HH:MM:SS' em horario de Brasilia — sem isso: "Data de
