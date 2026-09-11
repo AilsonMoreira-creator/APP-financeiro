@@ -5013,14 +5013,12 @@ const FotoProd=({sbUrl,refProd,onZoom})=>{
   const cb='?v='+new Date().toISOString().slice(0,10);
   if(!storageBase)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
   // Sequência: norm → orig (se diferente) → zero-padded (4 e 5 dígitos) → placeholder
-  const urls=[norm+'.jpg',norm+'.png',norm+'.webp'];
-  if(orig!==norm)urls.push(orig+'.jpg',orig+'.png',orig+'.webp');
-  // Tenta com zero-padding (376 → 0376, 0376 → 00376)
-  const pad4=norm.padStart(4,'0');const pad5=norm.padStart(5,'0');
-  if(pad4!==norm&&pad4!==orig)urls.push(pad4+'.jpg',pad4+'.png',pad4+'.webp');
-  if(pad5!==norm&&pad5!==orig&&pad5!==pad4)urls.push(pad5+'.jpg',pad5+'.png',pad5+'.webp');
-  return <img src={storageBase+urls[0]+cb}
-    onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
+  // 11/09: memoria compartilhada — REF sem foto (por dia) nao tenta de novo; REF resolvida vai direto na URL boa
+  if(fotoSemFoto(norm))return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
+  const conhecida=fotoUrlConhecida(norm);
+  const urls=conhecida?[]:candidatosFoto(refProd,true);
+  return <img src={conhecida||(storageBase+urls[0]+cb)} onLoad={(e)=>marcarFotoOk(norm,e.target.src)}
+    onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u+'?')||cur.endsWith(u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{marcarSemFoto(norm);e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
     onClick={(e)=>{e.stopPropagation();onZoom&&onZoom(e.target.src);}}
     style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0,cursor:"pointer"}}/>;
 };
@@ -5031,14 +5029,12 @@ const FotoProdLarge=({sbUrl,refProd,onZoom})=>{
   const storageBase=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/`:'';
   const cb='?v='+new Date().toISOString().slice(0,10);
   if(!storageBase)return <div style={{width:"100%",aspectRatio:"3/4",background:"linear-gradient(135deg,#f0ebe3,#e8e2da)",display:"flex",alignItems:"center",justifyContent:"center",color:"#c0b8b0",fontSize:10,fontFamily:"Georgia,serif",fontStyle:"italic"}}>foto ref {String(refProd)}</div>;
-  const urls=[norm+'.jpg',norm+'.png',norm+'.webp'];
-  if(orig!==norm)urls.push(orig+'.jpg',orig+'.png',orig+'.webp');
-  const pad4=norm.padStart(4,'0');const pad5=norm.padStart(5,'0');
-  if(pad4!==norm&&pad4!==orig)urls.push(pad4+'.jpg',pad4+'.png',pad4+'.webp');
-  if(pad5!==norm&&pad5!==orig&&pad5!==pad4)urls.push(pad5+'.jpg',pad5+'.png',pad5+'.webp');
+  const conhecida=fotoUrlConhecida(norm);
+  const urls=conhecida?[]:(fotoSemFoto(norm)?[]:candidatosFoto(refProd,true));
+  if(!conhecida&&!urls.length)return(<div style={{width:"100%",aspectRatio:"3/4",background:"linear-gradient(135deg,#f0ebe3,#e8e2da)",display:"flex",alignItems:"center",justifyContent:"center",color:"#c0b8b0",fontSize:10,fontFamily:"Georgia,serif",fontStyle:"italic"}}>foto ref {norm}</div>);
   return(<div style={{width:"100%",aspectRatio:"3/4",position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#f0ebe3,#e8e2da)"}}>
-    <img src={storageBase+urls[0]+cb}
-      onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
+    <img src={conhecida||(storageBase+urls[0]+cb)} onLoad={(e)=>marcarFotoOk(norm,e.target.src)}
+      onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u+'?')||cur.endsWith(u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{marcarSemFoto(norm);e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
       onClick={onZoom?(e)=>{e.stopPropagation();onZoom(e.target.src);}:undefined}
       style={{width:"100%",height:"100%",objectFit:"cover",cursor:onZoom?"pointer":"inherit",display:"block"}}/>
     <div style={{display:"none",width:"100%",height:"100%",alignItems:"center",justifyContent:"center",color:"#c0b8b0",fontSize:10,fontFamily:"Georgia,serif",fontStyle:"italic"}}>foto ref {String(refProd)}</div>
@@ -5053,13 +5049,13 @@ const FotoBlingThumb=({refProd,w=38,h=50})=>{
   const norm=orig.replace(/^0+/,'');
   const phStyle={width:w,height:h,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da"};
   if(!sbUrl||!norm)return <div style={phStyle}><span style={{fontSize:Math.round(w*0.37),opacity:0.3}}>📷</span></div>;
-  const urls=[norm+'.jpg',norm+'.png',norm+'.webp'];
-  if(orig!==norm)urls.push(orig+'.jpg');
-  const pad4=norm.padStart(4,'0');if(pad4!==norm&&pad4!==orig)urls.push(pad4+'.jpg');
   const base=`${sbUrl}/storage/v1/object/public/produtos/`;
+  if(fotoSemFoto(norm))return <div style={phStyle}><span style={{fontSize:Math.round(w*0.37),opacity:0.3}}>📷</span></div>;
+  const conhecida=fotoUrlConhecida(norm);
+  const urls=conhecida?[]:candidatosFoto(refProd,false);
   return(<div style={{position:"relative",width:w,height:h}}>
-    <img src={base+urls[0]}
-      onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u));if(idx>=0&&idx<urls.length-1){e.target.src=base+urls[idx+1];}else{e.target.style.display='none';const p=e.target.nextSibling;if(p)p.style.display='flex';}}}
+    <img src={conhecida||(base+urls[0])} onLoad={(e)=>marcarFotoOk(norm,e.target.src)}
+      onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u+'?')||cur.endsWith(u));if(idx>=0&&idx<urls.length-1){e.target.src=base+urls[idx+1];}else{marcarSemFoto(norm);e.target.style.display='none';const p=e.target.nextSibling;if(p)p.style.display='flex';}}}
       style={{width:w,height:h,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",display:"block"}}/>
     <div style={{...phStyle,display:"none",position:"absolute",inset:0}}><span style={{fontSize:Math.round(w*0.37),opacity:0.3}}>📷</span></div>
   </div>);

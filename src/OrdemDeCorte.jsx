@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { fotoUrlConhecida, fotoSemFoto, marcarFotoOk, marcarSemFoto, candidatosFoto } from './fotoProdutosCache.js';
 import { compartilharElementoComoImagem, gerarPngDeElemento, compartilharArquivos } from './compartilhar-card.js';
 import { listarCoresManuais, adicionarCorManual, removerCorManual, resolverHexCor } from './cores-manuais.js';
 import OrdemMatrixModal from './OrdemMatrixModal';
@@ -52,23 +53,22 @@ function FotoOrdem({ refProd }) {
   if (!storageBase || !refProd) return placeholder;
   const orig = String(refProd).toUpperCase();
   const norm = orig.replace(/^0+/, '') || '0';
-  const urls = [norm + '.jpg', norm + '.png', norm + '.webp'];
-  if (orig !== norm) urls.push(orig + '.jpg', orig + '.png', orig + '.webp');
-  const pad4 = norm.padStart(4, '0'), pad5 = norm.padStart(5, '0');
-  if (pad4 !== norm && pad4 !== orig) urls.push(pad4 + '.jpg', pad4 + '.png', pad4 + '.webp');
-  if (pad5 !== norm && pad5 !== orig && pad5 !== pad4) urls.push(pad5 + '.jpg', pad5 + '.png', pad5 + '.webp');
+  // 11/09: memoria compartilhada (fotoProdutosCache) — sem foto por dia nao tenta; resolvida vai direto
+  if (fotoSemFoto(norm)) return placeholder;
+  const conhecida = fotoUrlConhecida(norm);
+  const urls = conhecida ? [] : candidatosFoto(refProd, true);
   const cb = '?v=' + new Date().toISOString().slice(0, 10);
   return (
     <div style={{ position: 'relative', width: 52, height: 66, flexShrink: 0 }}>
       <img
-        src={storageBase + urls[0] + cb}
+        src={conhecida || (storageBase + urls[0] + cb)} onLoad={(e) => marcarFotoOk(norm, e.target.src)}
         alt={`REF ${refProd}`}
         onError={(e) => {
           const cur = e.target.src;
           const idx = urls.findIndex(u => cur.includes(u));
           if (idx >= 0 && idx < urls.length - 1) {
             e.target.src = storageBase + urls[idx + 1] + cb;
-          } else {
+          } else { marcarSemFoto(norm);
             e.target.style.display = 'none';
             const ph = e.target.nextSibling;
             if (ph) ph.style.display = 'flex';
