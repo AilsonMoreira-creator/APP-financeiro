@@ -89,7 +89,10 @@ export default async function handler(req, res) {
       const det = typeof detR.json === 'function' ? await detR.json().catch(() => ({})) : {};
       const d = det?.data || {};
       if (!d.id) return res.status(200).json({ ok: false, erro: 'pedido nao lido', http: detR.status });
-      const MODELO = { naturezaId: 15103262184, serie: 2, lojaId: 205414310, intermediadorCnpj: '27415911000136' };
+      // 11/09: a SERIE no Bling vem da NATUREZA DE OPERACAO (campo "Serie"
+      // dentro dela), nao do payload — por isso `serie: 2` era ignorado.
+      // ?natureza=ID permite testar qual natureza traz a serie 2.
+      const MODELO = { naturezaId: Number(req.query?.natureza) || 15103262184, serie: 2, lojaId: 205414310, intermediadorCnpj: '27415911000136' };
       const ufDest = String(d.contato?.endereco?.uf || d.transporte?.etiqueta?.uf || '').toUpperCase();
       const cfop = ufDest && ufDest !== 'SP' ? '6912' : '5912';   // fora do estado : dentro
       // detalhe fiscal de cada produto (NCM/CEST/origem/peso) vem do cadastro
@@ -116,7 +119,9 @@ export default async function handler(req, res) {
         dataOperacao: agoraBrt, dataEmissao: agoraBrt,
         naturezaOperacao: { id: MODELO.naturezaId },
         loja: d.loja?.id ? { id: d.loja.id } : { id: MODELO.lojaId },
-        contato: { id: d.contato?.id },
+        contato: { id: d.contato?.id, nome: d.contato?.nome, tipoPessoa: d.contato?.tipoPessoa || 'F',
+                   numeroDocumento: d.contato?.numeroDocumento, contribuinte: 9,
+                   endereco: d.contato?.endereco || d.transporte?.etiqueta || undefined },
         consumidorFinal: true,
         optanteSimplesNacional: true,
         numeroPedidoLoja: d.numeroLoja || undefined,
