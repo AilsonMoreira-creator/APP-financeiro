@@ -78,36 +78,53 @@ export default async function handler(req, res) {
     // amostra (natureza "Amostra") a partir do pedido. Sem executar=1 so DEVOLVE
     // o payload. Com executar=1 cria a nota como RASCUNHO (POST /nfe) — NAO
     // transmite pra SEFAZ (isso e outro comando, /nfe/{id}/enviar).
+    // 11/09 (modelo dele: NF 138840 Exitus): monta a NF de amostra ESPELHANDO
+    // aquela nota — serie 2, natureza "Remessa de mercadoria para demonstracao"
+    // (a mesma id da 138840), consumidor final, CFOP 5912/6912 conforme a UF,
+    // itens com NCM/CEST/origem do cadastro e ICMS zerado (CSOSN 400 vem da
+    // natureza). ?executar=1 cria como RASCUNHO — nao transmite.
     if (req.query?.amostra_nf) {
       const pid = String(req.query.amostra_nf);
       const detR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, headers);
       const det = typeof detR.json === 'function' ? await detR.json().catch(() => ({})) : {};
       const d = det?.data || {};
       if (!d.id) return res.status(200).json({ ok: false, erro: 'pedido nao lido', http: detR.status });
-      const natR = await blingFetch('https://api.bling.com.br/Api/v3/naturezas-operacoes?limite=100', headers);
-      const natJ = typeof natR.json === 'function' ? await natR.json().catch(() => ({})) : {};
-      const nat = (natJ?.data || []).find(n => /^amostra$/i.test(String(n.descricao || '').trim()));
-      if (!nat) return res.status(200).json({ ok: false, erro: 'natureza "Amostra" nao encontrada nesta conta' });
+      const MODELO = { naturezaId: 15103262184, serie: 2, lojaId: 205414310, intermediadorCnpj: '27415911000136' };
+      const ufDest = String(d.contato?.endereco?.uf || d.transporte?.etiqueta?.uf || '').toUpperCase();
+      const cfop = ufDest && ufDest !== 'SP' ? '6912' : '5912';   // fora do estado : dentro
+      // detalhe fiscal de cada produto (NCM/CEST/origem/peso) vem do cadastro
+      const itens = [];
+      for (const i of (d.itens || [])) {
+        let fiscal = {};
+        if (i.produto?.id) {
+          const pr = await blingFetch(`https://api.bling.com.br/Api/v3/produtos/${i.produto.id}`, headers);
+          const pj = typeof pr.json === 'function' ? await pr.json().catch(() => ({})) : {};
+          const pd = pj?.data || {};
+          fiscal = { classificacaoFiscal: pd.tributacao?.ncm || '', cest: pd.tributacao?.cest || '', origem: pd.tributacao?.origem ?? 0,
+                     pesoBruto: pd.pesoBruto ?? undefined, pesoLiquido: pd.pesoLiquido ?? undefined };
+        }
+        itens.push({ codigo: i.codigo, descricao: i.descricao, unidade: i.unidade || 'UN', quantidade: i.quantidade,
+          valor: i.valor, tipo: 'P', cfop, ...fiscal,
+          impostos: { icms: { st: 0, origem: fiscal.origem ?? 0, modalidade: 0, aliquota: 0, valor: 0 } } });
+      }
       const payload = {
-        tipo: 1,
-        dataOperacao: new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 19).replace('T', ' '),
+        tipo: 1, serie: MODELO.serie,
+        naturezaOperacao: { id: MODELO.naturezaId },
+        loja: d.loja?.id ? { id: d.loja.id } : { id: MODELO.lojaId },
         contato: { id: d.contato?.id },
-        naturezaOperacao: { id: nat.id },
-        loja: d.loja?.id ? { id: d.loja.id } : undefined,
+        consumidorFinal: true,
+        optanteSimplesNacional: true,
         numeroPedidoLoja: d.numeroLoja || undefined,
         finalidade: 1,
-        itens: (d.itens || []).map(i => ({
-          codigo: i.codigo, descricao: i.descricao, unidade: i.unidade || 'UN', quantidade: i.quantidade, valor: i.valor,
-          ...(i.produto?.id ? { produto: { id: i.produto.id } } : {}),
-        })),
-        transporte: { fretePorConta: 3, frete: 0 },   // 3 = sem frete (remessa)
-        observacoes: `Remessa de amostra gratis - pedido ${d.numeroLoja || d.numero} (TikTok). Sem valor comercial.`,
+        itens,
+        transporte: { fretePorConta: 1, etiqueta: d.transporte?.etiqueta || undefined },
+        intermediador: { cnpj: MODELO.intermediadorCnpj, nomeUsuario: d.numeroLoja || '' },
+        observacoes: 'AMOSTRA - remessa sem valor comercial.',
       };
-      const executar = req.query?.executar === '1';
-      if (!executar) return res.status(200).json({ ok: true, modo: 'so_montagem', natureza: nat, pedido: { id: d.id, numero: d.numero, numeroLoja: d.numeroLoja, contato: d.contato?.nome }, payload });
+      if (req.query?.executar !== '1') return res.status(200).json({ ok: true, modo: 'so_montagem', cfop_escolhido: cfop, uf_destino: ufDest, payload });
       const cr = await fetch('https://api.bling.com.br/Api/v3/nfe', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const cj = await cr.json().catch(() => ({}));
-      return res.status(200).json({ ok: cr.ok, http: cr.status, modo: 'rascunho_criado_NAO_transmitido', resposta: cj });
+      return res.status(200).json({ ok: cr.ok, http: cr.status, modo: 'RASCUNHO criado (nao transmitido)', resposta: cj });
     }
     // 10/09 (TikTok amostra): ?naturezas=1 — naturezas de operacao cadastradas
     // no Bling desta conta (procurando a de remessa de amostra, CFOP 5911/6911)
