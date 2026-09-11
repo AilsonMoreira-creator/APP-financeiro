@@ -1,6 +1,7 @@
 // @ts-nocheck  
 import { useState, useEffect, useRef, useCallback, useMemo, Component } from "react";
 import { supabase, USER_ID } from "./supabase.js";
+import { fotoUrlConhecida, fotoSemFoto, marcarFotoOk, marcarSemFoto, candidatosFoto } from "./fotoProdutosCache.js";
 import CalcMetaAdsMeluni from "./CalcMetaAdsMeluni.jsx";
 import CalcDivergencia from "./CalcDivergencia.jsx";
 import { CalcAnaliseMeluni } from "./CalcAnaliseMeluni";
