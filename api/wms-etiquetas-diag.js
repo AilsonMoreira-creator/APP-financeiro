@@ -170,6 +170,29 @@ export default async function handler(req, res) {
     // usa na tela: o Bling vincula a nota ao pedido, preenche "numero da loja
     // virtual" e a origem (TikTok, nao "API"). Testa se aceita a natureza
     // "Amostra" no corpo. NAO transmite: so cria e mostra o que saiu.
+    // 11/09: ?ajustar_natureza=1&nf_id=&natureza= — troca a natureza de uma NF
+    // ainda em RASCUNHO (situacao 1). E o passo que faltava: gerar-nfe pelo
+    // pedido (vincula + numero da loja virtual) e depois trocar pra "Amostra"
+    // (que carrega serie 2 + CSOSN 400).
+    if (req.query?.ajustar_natureza === '1' && req.query?.nf_id) {
+      const nfId = String(req.query.nf_id);
+      const natId = Number(req.query?.natureza) || 15107671335;
+      const nR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+      const nJ = typeof nR.json === 'function' ? await nR.json().catch(() => ({})) : {};
+      const nf = nJ?.data || {};
+      if (nf.situacao !== 1) return res.status(200).json({ ok: false, erro: `nota nao esta em rascunho (situacao ${nf.situacao})` });
+      const corpo = { ...nf, naturezaOperacao: { id: natId } };
+      delete corpo.xml; delete corpo.linkDanfe; delete corpo.linkPDF; delete corpo.chaveAcesso;
+      const pR = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, { method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+      const pTxt = (await pR.text()).slice(0, 250);
+      await new Promise(r => setTimeout(r, 1800));
+      const vR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+      const vJ = typeof vR.json === 'function' ? await vR.json().catch(() => ({})) : {};
+      const v = vJ?.data || {};
+      return res.status(200).json({ ok: pR.ok, http: pR.status, resposta: pTxt,
+        agora: { numero: v.numero, serie: v.serie, natureza: v.naturezaOperacao?.id, numeroPedidoLoja: v.numeroPedidoLoja, situacao: v.situacao } });
+    }
     if (req.query?.gerar_pelo_pedido === '1' && req.query?.pedido_id) {
       const pid = String(req.query.pedido_id);
       const natId = Number(req.query?.natureza) || 15107671335;
