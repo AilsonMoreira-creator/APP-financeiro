@@ -158,6 +158,19 @@ export default async function handler(req, res) {
     // 07/09: ?nf=ID — resumo de uma NF (contato, natureza, loja, pedido) sem itens
     // 11/09 (amostra TikTok): ?nf_numero=138840 — acha a NF pelo NUMERO e
     // devolve o JSON COMPLETO, pra copiar exatamente os campos do modelo dele
+    // 11/09: ?rejeicao=NF_ID — motivo exato da rejeicao da SEFAZ
+    if (req.query?.rejeicao) {
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${req.query.rejeicao}`, headers);
+      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+      const d = j?.data || {};
+      const xml = String(d.xmlRetorno || d.xml || '');
+      const mot = /<xMotivo>([^<]+)<\/xMotivo>/.exec(xml);
+      const cSt = /<cStat>(\d+)<\/cStat>/.exec(xml);
+      return res.status(200).json({ situacao: d.situacao, numero: d.numero, serie: d.serie,
+        cStat: cSt?.[1] || null, motivo: mot?.[1] || null,
+        campos: { observacoes: d.observacoes, natureza: d.naturezaOperacao?.id, contato: d.contato },
+        bruto: xml ? xml.slice(0, 600) : JSON.stringify(d).slice(0, 600) });
+    }
     if (req.query?.nf_numero) {
       const lr = await blingFetch(`https://api.bling.com.br/Api/v3/nfe?numero=${encodeURIComponent(req.query.nf_numero)}&limite=5`, headers);
       const lj = typeof lr.json === 'function' ? await lr.json().catch(() => ({})) : {};
