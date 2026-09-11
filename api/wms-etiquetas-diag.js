@@ -173,15 +173,21 @@ export default async function handler(req, res) {
       const pJ = typeof pR.json === 'function' ? await pR.json().catch(() => ({})) : {};
       const ped = pJ?.data || {};
       out.passos.push({ passo: 'pedido', numero: ped.numero, numeroLoja: ped.numeroLoja, situacao: ped.situacao?.id, nf_atual: ped.notaFiscal?.id || null });
-      // (1) numeroPedidoLoja na NF — PUT na nota
-      const nR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
-      const nJ = typeof nR.json === 'function' ? await nR.json().catch(() => ({})) : {};
-      const nf = nJ?.data || {};
-      const putNf = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, { method: 'PUT',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...nf, numeroPedidoLoja: ped.numeroLoja || '' }) });
-      out.passos.push({ passo: 'nf-numeroPedidoLoja', http: putNf.status, resposta: (await putNf.text()).slice(0, 200) });
-      // (2) vincular a NF ao pedido
+      // (1) numeroPedidoLoja na NF — so faz sentido em RASCUNHO: nota
+      // AUTORIZADA nao aceita edicao (o Bling devolve 400). ?so_pedido=1 pula.
+      if (req.query?.so_pedido === '1') {
+        out.passos.push({ passo: 'nf-numeroPedidoLoja', pulado: 'so_pedido=1' });
+      } else {
+        const nR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+        const nJ = typeof nR.json === 'function' ? await nR.json().catch(() => ({})) : {};
+        const nf = nJ?.data || {};
+        const putNf = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, { method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...nf, numeroPedidoLoja: ped.numeroLoja || '' }) });
+        out.passos.push({ passo: 'nf-numeroPedidoLoja', http: putNf.status, resposta: (await putNf.text()).slice(0, 200) });
+      }
+      // (2) vincular a NF ao pedido (pausa: o Bling limita requisicoes por segundo)
+      await new Promise(r => setTimeout(r, 1800));
       const putPed = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, { method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...ped, notaFiscal: { id: Number(nfId) } }) });
