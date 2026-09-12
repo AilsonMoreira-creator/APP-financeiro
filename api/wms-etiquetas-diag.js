@@ -200,11 +200,23 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: pR.ok, http: pR.status, resposta: pTxt,
         agora: { numero: v.numero, serie: v.serie, natureza: v.naturezaOperacao?.id, numeroPedidoLoja: v.numeroPedidoLoja, situacao: v.situacao } });
     }
+    // 12/09: ?apagar_rascunho=1&nf_id= — remove NF ainda em rascunho (situacao 1)
+    if (req.query?.apagar_rascunho === '1' && req.query?.nf_id) {
+      const nfId = String(req.query.nf_id);
+      const nR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+      const nJ = typeof nR.json === 'function' ? await nR.json().catch(() => ({})) : {};
+      const sit = nJ?.data?.situacao;
+      if (sit !== 1) return res.status(200).json({ ok: false, erro: `nao esta em rascunho (situacao ${sit}) — nao apaguei` });
+      const dR = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, { method: 'DELETE', headers });
+      return res.status(200).json({ ok: dR.ok, http: dR.status, resposta: (await dR.text()).slice(0, 200) });
+    }
     if (req.query?.gerar_pelo_pedido === '1' && req.query?.pedido_id) {
       const pid = String(req.query.pedido_id);
       const natId = Number(req.query?.natureza) || 15107671335;
       const out = { pedido_id: pid, natureza_pedida: natId, passos: [] };
-      const body = JSON.stringify({ naturezaOperacao: { id: natId } });
+      // 12/09: com a "Natureza de operacao para amostras" configurada no Bling,
+      // o corpo vai VAZIO — quem decide natureza/serie e a integracao TikTok.
+      const body = req.query?.natureza ? JSON.stringify({ naturezaOperacao: { id: natId } }) : '{}';
       const gR = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}/gerar-nfe`, {
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body });
       const gJ = await gR.json().catch(() => ({}));
