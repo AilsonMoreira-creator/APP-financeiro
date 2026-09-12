@@ -186,6 +186,10 @@ export default async function handler(req, res) {
       // 11/09: sem numero/serie — a natureza nova tem serie propria e o Bling
       // precisa renumerar ("Ja existe uma nota com este numero" se mandarmos)
       delete corpo.numero; delete corpo.serie; delete corpo.id;
+      // 11/09 (pedido dele: numero tem que vir automatico): manda a SERIE nova
+      // e NAO manda numero — e o que a Sthefany faz na tela (troca a serie, o
+      // Bling renumera sozinho). ?serie=2
+      if (req.query?.serie) corpo.serie = Number(req.query.serie);
       const pR = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, { method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
       const pTxt = (await pR.text()).slice(0, 250);
