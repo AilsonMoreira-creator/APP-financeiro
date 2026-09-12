@@ -137,67 +137,16 @@ export default async function handler(req, res) {
         // uma NF de venda por cima. Marca no espelho e deixa pra emissao manual.
         const obsInt = String(det.data?.observacoesInternas || '') + ' ' + String(det.data?.observacoes || '');
         if (/amostra/i.test(obsInt)) {
-          // 11/09 (validado com a NF 138909 AUTORIZADA): amostra tem NF propria
-          // — natureza "Amostra" (serie 2, consumidor final, CSOSN 400 e CFOP
-          // 5910/6910 configurados NA NATUREZA). Nao mandamos impostos nem CEST
-          // no item: o calculo automatico do Bling aplica a regra da natureza.
-          // Com imposto manual a SEFAZ rejeita (600 - CSOSN incompativel).
-          await supabase.from('wms_pedidos').update({ amostra: true }).eq('pedido_id', p.pedido_id);
-          if (det.data?.notaFiscal?.id) { resumo.ja_tinham++; continue; }
-          if (dry) { resumo.detalhe.push({ conta, pedido: p.numero, acao: 'geraria AMOSTRA' }); resumo.gerados++; continue; }
-          try {
-            const d = det.data;
-            const agoraBrt = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
-            const itensAmostra = [];
-            for (const it of (d.itens || [])) {
-              let fiscal = {};
-              if (it.produto?.id) {
-                const pr = await blingFetch(`https://api.bling.com.br/Api/v3/produtos/${it.produto.id}`, headers);
-                const pj = typeof pr.json === 'function' ? await pr.json().catch(() => ({})) : {};
-                const pd = pj?.data || {};
-                fiscal = { classificacaoFiscal: pd.tributacao?.ncm || '', origem: pd.tributacao?.origem ?? 0,
-                           pesoBruto: pd.pesoBruto ?? undefined, pesoLiquido: pd.pesoLiquido ?? undefined };
-              }
-              itensAmostra.push({ codigo: it.codigo, descricao: it.descricao, unidade: it.unidade || 'UN',
-                quantidade: it.quantidade, valor: it.valor, tipo: 'P', ...fiscal });
-            }
-            const payloadAmostra = {
-              tipo: 1, dataOperacao: agoraBrt, dataEmissao: agoraBrt,
-              naturezaOperacao: { id: NATUREZA_AMOSTRA },
-              loja: d.loja?.id ? { id: d.loja.id } : undefined,
-              contato: { id: d.contato?.id, nome: d.contato?.nome, tipoPessoa: d.contato?.tipoPessoa || 'F',
-                         numeroDocumento: d.contato?.numeroDocumento, contribuinte: 9,
-                         endereco: d.contato?.endereco || d.transporte?.etiqueta || undefined },
-              consumidorFinal: true, optanteSimplesNacional: true, finalidade: 1,
-              numeroPedidoLoja: d.numeroLoja || undefined,
-              itens: itensAmostra,
-              transporte: { fretePorConta: 1, etiqueta: d.transporte?.etiqueta || undefined },
-              intermediador: { cnpj: INTERMEDIADOR_TIKTOK, nomeUsuario: d.numeroLoja || '' },
-              observacoes: 'AMOSTRA - remessa sem valor comercial.',
-            };
-            const cr = await fetch('https://api.bling.com.br/Api/v3/nfe', { method: 'POST', headers: { ...headersPost, 'Content-Type': 'application/json' }, body: JSON.stringify(payloadAmostra) });
-            const cj = await cr.json().catch(() => ({}));
-            const nfIdAmostra = cj?.data?.id;
-            if (!nfIdAmostra) {
-              await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'amostra', http: cr.status, resultado: 'erro', mensagem: 'amostra: não consegui criar a NF — ' + JSON.stringify(cj).slice(0, 200) });
-              resumo.erros++; continue;
-            }
-            await espera(PAUSA);
-            const er = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfIdAmostra}/enviar?enviarEmail=false`, { method: 'POST', headers: { ...headersPost, 'Content-Type': 'application/json' }, body: '{}' });
-            await espera(PAUSA);
-            const vr = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfIdAmostra}`, headers);
-            const vj = typeof vr.json === 'function' ? await vr.json().catch(() => ({})) : {};
-            const sitFinal = vj?.data?.situacao;
-            await supabase.from('wms_pedidos').update({ nf_id: nfIdAmostra, nf_situacao: sitFinal, nf_checado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id);
-            await log({ conta, pedido_id: p.pedido_id, numero: p.numero, nf_id: nfIdAmostra, etapa: 'amostra', http: er.status,
-              resultado: sitFinal === 5 ? 'ok' : 'erro',
-              situacao: sitFinal,
-              mensagem: sitFinal === 5 ? `AMOSTRA autorizada — NF ${vj?.data?.numero} série ${vj?.data?.serie}` : `AMOSTRA não autorizada (situação ${sitFinal}) — conferir no Bling` });
-            if (sitFinal === 5) resumo.gerados++; else resumo.erros++;
-          } catch (e) {
-            await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'amostra', resultado: 'erro', mensagem: 'amostra: ' + String(e?.message || e) });
-            resumo.erros++;
-          }
+          // 11/09 (REGRA DELE, descoberta depois do teste): a NF de amostra TEM
+          // QUE ESTAR VINCULADA AO PEDIDO — sem vinculo o Bling nao avisa o
+          // TikTok e a plataforma NAO LIBERA A LOGISTICA. A API so vincula
+          // quando a nota e gerada PELO pedido (/gerar-nfe), e esse caminho nao
+          // aceita escolher a natureza (sai demonstracao/serie 1). Enquanto nao
+          // houver caminho que faca as duas coisas, a amostra volta a ser
+          // MANUAL (a Sthefany emite pela tela, que resolve vinculo+natureza).
+          await supabase.from('wms_pedidos').update({ amostra: true, print_motivo: 'AMOSTRA — emitir pelo pedido no Bling (vínculo obrigatório p/ liberar logística TikTok)' }).eq('pedido_id', p.pedido_id);
+          await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'checagem', resultado: 'pulado', mensagem: 'pedido de amostra — emitir à mão pelo pedido (nota precisa ficar vinculada p/ o TikTok liberar a logística)' });
+          resumo.pulados++;
           resumo.amostras = (resumo.amostras || 0) + 1;
           continue;
         }
