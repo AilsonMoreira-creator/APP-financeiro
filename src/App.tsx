@@ -8417,6 +8417,56 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   );
 };
 
+// ── Saúde do app (Ailson 12/09/2026) — FASE 0 do circuit breaker: só mede e avisa.
+// Amarelo/vermelho vão pro WhatsApp dele pela Sofia; "aviso" aparece SÓ aqui.
+const SaudeApp=({isAdmin})=>{
+  const [d,setD]=useState(null);const [erro,setErro]=useState("");const [num,setNum]=useState("");const [salvando,setSalvando]=useState(false);
+  const carregar=async()=>{try{const r=await fetch("/api/saude-monitor?painel=1",{headers:{"X-User":USER_ID||"ailson"}});const j=await r.json();if(j?.ok)setD(j);else setErro(j?.error||"erro");}catch(e){setErro(String(e?.message||e));}};
+  useEffect(()=>{carregar();const t=setInterval(carregar,60000);return()=>clearInterval(t);},[]);
+  const salvar=async(chave,valor)=>{setSalvando(true);try{await fetch("/api/saude-monitor",{method:"POST",headers:{"Content-Type":"application/json","X-User":USER_ID||"ailson"},body:JSON.stringify({chave,valor})});await carregar();}finally{setSalvando(false);}};
+  const cor={verde:"#1e8e4e",aviso:"#8a6d1a",amarelo:"#c9900a",vermelho:"#c0392b"};
+  const bg={verde:"#eafbf0",aviso:"#fdf6dd",amarelo:"#fff1c9",vermelho:"#fde8e6"};
+  const rotulo={verde:"🟢 Normal",aviso:"⚪ Aviso",amarelo:"🟡 Amarelo — risco iminente",vermelho:"🔴 Vermelho — app travado"};
+  if(erro)return <div style={{color:"#c0392b",fontSize:13}}>⚠ {erro}</div>;
+  if(!d)return <div style={{color:"#a89f94",fontSize:13}}>carregando…</div>;
+  const a=d.agora;const pct=a?.conexoes_max?Math.round(100*a.conexoes/a.conexoes_max):0;
+  const ultimas=(d.leituras||[]).slice(0,72).reverse();   // 6h
+  const maxSt=Math.max(1,...ultimas.map(l=>Number(l.storage_calls_5min)||0));
+  const enviarOn=d.config?.enviar_whats==="1";
+  const fmt=(t)=>t?new Date(t).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"";
+  return(<div>
+    {a&&(<div style={{background:bg[a.nivel]||"#f5f5f5",border:`1px solid ${cor[a.nivel]||"#ccc"}`,borderRadius:12,padding:"14px 16px",marginBottom:14}}>
+      <div style={{fontSize:16,fontWeight:800,color:cor[a.nivel]}}>{rotulo[a.nivel]||a.nivel}</div>
+      <div style={{fontSize:12,color:"#6b6259",marginTop:4}}>última leitura {fmt(a.lida_em)} · banco {a.conexoes}/{a.conexoes_max} conexões ({pct}%) · resposta {a.latencia_ms} ms · Storage {a.storage_calls_5min??"—"} consultas/5 min · esteira {a.esteira_erros_1h} erros/1h · Bling 429: {a.bling_429_1h}</div>
+      {a.motivos&&Object.entries(a.motivos).flatMap(([n,lst])=>(lst||[]).map((m,i)=><div key={n+i} style={{fontSize:12.5,color:cor[n],marginTop:4}}>• {m}</div>))}
+    </div>)}
+    <div style={{fontSize:11,color:"#a89f94",marginBottom:4}}>Últimas 6 h · conexões (linha) e Storage (barras)</div>
+    <div style={{display:"flex",alignItems:"flex-end",gap:2,height:70,background:"#faf8f4",borderRadius:8,padding:"6px 8px",marginBottom:14}}>
+      {ultimas.map((l,i)=>{const h=Math.round(56*(Number(l.storage_calls_5min)||0)/maxSt);const p=l.conexoes_max?Math.round(56*l.conexoes/l.conexoes_max):0;return(<div key={i} title={`${fmt(l.lida_em)} · ${l.nivel} · ${l.conexoes} conex · storage ${l.storage_calls_5min??"—"}`} style={{flex:1,position:"relative",height:56}}>
+        <div style={{position:"absolute",bottom:0,left:0,right:0,height:h,background:cor[l.nivel]||"#bbb",opacity:.5,borderRadius:2}}/>
+        <div style={{position:"absolute",bottom:p,left:0,right:0,height:2,background:"#2f4a6a"}}/>
+      </div>);})}
+    </div>
+    <div style={{fontSize:13,fontWeight:700,color:"#2b2b2b",marginBottom:6}}>Incidentes</div>
+    {(d.incidentes||[]).length===0&&<div style={{fontSize:12,color:"#a89f94",marginBottom:12}}>nenhum registrado</div>}
+    {(d.incidentes||[]).map(inc=>(<div key={inc.codigo} style={{border:`1px solid ${cor[inc.nivel]}`,background:bg[inc.nivel],borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><b style={{color:cor[inc.nivel]}}>{inc.nivel==="vermelho"?"🔴":"🟡"} {inc.codigo}</b><span style={{fontSize:12,color:"#6b6259"}}>{fmt(inc.aberto_em)}</span><span style={{fontSize:11,marginLeft:"auto",color:inc.enviado_whats?"#1e8e4e":"#a89f94"}}>{inc.enviado_whats?"WhatsApp enviado":(inc.envio_erro?"envio falhou":"não enviado")}</span></div>
+      <div style={{fontSize:12.5,color:"#2b2b2b",marginTop:4}}>{inc.resumo}</div>
+      <div style={{fontSize:12,color:"#6b6259",marginTop:2}}>Sugestão: {inc.sugestao}</div>
+      <div style={{fontSize:11,color:"#a89f94",marginTop:4}}>Cole o código no Claude pra investigar pelo dossiê.</div>
+    </div>))}
+    {isAdmin&&(<div style={{marginTop:16,padding:"12px 14px",background:"#faf8f4",borderRadius:10}}>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Alertas no WhatsApp (pela Sofia)</div>
+      <div style={{fontSize:12,color:"#6b6259",marginBottom:8}}>Número cadastrado: <b>{d.config?.whats_admin||"(nenhum)"}</b> · envio {enviarOn?"LIGADO":"desligado"} · amarelo até {d.config?.max_amarelo_dia}/dia · vermelho até {d.config?.max_vermelho_dia}/dia · {d.config?.hora_ini}h–{d.config?.hora_fim}h · {d.config?.intervalo_min} min entre envios</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <input value={num} onChange={e=>setNum(e.target.value)} placeholder="seu WhatsApp com DDD (ex: 11999998888)" style={{padding:"8px 10px",borderRadius:8,border:"1px solid #e0d8cc",fontSize:13,minWidth:240}}/>
+        <button disabled={salvando||!num.trim()} onClick={()=>{salvar("whats_admin",num.replace(/\D/g,""));setNum("");}} style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#2f4a6a",color:"#fff",fontWeight:700,cursor:"pointer"}}>Salvar número</button>
+        <button disabled={salvando} onClick={()=>salvar("enviar_whats",enviarOn?"0":"1")} style={{padding:"8px 14px",borderRadius:8,border:"1px solid #e0d8cc",background:enviarOn?"#fde8e6":"#eafbf0",color:enviarOn?"#c0392b":"#1e8e4e",fontWeight:700,cursor:"pointer"}}>{enviarOn?"Desligar envio":"Ligar envio"}</button>
+      </div>
+    </div>)}
+  </div>);
+};
+
 const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,isAdmin=false,onZerarBoletos=null,onRestaurarDiario=null})=>{
   const [bling,setBling]=useState(()=>{try{const s=localStorage.getItem("amica_bling");return s?JSON.parse(s):{exitus:"",lumia:"",muniam:""};}catch{return{exitus:"",lumia:"",muniam:""};}}); 
   const [mire,setMire]=useState({token:"",idSilvaTeles:"",idBomRetiro:""});
@@ -8484,6 +8534,9 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
   return(
     <div>
       <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Configurações</div>
+      {isAdmin&&(<Section title="Saúde do app" subtitle="monitor a cada 5 min · avisa no WhatsApp em amarelo/vermelho · não desliga nada sozinho">
+        <SaudeApp isAdmin={isAdmin}/>
+      </Section>)}
       <Section title="Miré — Lojas Físicas" subtitle="Silva Teles e Bom Retiro">
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:4}}>Token API Miré</div>
