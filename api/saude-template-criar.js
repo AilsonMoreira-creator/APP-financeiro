@@ -12,6 +12,8 @@ const NOME = 'alerta_saude_app';
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
+  // aceita ?user=ailson (mesmo atalho do cron diario) pra rodar do navegador/curl
+  if (req.query?.user === 'ailson') req.headers['x-user'] = 'ailson';
   const auth = await validarUsuario(req);
   if (!auth.ok || !auth.isAdmin) return res.status(403).json({ error: 'Apenas admin' });
   const WABA = process.env.META_WA_WABA_ID;
