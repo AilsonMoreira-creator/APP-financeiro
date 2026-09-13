@@ -4749,6 +4749,10 @@ const LoginScreen=({usuarios,onLogin})=>{
     const s=senha.replace(/\s/g,"");
     if(!u||!s){setErro(true);return;}
     const found=(usuarios||[]).find(x=>x.usuario.toLowerCase()===u&&x.senha===s);
+    // 12/09 (passo 1 do login no servidor, modo SOMBRA): informa o servidor DEPOIS
+    // que o local decidiu — nao espera resposta, nao muda o resultado. So registra
+    // se o servidor (hash) concorda com o local. Uma semana batendo -> passo 2.
+    try{fetch("/api/app-login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({usuario:u,senha:s,local_ok:!!found,device_id:localStorage.getItem("amica_device_id")||null})}).catch(()=>{});}catch{}
     if(!found){setErro(true);return;}
     // 01/09 (pedido dele): pedro (ou usuario com "sessao unica") so entra se
     // nao houver OUTRO aparelho ativo — o servidor decide.
