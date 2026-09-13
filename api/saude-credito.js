@@ -15,14 +15,32 @@ import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 
 export const config = { maxDuration: 30 };
 
+// 13/09: a Admin API da Anthropic respondeu 403 pra todas as chaves desta
+// organizacao (o Console nao expoe "Admin keys"). Fonte alternativa: o custo
+// que o PROPRIO APP registra por chamada (lojas_ia_chamadas_log via
+// chamarClaude). Cobre co-piloto/Sofia/Lara; os pontos que chamam direto
+// (ML reviews, IA pergunta, leads...) entram quando forem instrumentados.
+async function sincronizarCustoInterno(dias = 10) {
+  const ini = new Date(Date.now() - dias * 86400000).toISOString();
+  const { data } = await supabase.from('lojas_ia_chamadas_log').select('created_at, custo_estimado_usd').gte('created_at', ini);
+  const porDia = {};
+  for (const r of (data || [])) { const d = new Date(new Date(r.created_at).getTime() - 3 * 3600000).toISOString().slice(0, 10); porDia[d] = (porDia[d] || 0) + (Number(r.custo_estimado_usd) || 0); }
+  let n = 0;
+  for (const [dia, custo] of Object.entries(porDia)) {
+    await supabase.from('saude_custo_dia').upsert({ dia, custo_usd: Math.round(custo * 10000) / 10000, atualizado_em: new Date().toISOString() }, { onConflict: 'dia' });
+    n++;
+  }
+  return { ok: true, fonte: 'registro interno (parcial)', dias: n };
+}
+
 export async function sincronizarCusto(dias = 10) {
   const key = process.env.ANTHROPIC_ADMIN_API_KEY;
-  if (!key) return { ok: false, erro: 'ANTHROPIC_ADMIN_API_KEY ausente' };
+  if (!key) return sincronizarCustoInterno(dias);
   const ini = new Date(Date.now() - dias * 86400000); ini.setUTCHours(0, 0, 0, 0);
   const url = `https://api.anthropic.com/v1/organizations/cost_report?starting_at=${ini.toISOString()}&bucket_width=1d&limit=31`;
   const r = await fetch(url, { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) return { ok: false, http: r.status, erro: JSON.stringify(j).slice(0, 300) };
+  if (!r.ok) { const alt = await sincronizarCustoInterno(dias); return { ...alt, admin_api: { http: r.status, erro: JSON.stringify(j).slice(0, 120) } }; }
   let n = 0;
   for (const b of (j.data || [])) {
     const dia = String(b.starting_at || '').slice(0, 10);
@@ -65,7 +83,7 @@ async function painel() {
   else if (saldo != null && saldo < 20 && (m.credito_alerta_20 || '') < ultimaRecarga + '~') { alertas.push({ nivel: 'amarelo', texto: `Crédito da Anthropic abaixo de US$ 20 (estimado US$ ${saldo.toFixed(2)}) — programar recarga` }); }
   return { ok: true, saldo_estimado: saldo, ancora: ancora ? { data: ancora.data_recarga, saldo_console: ancora.saldo_console_usd } : null,
     gasto_7d: gasto7, gasto_30d: gasto30, media_dia: Math.round(mediaDia * 100) / 100, dias_restantes: diasRestantes,
-    ultimo_custo_dia: c[0] || null, recargas: recargas.slice(-10).reverse(), alertas, chave_ok: !!process.env.ANTHROPIC_ADMIN_API_KEY };
+    ultimo_custo_dia: c[0] || null, recargas: recargas.slice(-10).reverse(), alertas, chave_ok: true, fonte: 'registro interno do app (parcial até instrumentar todos os pontos)' };
 }
 
 export default async function handler(req, res) {
