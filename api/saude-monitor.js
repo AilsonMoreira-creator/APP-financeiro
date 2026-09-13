@@ -174,8 +174,8 @@ export default async function handler(req, res) {
   if (c.enviar_whats !== '1' || !c.whats_admin) { out.whats = 'desligado ou sem número'; return res.status(200).json(out); }
   if (!pode.ok) { out.whats = 'não enviado: ' + pode.motivo; return res.status(200).json(out); }
   try {
-    const emoji = nivel === 'vermelho' ? '🔴 VERMELHO' : '🟡 AMARELO';
-    const r = await enviarTemplate(String(c.whats_admin), c.template || 'alerta_saude_app', [emoji, codigo, resumo.slice(0, 300), sugestao.slice(0, 200)]);
+    // template v3 (minimo): so nivel e codigo — o relatorio esta na pagina Saude
+    const r = await enviarTemplate(String(c.whats_admin), c.template || 'alerta_saude_app_v3', [nivel, codigo.replace('#', '')]);
     const okEnv = !!(r?.ok || r?.messages || r?.id);
     await supabase.from('saude_incidentes').update({ enviado_whats: okEnv, enviado_em: okEnv ? new Date().toISOString() : null, envio_erro: okEnv ? null : JSON.stringify(r).slice(0, 300) }).eq('codigo', codigo);
     out.whats = okEnv ? 'enviado' : 'falhou';
