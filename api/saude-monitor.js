@@ -52,13 +52,35 @@ async function coletar() {
   };
 }
 
-// media das ultimas 24h do mesmo sinal (linha de base pro "X vezes o normal")
+// Linha de base pro "X vezes o normal" (13/09, apos o falso positivo
+// #INC-0913-1 — 09:05 de domingo comparado com a madrugada): usa a MESMA
+// FAIXA DE HORARIO (±1h, hora de Brasilia) dos ultimos 7 dias, e so quando ha
+// pelo menos 3 dias de historico. Sem isso, os criterios de "X vezes" ficam
+// desligados (sobram os absolutos: conexoes, latencia, erros).
 async function baseline(campo) {
-  const { data } = await supabase.from('saude_leituras').select(campo).gte('lida_em', new Date(Date.now() - 86400000).toISOString()).not(campo, 'is', null);
-  const v = (data || []).map(r => Number(r[campo])).filter(x => x > 0);
-  if (v.length < 12) return null;              // menos de 1h de historico: sem baseline
+  const { data: prim } = await supabase.from('saude_leituras').select('lida_em').order('lida_em', { ascending: true }).limit(1).maybeSingle();
+  if (!prim || Date.now() - new Date(prim.lida_em).getTime() < 3 * 86400000) return null;
+  const { data } = await supabase.from('saude_leituras').select(campo + ', lida_em')
+    .gte('lida_em', new Date(Date.now() - 7 * 86400000).toISOString())
+    .lt('lida_em', new Date(Date.now() - 20 * 3600000).toISOString())   // exclui as ultimas 20h (o proprio episodio)
+    .not(campo, 'is', null);
+  const hAgora = (new Date(Date.now() - 3 * 3600000)).getUTCHours();
+  const v = (data || []).filter(r => {
+    const h = new Date(new Date(r.lida_em).getTime() - 3 * 3600000).getUTCHours();
+    return Math.abs(h - hAgora) <= 1 || Math.abs(h - hAgora) >= 23;
+  }).map(r => Number(r[campo])).filter(x => x > 0);
+  if (v.length < 12) return null;
   v.sort((a, b) => a - b);
-  return v[Math.floor(v.length / 2)];         // mediana (robusta a picos)
+  return v[Math.floor(v.length / 2)];
+}
+
+// 13/09: "X vezes o normal" so vira AMARELO se o banco tambem mostrar estresse
+// (>=50% das conexoes ou >=1s de resposta) E persistir em 2 leituras seguidas.
+// Volume alto com banco folgado e AVISO (so na pagina), nao risco iminente.
+async function volumePersistente(motivoRegex) {
+  const { data } = await supabase.from('saude_leituras').select('motivos').order('lida_em', { ascending: false }).limit(1).maybeSingle();
+  const ant = data?.motivos || {};
+  return [...(ant.amarelo || []), ...(ant.aviso || [])].some(m => motivoRegex.test(m));
 }
 
 // ── classificacao ──────────────────────────────────────────────────────────
@@ -79,8 +101,15 @@ async function classificar(m) {
   // AMARELO (iminente)
   if (pct >= 75 && pct < 90) motivos.amarelo.push(`banco em ${pct}% das conexões (${m.conexoes}/${m.conexoes_max})`);
   if (m.latencia_ms >= 3000 && m.latencia_ms < 8000) motivos.amarelo.push(`banco lento: ${(m.latencia_ms / 1000).toFixed(1)}s`);
-  if (baseStorage && m.storage_calls_5min > 5 * baseStorage && m.storage_calls_5min > 1000 && !motivos.vermelho.length) motivos.amarelo.push(`Storage ${Math.round(m.storage_calls_5min / baseStorage)}× o normal (${m.storage_calls_5min} em 5 min)`);
-  if (baseDb && m.db_calls_5min > 5 * baseDb) motivos.amarelo.push(`consultas ao banco ${Math.round(m.db_calls_5min / baseDb)}× o normal`);
+  const bancoEstressado = pct >= 50 || m.latencia_ms >= 1000;
+  if (baseStorage && m.storage_calls_5min > 5 * baseStorage && m.storage_calls_5min > 1000 && !motivos.vermelho.length) {
+    const txt = `Storage ${Math.round(m.storage_calls_5min / baseStorage)}× o normal (${m.storage_calls_5min} em 5 min)`;
+    (bancoEstressado && await volumePersistente(/Storage/)) ? motivos.amarelo.push(txt) : motivos.aviso.push(txt);
+  }
+  if (baseDb && m.db_calls_5min > 5 * baseDb) {
+    const txt = `consultas ao banco ${Math.round(m.db_calls_5min / baseDb)}× o normal`;
+    (bancoEstressado && await volumePersistente(/consultas ao banco/)) ? motivos.amarelo.push(txt) : motivos.aviso.push(txt);
+  }
   if (m.idle_tx >= 10) motivos.amarelo.push(`${m.idle_tx} conexões presas em transação`);
   if (m.bling_429_1h >= 20) motivos.amarelo.push(`${m.bling_429_1h} respostas 429 do Bling na última hora`);
   // AVISO (so na pagina)
@@ -114,6 +143,7 @@ async function proximoCodigo() {
 function sugestaoPara(motivos) {
   const t = motivos.join(' ');
   if (/loop de fotos|Storage/.test(t)) return 'ver quem está com tela de fotos aberta (Bling Estoque/Calculadora) e fechar; se persistir, me chamar';
+  if (/× o normal/.test(t)) return 'volume alto de consultas — ver se há tela/cron fora do padrão; se o app está normal, sem ação';
   if (/conexões|banco/.test(t)) return 'abrir o painel do Supabase e me chamar com o código; se travado, reiniciar o banco';
   if (/429/.test(t)) return 'o Bling está limitando; aguardar 10 min e evitar varredura geral';
   return 'me chamar no Claude com o código';
