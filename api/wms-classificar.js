@@ -84,7 +84,7 @@ export function classificar(p, hojeBRT) {
   if (!temNf) return { regra: 'SEM_NF', nf: true, etiqueta: true, estado: 'AGUARDA_NF', motivo: 'sem nota fiscal ainda' };
 
   // 10/09 (TikTok amostra): sem nota ainda = aguarda a remessa de amostra manual
-  if (p.amostra && !temNf) return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'AGUARDA_NF', motivo: 'AMOSTRA — nota de remessa de amostra (emitir à mão)' };
+  if (p.amostra && !temNf) return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'AGUARDA_NF', motivo: 'AMOSTRA — nota sai na esteira (natureza Amostra, série 2)' };
   if (nfMorta) return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'ERRO', motivo: rotuloMorta };
   if (nfImpressa || p.etiqueta_impressa_em) {
     return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'IMPRESSO', motivo: 'já impresso' };

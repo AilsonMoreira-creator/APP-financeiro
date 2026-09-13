@@ -137,18 +137,16 @@ export default async function handler(req, res) {
         // uma NF de venda por cima. Marca no espelho e deixa pra emissao manual.
         const obsInt = String(det.data?.observacoesInternas || '') + ' ' + String(det.data?.observacoes || '');
         if (/amostra/i.test(obsInt)) {
-          // 11/09 (REGRA DELE, descoberta depois do teste): a NF de amostra TEM
-          // QUE ESTAR VINCULADA AO PEDIDO — sem vinculo o Bling nao avisa o
-          // TikTok e a plataforma NAO LIBERA A LOGISTICA. A API so vincula
-          // quando a nota e gerada PELO pedido (/gerar-nfe), e esse caminho nao
-          // aceita escolher a natureza (sai demonstracao/serie 1). Enquanto nao
-          // houver caminho que faca as duas coisas, a amostra volta a ser
-          // MANUAL (a Sthefany emite pela tela, que resolve vinculo+natureza).
-          await supabase.from('wms_pedidos').update({ amostra: true, print_motivo: 'AMOSTRA — emitir pelo pedido no Bling (vínculo obrigatório p/ liberar logística TikTok)' }).eq('pedido_id', p.pedido_id);
-          await log({ conta, pedido_id: p.pedido_id, numero: p.numero, etapa: 'checagem', resultado: 'pulado', mensagem: 'pedido de amostra — emitir à mão pelo pedido (nota precisa ficar vinculada p/ o TikTok liberar a logística)' });
-          resumo.pulados++;
+          // 12/09 (validado ponta a ponta com a NF 139048 — autorizada e com a
+          // logistica do TikTok liberada em <1 min): amostra segue o MESMO
+          // caminho das outras notas (gerar-nfe PELO PEDIDO). Quem aplica a
+          // natureza "Amostra" (serie 2, CSOSN 400, CFOP 5910/6910) e o proprio
+          // Bling, pela configuracao "Natureza de operacao para amostras" da
+          // integracao TikTok Shop. Nada de nota avulsa (nao vincula -> TikTok
+          // nao libera logistica) e nada de regra fiscal aqui. So marca no
+          // espelho (a DANFE rica ganha a faixa AMOSTRA) e continua.
+          await supabase.from('wms_pedidos').update({ amostra: true }).eq('pedido_id', p.pedido_id);
           resumo.amostras = (resumo.amostras || 0) + 1;
-          continue;
         }
         const jaTem = det.data?.notaFiscal?.id;
         if (jaTem) {
