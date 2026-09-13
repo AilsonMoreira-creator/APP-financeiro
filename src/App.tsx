@@ -3673,6 +3673,19 @@ function amicaDeviceId(){
     return d;
   }catch{return "sem-storage";}
 }
+// 13/09: atividade real do usuario (clique/tecla/aba) -> servidor, no maximo a
+// cada 2 min (troca de modulo: a cada 30 s). E o que define "ativo" na Saude.
+let _ultAtividadeEnv=0,_ultModuloEnv="";
+function amicaAtividade(modulo){
+  try{
+    const sess=JSON.parse(localStorage.getItem("amica_session")||"null");if(!sess?.usuario)return;
+    const mudouModulo=modulo&&modulo!==_ultModuloEnv;
+    const minGap=mudouModulo?30000:120000;
+    if(Date.now()-_ultAtividadeEnv<minGap)return;
+    _ultAtividadeEnv=Date.now();_ultModuloEnv=modulo||_ultModuloEnv;
+    amicaRegistrarSessao(sess.usuario,'atividade',{modulo:modulo||_ultModuloEnv||null});
+  }catch{}
+}
 async function amicaRegistrarSessao(usuario,evento,extras){
   try{
     const r=await fetch('/api/app-sessao',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -8444,6 +8457,13 @@ const SaudeApp=({isAdmin})=>{
       <div style={{fontSize:12,color:"#6b6259",marginTop:4}}>última leitura {fmt(a.lida_em)} · banco {a.conexoes}/{a.conexoes_max} conexões ({pct}%) · resposta {a.latencia_ms} ms · Storage {a.storage_calls_5min??"—"} consultas/5 min · esteira {a.esteira_erros_1h} erros/1h · Bling 429: {a.bling_429_1h}</div>
       {a.motivos&&Object.entries(a.motivos).flatMap(([n,lst])=>(lst||[]).map((m,i)=><div key={n+i} style={{fontSize:12.5,color:cor[n],marginTop:4}}>• {m}</div>))}
     </div>)}
+    <div style={{background:"#faf8f4",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
+      <div style={{fontSize:13,fontWeight:700,color:"#2b2b2b",marginBottom:6}}>👥 Ativos agora <span style={{fontWeight:400,fontSize:11,color:"#a89f94"}}>(interagiram nos últimos 15 min)</span></div>
+      {(d.ativos||[]).length===0&&<div style={{fontSize:12,color:"#a89f94"}}>ninguém</div>}
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {(d.ativos||[]).map((u,i)=>(<span key={i} title={`${u.aparelho||""} · ${fmt(u.ultima_atividade_em)}`} style={{fontSize:12,padding:"3px 9px",borderRadius:999,background:"#eef4fb",border:"1px solid #c9dbee",color:"#2f4a6a"}}><b>{u.usuario}</b>{u.modulo?` · ${u.modulo}`:""}</span>))}
+      </div>
+    </div>
     <div style={{fontSize:11,color:"#a89f94",marginBottom:4}}>Últimas 6 h · conexões (linha) e Storage (barras)</div>
     <div style={{display:"flex",alignItems:"flex-end",gap:2,height:70,background:"#faf8f4",borderRadius:8,padding:"6px 8px",marginBottom:14}}>
       {ultimas.map((l,i)=>{const h=Math.round(56*(Number(l.storage_calls_5min)||0)/maxSt);const p=l.conexoes_max?Math.round(56*l.conexoes/l.conexoes_max):0;return(<div key={i} title={`${fmt(l.lida_em)} · ${l.nivel} · ${l.conexoes} conex · storage ${l.storage_calls_5min??"—"}`} style={{flex:1,position:"relative",height:56}}>
@@ -8457,6 +8477,7 @@ const SaudeApp=({isAdmin})=>{
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><b style={{color:cor[inc.nivel]}}>{inc.nivel==="vermelho"?"🔴":"🟡"} {inc.codigo}</b><span style={{fontSize:12,color:"#6b6259"}}>{fmt(inc.aberto_em)}</span><span style={{fontSize:11,marginLeft:"auto",color:inc.enviado_whats?"#1e8e4e":"#a89f94"}}>{inc.enviado_whats?"WhatsApp enviado":(inc.envio_erro?"envio falhou":"não enviado")}</span></div>
       <div style={{fontSize:12.5,color:"#2b2b2b",marginTop:4}}>{inc.resumo}</div>
       <div style={{fontSize:12,color:"#6b6259",marginTop:2}}>Sugestão: {inc.sugestao}</div>
+      {Array.isArray(inc.dossie?.ativos)&&inc.dossie.ativos.length>0&&<div style={{fontSize:12,color:"#6b6259",marginTop:2}}>Ativos na hora: {inc.dossie.ativos.map(a=>a.usuario+(a.modulo?" ("+a.modulo+")":"")).join(", ")}</div>}
       <div style={{fontSize:11,color:"#a89f94",marginTop:4}}>Cole o código no Claude pra investigar pelo dossiê.</div>
     </div>))}
     {isAdmin&&(<div style={{marginTop:16,padding:"12px 14px",background:"#faf8f4",borderRadius:10}}>
@@ -10461,6 +10482,8 @@ export default function App(){
     }catch{}
     try{const s=localStorage.getItem("amica_session");if(s){const u=JSON.parse(s);const mod=u.moduloPadrao||"home";if(u.admin||mod==="home"||u.modulos?.includes(mod))return mod;return u.modulos?.[0]||"home";}}catch{}return"lancamentos";
   });
+  // 13/09: troca de modulo e uma interacao — envia atividade (throttle 30 s no helper)
+  useEffect(()=>{try{window.__amicaModuloAtivo=active;amicaAtividade(active);}catch{}},[active]);
   // 01/09 (blindagem): guarda central — se por QUALQUER caminho o modulo ativo
   // sair da lista do usuario (deep link, estado restaurado, atalho interno),
   // volta pro padrao dele. Admin passa livre.
@@ -12130,6 +12153,7 @@ export default function App(){
       if(now-ultimaSyncAtividadeRef.current>SYNC_MS){
         try{localStorage.setItem("amica_last_activity",String(now));}catch{}
         ultimaSyncAtividadeRef.current=now;
+        amicaAtividade(window.__amicaModuloAtivo||"");   // 13/09: "ativo" na Saude (throttle proprio de 2 min)
       }
     };
     const eventos=['mousedown','touchstart','keydown','scroll'];

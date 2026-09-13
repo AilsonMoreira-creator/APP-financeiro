@@ -59,6 +59,18 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ ok: false });
     const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
 
+    // 13/09 (pedido dele): usuarios ATIVOS = interagiram nos ultimos 15 min
+    // (clique, tecla, mudanca de aba) — nao basta ter logado. GET ?ativos=1
+    if (req.method === 'GET' && req.query?.ativos === '1') {
+      const desde = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      const { data } = await supabase.from('app_sessoes')
+        .select('usuario, modulo, aparelho, ultima_atividade_em')
+        .gte('ultima_atividade_em', desde).is('encerrado_em', null).is('revogado_em', null)
+        .order('ultima_atividade_em', { ascending: false });
+      const vistos = new Set(); const ativos = [];
+      for (const r of (data || [])) { const k = r.usuario + '|' + r.aparelho; if (vistos.has(k)) continue; vistos.add(k); ativos.push(r); }
+      return res.status(200).json({ ok: true, ativos, desde });
+    }
     if (b.revogar || b.liberar) {
       const id = Number(b.revogar || b.liberar);
       const { error } = await supabase.from('app_sessoes')
@@ -109,6 +121,8 @@ export default async function handler(req, res) {
       await supabase.from('app_sessoes').update({
         ultimo_em: new Date().toISOString(), ip, user_agent: ua, aparelho: resumoAparelho(ua),
         tela: b.tela || null, pings: (ex.pings || 0) + 1,
+        // 13/09: 'atividade' carimba interacao real + modulo em que estava
+        ...(b.evento === 'atividade' || b.evento === 'login' ? { ultima_atividade_em: new Date().toISOString(), modulo: String(b.modulo || '').slice(0, 40) || null } : {}),
         // re-login no mesmo aparelho reativa a sessao; revogado continua ate o admin liberar
         ...(b.evento === 'login' ? { encerrado_em: null, encerrado_motivo: null } : {}),
       }).eq('id', ex.id);
@@ -116,6 +130,7 @@ export default async function handler(req, res) {
     }
     const { error } = await supabase.from('app_sessoes').insert({
       usuario, device_id, aparelho: resumoAparelho(ua), user_agent: ua, tela: b.tela || null, ip,
+      ultima_atividade_em: new Date().toISOString(), modulo: String(b.modulo || '').slice(0, 40) || null,
     });
     if (error) return res.status(500).json({ ok: false, erro: error.message });
     return res.status(200).json({ ok: true, revogado: false, novo: true });

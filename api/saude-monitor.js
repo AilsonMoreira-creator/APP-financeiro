@@ -30,6 +30,16 @@ async function cfg() {
 }
 
 // ── coleta ─────────────────────────────────────────────────────────────────
+// 13/09: quem esta ATIVO (interagiu nos ultimos 15 min) — vai no painel e no dossie
+async function usuariosAtivos() {
+  const desde = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const { data } = await supabase.from('app_sessoes').select('usuario, modulo, aparelho, ultima_atividade_em')
+    .gte('ultima_atividade_em', desde).is('encerrado_em', null).is('revogado_em', null).order('ultima_atividade_em', { ascending: false });
+  const vistos = new Set(); const out = [];
+  for (const r of (data || [])) { const k = r.usuario + '|' + r.aparelho; if (vistos.has(k)) continue; vistos.add(k); out.push(r); }
+  return out;
+}
+
 async function coletar() {
   const t0 = Date.now();
   const { data: snap, error } = await supabase.rpc('saude_snapshot');
@@ -174,12 +184,13 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: !!(r?.messages || r?.ok || r?.id), resposta: r });
   }
   if (req.query?.painel === '1') {
+    const ativos = await usuariosAtivos();
     const [{ data: leituras }, { data: incidentes }, c] = await Promise.all([
       supabase.from('saude_leituras').select('*').order('lida_em', { ascending: false }).limit(288),
       supabase.from('saude_incidentes').select('*').order('aberto_em', { ascending: false }).limit(30),
       cfg(),
     ]);
-    return res.status(200).json({ ok: true, agora: leituras?.[0] || null, leituras: leituras || [], incidentes: incidentes || [], config: { ...c, whats_admin: c.whats_admin ? '•••' + String(c.whats_admin).slice(-4) : '' } });
+    return res.status(200).json({ ok: true, ativos, agora: leituras?.[0] || null, leituras: leituras || [], incidentes: incidentes || [], config: { ...c, whats_admin: c.whats_admin ? '•••' + String(c.whats_admin).slice(-4) : '' } });
   }
 
   // ── uma leitura ──
@@ -204,7 +215,8 @@ export default async function handler(req, res) {
   const lista = motivos[nivel];
   const resumo = lista.join(' · ');
   const sugestao = sugestaoPara(lista);
-  await supabase.from('saude_incidentes').insert({ codigo, nivel, resumo, sugestao, dossie: { medidas: m, motivos, lida_em: new Date().toISOString() } });
+  const ativosNoMomento = await usuariosAtivos();
+  await supabase.from('saude_incidentes').insert({ codigo, nivel, resumo, sugestao, dossie: { medidas: m, motivos, ativos: ativosNoMomento, lida_em: new Date().toISOString() } });
   out.incidente = codigo;
 
   const pode = await podeEnviar(nivel, c);
