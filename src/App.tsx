@@ -6171,7 +6171,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         const alvo=normCorBling(pm.cor);
         const lista=cortesRef.filter(ct=>(ct.cores||[]).some(co=>normCorBling(co.nome)===alvo));
         const fechar=()=>{setProjModal(null);setMatrizCorteAberto(null);};
-        return <div onClick={fechar} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:110,overflowY:"auto",backdropFilter:"blur(3px)"}}>
+        return <div onClick={fechar} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:1300,overflowY:"auto",backdropFilter:"blur(3px)"}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,maxWidth:560,width:"100%",boxShadow:"0 12px 40px rgba(0,0,0,0.25)",overflow:"hidden"}}>
             <div style={{padding:"14px 18px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
@@ -6222,7 +6222,15 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         </div>;
       })()}
       {etqOpen && <EtiquetaGerar sample={etqSample} onClose={()=>setEtqOpen(false)}/>}
-      {fullOpen && <FullEnvio refProduto={fullOpen.ref} desc={fullOpen.desc} usuario={(typeof window!=='undefined'&&localStorage.getItem('amicia_usuario'))||'equipe'} onClose={()=>setFullOpen(null)}/>}
+      {fullOpen && (()=>{
+        // 13/09 (pedido dele): a tela do Full ganha a coluna "Reposicao prevista" com a
+        // MESMA matriz de cortes do modal de estoque, e o clique abre o mesmo modal de cortes.
+        const rn=String(fullOpen.ref).replace(/\D/g,'').replace(/^0+/,'');
+        const mref=matrizProjPorRef[rn]||{};
+        const getProjFull=(cor,tam)=>mref[`${normCorBling(cor)}|${String(tam||'').toLowerCase().trim()}`]||0;
+        return <FullEnvio refProduto={fullOpen.ref} desc={fullOpen.desc} usuario={(typeof window!=='undefined'&&localStorage.getItem('amicia_usuario'))||'equipe'} onClose={()=>setFullOpen(null)}
+          getProj={getProjFull} onVerCortes={(cor,tam)=>setProjModal({refNorm:rn,cor,tam:String(tam||'').toUpperCase().trim()})}/>;
+      })()}
       {raioxOpen && <RaioXProduto refProduto={raioxOpen.ref} desc={raioxOpen.desc} foto={raioxOpen.foto} onClose={()=>setRaioxOpen(null)}/>}
       {mapOpen && <MapeamentoSkus refProduto={mapOpen.ref} desc={mapOpen.desc} cores={mapOpen.cores} onClose={()=>setMapOpen(null)}/>}
       {gtinOpen && (

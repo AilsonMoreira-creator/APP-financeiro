@@ -13,7 +13,7 @@ const C = {
 };
 const ORDEM_TAM = { PP: 0, P: 1, M: 2, G: 3, GG: 4, G1: 5, G2: 6, G3: 7 };
 
-export default function FullEnvio({ refProduto, desc, usuario, onClose }) {
+export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj, onVerCortes }) {
   const [d, setD] = useState(null);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
@@ -91,12 +91,12 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose }) {
                   Esta referência já está confirmada para a semana — as quantidades abaixo são as que você definiu.
                 </div>
               )}
-              <div style={{ overflowX: 'auto' }}>
+              <div>{/* 13/09: sem overflow aqui — senao o cabecalho "sticky" nao gruda no scroll do modal */}
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     {/* 13/09: cabecalho FIXO ao rolar; Venda/dia + Cobertura viraram "Proj. 10 dias" */}
                     <tr style={{ background: C.azul, color: '#fff' }}>
-                      {['Cor', 'Tam', 'Full', 'Fábrica', 'Proj. 10 dias', 'Ideal', 'Possível', 'Enviar'].map((h, i) => (
+                      {['Cor', 'Tam', 'Full', 'Fábrica', 'Reposição prevista', 'Proj. 10 dias', 'Ideal', 'Possível', 'Enviar'].map((h, i) => (
                         <th key={h} style={{ padding: '9px 8px', fontSize: 10.5, letterSpacing: .5, textTransform: 'uppercase', textAlign: i < 2 ? 'left' : 'right',
                           position: 'sticky', top: 0, zIndex: 2, background: C.azul }}>{h}</th>
                       ))}
@@ -118,6 +118,10 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose }) {
                           <td style={{ ...cel, color: C.azul, fontWeight: 700 }}>{l.tam}</td>
                           <td style={{ ...num, fontWeight: 800, color: C.navy }}>{inteiro(l.estoqueFull)}</td>
                           <td style={{ ...num, fontWeight: 800, color: C.navy }}>{inteiro(l.estoqueFabrica)}</td>
+                          {(() => { const proj = getProj ? (getProj(l.cor, l.tam) || 0) : 0;
+                            return <td onClick={proj > 0 && onVerCortes ? () => onVerCortes(l.cor, l.tam) : undefined} title={proj > 0 ? 'Ver cortes que geram a reposição' : undefined}
+                              style={{ ...num, color: proj > 0 ? '#1e6e42' : C.suave, fontWeight: proj > 0 ? 800 : 400, cursor: proj > 0 ? 'pointer' : 'default', textDecoration: proj > 0 ? 'underline dotted' : 'none' }}>
+                              {proj > 0 ? `+${inteiro(proj)}` : '—'}</td>; })()}
                           <td style={{ ...num, color: baixa ? C.erro : C.navy, fontWeight: baixa ? 800 : 500 }}
                             title={`venda/dia ${Number(l.vendaDia || 0).toFixed(2)} · cobertura ${l.cobertura_atual === null ? '—' : Math.round(l.cobertura_atual) + ' dias'}`}>
                             {inteiro((Number(l.vendaDia) || 0) * 10)}
