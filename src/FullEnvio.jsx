@@ -64,14 +64,14 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
 
   const cel = { padding: '7px 8px', fontSize: 12.5, borderBottom: `1px solid ${C.borda}` };
   // 13/09 (pedido dele): numeros um degrau maiores, sempre inteiros (nunca quebrados)
-  const num = { ...cel, fontSize: 14.5, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
+  const num = { ...cel, fontSize: 14.5, textAlign: 'center', fontVariantNumeric: 'tabular-nums' };
   const inteiro = (v) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v))) ? '—' : String(Math.round(Number(v)));
 
   return (
     <div onClick={() => onClose?.()} style={{ position: 'fixed', inset: 0, background: 'rgba(44,62,80,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 230, backdropFilter: 'blur(3px)' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 880, maxHeight: '92vh', overflow: 'auto', fontFamily: F }}>
 
-        <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.borda}`, background: C.bege, position: 'sticky', top: 0, zIndex: 2 }}>
+        <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.borda}`, background: C.bege }}>
           <div style={{ fontSize: 11, color: C.azul, fontWeight: 700 }}>REF {refProduto} · ENVIO PARA O FULL</div>
           <div style={{ fontSize: 15, fontWeight: 700, color: C.navy }}>{desc || ''}</div>
           <div style={{ fontSize: 11.5, color: C.suave, marginTop: 3 }}>
@@ -96,9 +96,10 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                   <thead>
                     {/* 13/09: cabecalho FIXO ao rolar; Venda/dia + Cobertura viraram "Proj. 10 dias" */}
                     <tr style={{ background: C.azul, color: '#fff' }}>
-                      {['Cor', 'Tam', 'Full', 'Fábrica', 'Reposição prevista', 'Proj. 10 dias', 'Ideal', 'Possível', 'Enviar'].map((h, i) => (
-                        <th key={h} style={{ padding: '9px 8px', fontSize: 10.5, letterSpacing: .5, textTransform: 'uppercase', textAlign: i < 2 ? 'left' : 'right',
-                          position: 'sticky', top: 0, zIndex: 2, background: C.azul }}>{h}</th>
+                      {[['Cor', '20%', 'left'], ['Tam', '7%', 'center'], ['Full', '9%', 'center'], ['Fábrica', '9%', 'center'], ['Reposição', '9%', 'center'],
+                        ['Proj. 10 dias', '11%', 'center'], ['Ideal', '9%', 'center'], ['Possível', '9%', 'center'], ['Enviar', '17%', 'center']].map(([h, w, al]) => (
+                        <th key={h} style={{ width: w, padding: '9px 6px', fontSize: 10.5, letterSpacing: .5, textTransform: 'uppercase', textAlign: al,
+                          position: 'sticky', top: 0, zIndex: 3, background: h === 'Full' ? C.navy : C.azul }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -115,8 +116,8 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                                 background: '#fdf0e3', color: '#9a5b00', border: '1px solid #f0d5b5' }}>NÃO TEM NO FULL</span>
                             )}
                           </td>
-                          <td style={{ ...cel, color: C.azul, fontWeight: 700 }}>{l.tam}</td>
-                          <td style={{ ...num, fontWeight: 800, color: C.navy }}>{inteiro(l.estoqueFull)}</td>
+                          <td style={{ ...cel, color: C.azul, fontWeight: 700, textAlign: 'center' }}>{l.tam}</td>
+                          <td style={{ ...num, fontWeight: 800, color: C.navy, background: '#eef5fb' }}>{inteiro(l.estoqueFull)}</td>
                           <td style={{ ...num, fontWeight: 800, color: C.navy }}>{inteiro(l.estoqueFabrica)}</td>
                           {(() => { const proj = getProj ? (getProj(l.cor, l.tam) || 0) : 0;
                             return <td onClick={proj > 0 && onVerCortes ? () => onVerCortes(l.cor, l.tam) : undefined} title={proj > 0 ? 'Ver cortes que geram a reposição' : undefined}
@@ -128,7 +129,7 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                           </td>
                           <td style={{ ...num, color: C.suave }}>{l.qtd_ideal ? inteiro(l.qtd_ideal) : '—'}</td>
                           <td style={{ ...num }}>{l.qtd_possivel ? inteiro(l.qtd_possivel) : '—'}</td>
-                          <td style={{ ...cel, textAlign: 'right' }}>
+                          <td style={{ ...cel, textAlign: 'center' }}>
                             <input type="number" min="0" value={edit[k] ?? 0}
                               onChange={ev => setEdit(s => ({ ...s, [k]: ev.target.value }))}
                               style={{ width: 58, padding: '5px 6px', textAlign: 'center', fontSize: 13, fontWeight: 800,

@@ -140,7 +140,18 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   }
   const teto = Math.floor(estoqueFabrica * (tetoPct / 100));
   const qtd_possivel = Math.max(0, Math.min(qtd_ideal, teto));
-  const qtd_sugerida = arredondar(qtd_possivel, ehBasica);
+  let qtd_sugerida = arredondar(qtd_possivel, ehBasica);
+  // 13/09 (regra dele): quando JA VAI TER ENVIO, a quantidade tem que cobrir
+  // pelo menos as vendas dos proximos 10 dias — sempre que o estoque da
+  // fabrica (teto) permitir.
+  const piso10 = Math.ceil(vendaDia * 10);
+  if (qtd_sugerida > 0 && qtd_sugerida < piso10) {
+    const alvo = Math.min(piso10, teto);
+    if (alvo > qtd_sugerida) {
+      qtd_sugerida = Math.max(alvo, arredondar(alvo, ehBasica));
+      motivos.push(`subiu pra cobrir os próximos 10 dias (${piso10} pç)`);
+    }
+  }
 
   // ── motivo em uma frase ──
   const coberturaAtual = vendaDia > 0 ? +(estoqueFull / vendaDia).toFixed(1) : null;
