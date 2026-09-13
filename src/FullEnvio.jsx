@@ -63,6 +63,9 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose }) {
   };
 
   const cel = { padding: '7px 8px', fontSize: 12.5, borderBottom: `1px solid ${C.borda}` };
+  // 13/09 (pedido dele): numeros um degrau maiores, sempre inteiros (nunca quebrados)
+  const num = { ...cel, fontSize: 14.5, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
+  const inteiro = (v) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v))) ? '—' : String(Math.round(Number(v)));
 
   return (
     <div onClick={() => onClose?.()} style={{ position: 'fixed', inset: 0, background: 'rgba(44,62,80,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 230, backdropFilter: 'blur(3px)' }}>
@@ -73,7 +76,7 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose }) {
           <div style={{ fontSize: 15, fontWeight: 700, color: C.navy }}>{desc || ''}</div>
           <div style={{ fontSize: 11.5, color: C.suave, marginTop: 3 }}>
             {carregando ? 'calculando…'
-              : `cobertura de ${d?.regras?.cobertura ?? 14} dias (${d?.regras?.basicas ?? 20} nas básicas) + ${d?.regras?.transito ?? 5} de trânsito`}
+              : `cobertura de ${d?.regras?.cobertura ?? 14} dias (${d?.regras?.basicas ?? 20} nas básicas) + ${d?.regras?.transito ?? 5} de trânsito · Proj. 10 dias = quantas peças devem vender nos próximos 10 dias`}
           </div>
         </div>
 
@@ -91,9 +94,11 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose }) {
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
+                    {/* 13/09: cabecalho FIXO ao rolar; Venda/dia + Cobertura viraram "Proj. 10 dias" */}
                     <tr style={{ background: C.azul, color: '#fff' }}>
-                      {['Cor', 'Tam', 'Full', 'Fábrica', 'Venda/dia', 'Cobertura', 'Ideal', 'Possível', 'Enviar'].map((h, i) => (
-                        <th key={h} style={{ padding: '8px 8px', fontSize: 10, letterSpacing: .5, textTransform: 'uppercase', textAlign: i < 2 ? 'left' : 'right' }}>{h}</th>
+                      {['Cor', 'Tam', 'Full', 'Fábrica', 'Proj. 10 dias', 'Ideal', 'Possível', 'Enviar'].map((h, i) => (
+                        <th key={h} style={{ padding: '9px 8px', fontSize: 10.5, letterSpacing: .5, textTransform: 'uppercase', textAlign: i < 2 ? 'left' : 'right',
+                          position: 'sticky', top: 0, zIndex: 2, background: C.azul }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -111,14 +116,14 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose }) {
                             )}
                           </td>
                           <td style={{ ...cel, color: C.azul, fontWeight: 700 }}>{l.tam}</td>
-                          <td style={{ ...cel, textAlign: 'right' }}>{l.estoqueFull}</td>
-                          <td style={{ ...cel, textAlign: 'right', color: C.suave }}>{l.estoqueFabrica}</td>
-                          <td style={{ ...cel, textAlign: 'right' }}>{l.vendaDia}</td>
-                          <td style={{ ...cel, textAlign: 'right', color: baixa ? C.erro : C.suave, fontWeight: baixa ? 700 : 400 }}>
-                            {l.cobertura_atual === null ? '—' : `${l.cobertura_atual}d`}
+                          <td style={{ ...num, fontWeight: 800, color: C.navy }}>{inteiro(l.estoqueFull)}</td>
+                          <td style={{ ...num, fontWeight: 800, color: C.navy }}>{inteiro(l.estoqueFabrica)}</td>
+                          <td style={{ ...num, color: baixa ? C.erro : C.navy, fontWeight: baixa ? 800 : 500 }}
+                            title={`venda/dia ${Number(l.vendaDia || 0).toFixed(2)} · cobertura ${l.cobertura_atual === null ? '—' : Math.round(l.cobertura_atual) + ' dias'}`}>
+                            {inteiro((Number(l.vendaDia) || 0) * 10)}
                           </td>
-                          <td style={{ ...cel, textAlign: 'right', color: C.suave }}>{l.qtd_ideal || '—'}</td>
-                          <td style={{ ...cel, textAlign: 'right' }}>{l.qtd_possivel || '—'}</td>
+                          <td style={{ ...num, color: C.suave }}>{l.qtd_ideal ? inteiro(l.qtd_ideal) : '—'}</td>
+                          <td style={{ ...num }}>{l.qtd_possivel ? inteiro(l.qtd_possivel) : '—'}</td>
                           <td style={{ ...cel, textAlign: 'right' }}>
                             <input type="number" min="0" value={edit[k] ?? 0}
                               onChange={ev => setEdit(s => ({ ...s, [k]: ev.target.value }))}
