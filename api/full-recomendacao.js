@@ -70,7 +70,7 @@ export default async function handler(req, res) {
       const h = { Authorization: `Bearer ${token}` };
       const me = await (await fetch('https://api.mercadolibre.com/users/me', { headers: h })).json();
       // acha os anúncios Full desta REF (basta um SKU dela levar ao anúncio)
-      const itensFull = new Set();
+      const itensFull = new Set(); var itensFullDebug = itensFull;
       for (const e of (estoque || []).slice(0, 8)) {
         if (!e.bling_sku) continue;
         const b = await (await fetch(
@@ -89,6 +89,11 @@ export default async function handler(req, res) {
           const tam = (combo.find(a => /size|tamanho/i.test(a.id || a.name)) || {}).value_name;
           if (!cor || !tam) continue;
           const k = `${chaveCor(cor)}|${String(tam).toUpperCase().trim()}`;
+          // 13/09 (REF 2700: Azul Marinho e Creme "no Full" com o numero da FABRICA):
+          // variacao SEM inventory_id nao esta no armazem do ML — o available_quantity
+          // dela e o estoque que o Bling empurra pro anuncio, nao o do Full. So conta
+          // variacao com inventory_id.
+          if (!v.inventory_id) { fullPorSku[k] = fullPorSku[k] || { qtd: 0, inventory_id: null, anuncio: itemId, sem_inventory: true }; continue; }
           const atual = fullPorSku[k]?.qtd || 0;
           fullPorSku[k] = { qtd: atual + n(v.available_quantity), inventory_id: v.inventory_id, anuncio: itemId };
         }
@@ -96,6 +101,7 @@ export default async function handler(req, res) {
       }
     } catch (e) { /* segue sem o Full: a tela avisa */ }
 
+    if (req.query?.debug_full === '1') return res.status(200).json({ anuncios: [...itensFullDebug], full: fullPorSku });
     // 4) corte chegando (Oficinas) — quantas peças e em quantos dias
     const { data: cortes } = await supabase.from('ordens_corte')
       .select('ref, cores, status, created_at, data_entrega')
