@@ -17,6 +17,7 @@
 
 import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 import { enviarTemplate } from './_lojas-whats-meta-client.js';
+import { sincronizarCusto } from './saude-credito.js';
 
 export const config = { maxDuration: 30 };
 
@@ -215,6 +216,8 @@ export default async function handler(req, res) {
   }
 
   // ── uma leitura ──
+  // 13/09: custo da Anthropic 1x por hora (na leitura dos minutos 00-04), sem cron proprio
+  try { if (new Date().getUTCMinutes() < 5) await sincronizarCusto(10); } catch { /* nao derruba a leitura */ }
   const m = await coletar();
   const { nivel, motivos } = await classificar(m);
   await supabase.from('saude_leituras').insert({

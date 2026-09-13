@@ -8458,6 +8458,39 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
 
 // ── Saúde do app (Ailson 12/09/2026) — FASE 0 do circuit breaker: só mede e avisa.
 // Amarelo/vermelho vão pro WhatsApp dele pela Sofia; "aviso" aparece SÓ aqui.
+// ── Crédito da Anthropic (13/09): saldo ESTIMADO = âncora do Console + recargas − gasto (Admin API).
+// Alertas na tela 1× abaixo de US$ 20 e 1× abaixo de US$ 5; rearmam ao registrar recarga.
+const CreditoAnthropic=()=>{
+  const [c,setC]=useState(null);const [f,setF]=useState({data:new Date(Date.now()-3*3600000).toISOString().slice(0,10),valor:"",saldo:""});const [ok,setOk]=useState("");
+  const hdr={"Content-Type":"application/json","X-User":USER_ID||"ailson"};
+  const carregar=async()=>{try{const r=await fetch("/api/saude-credito?painel=1",{headers:hdr});setC(await r.json());}catch{}};
+  useEffect(()=>{carregar();},[]);
+  useEffect(()=>{ // marca o alerta como mostrado (1x por recarga)
+    if(!c?.alertas?.length)return;const a=c.alertas[0];const chave=a.nivel==="vermelho"?"credito_alerta_5":"credito_alerta_20";
+    fetch("/api/saude-credito",{method:"POST",headers:hdr,body:JSON.stringify({marcar_alerta:chave})}).catch(()=>{});
+  },[c?.alertas?.length]);
+  const registrar=async()=>{if(!f.valor)return;await fetch("/api/saude-credito",{method:"POST",headers:hdr,body:JSON.stringify({data_recarga:f.data,valor_usd:Number(f.valor),saldo_console_usd:f.saldo||null})});setF({...f,valor:"",saldo:""});setOk("recarga registrada");setTimeout(()=>setOk(""),3000);carregar();};
+  if(!c)return null;
+  const s=c.saldo_estimado;const cor=s==null?"#a89f94":s<5?"#c0392b":s<20?"#c9900a":"#1e8e4e";
+  return(<div style={{background:"#faf8f4",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
+    <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
+      <span style={{fontSize:13,fontWeight:700,color:"#2b2b2b"}}>💳 Crédito Anthropic</span>
+      <span style={{fontSize:20,fontWeight:800,color:cor}}>{s==null?"—":`US$ ${s.toFixed(2)}`}</span>
+      <span style={{fontSize:11,color:"#a89f94"}}>estimado{c.ancora?` · âncora ${c.ancora.data.split("-").reverse().join("/")} = US$ ${Number(c.ancora.saldo_console).toFixed(2)}`:""}</span>
+    </div>
+    {(c.alertas||[]).map((a,i)=><div key={i} style={{marginTop:6,padding:"8px 10px",borderRadius:8,background:a.nivel==="vermelho"?"#fde8e6":"#fff1c9",color:a.nivel==="vermelho"?"#c0392b":"#8a6d1a",fontSize:12.5,fontWeight:700}}>{a.nivel==="vermelho"?"🔴":"🟡"} {a.texto}</div>)}
+    <div style={{fontSize:12,color:"#6b6259",marginTop:6}}>gasto 7 dias <b>US$ {c.gasto_7d.toFixed(2)}</b> · 30 dias <b>US$ {c.gasto_30d.toFixed(2)}</b> · média <b>US$ {c.media_dia.toFixed(2)}/dia</b>{c.dias_restantes!=null?<> · dá pra <b>{c.dias_restantes} dias</b></>:null}{!c.chave_ok&&<span style={{color:"#c0392b"}}> · chave da Admin API ausente</span>}{c.ultimo_custo_dia?<span style={{color:"#a89f94"}}> · último dia lido {c.ultimo_custo_dia.dia.split("-").reverse().join("/")}</span>:null}</div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:8}}>
+      <input type="date" value={f.data} onChange={e=>setF({...f,data:e.target.value})} style={{padding:"6px 8px",borderRadius:8,border:"1px solid #e0d8cc",fontSize:12}}/>
+      <input value={f.valor} onChange={e=>setF({...f,valor:e.target.value})} placeholder="recarga US$" style={{padding:"6px 8px",borderRadius:8,border:"1px solid #e0d8cc",fontSize:12,width:110}}/>
+      <input value={f.saldo} onChange={e=>setF({...f,saldo:e.target.value})} placeholder="saldo no Console (opcional)" style={{padding:"6px 8px",borderRadius:8,border:"1px solid #e0d8cc",fontSize:12,width:190}}/>
+      <button onClick={registrar} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#2f4a6a",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>Registrar recarga</button>
+      {ok&&<span style={{fontSize:12,color:"#1e8e4e"}}>{ok}</span>}
+    </div>
+    <div style={{fontSize:11,color:"#a89f94",marginTop:4}}>Se informar o saldo do Console junto, ele vira a nova âncora e o cálculo zera o erro acumulado.</div>
+  </div>);
+};
+
 const SaudeApp=({isAdmin})=>{
   const [d,setD]=useState(null);const [erro,setErro]=useState("");const [num,setNum]=useState("");const [salvando,setSalvando]=useState(false);
   const carregar=async()=>{try{const r=await fetch("/api/saude-monitor?painel=1",{headers:{"X-User":USER_ID||"ailson"}});const j=await r.json();if(j?.ok)setD(j);else setErro(j?.error||"erro");}catch(e){setErro(String(e?.message||e));}};
@@ -8479,6 +8512,7 @@ const SaudeApp=({isAdmin})=>{
       <div style={{fontSize:12,color:"#6b6259",marginTop:4}}>última leitura {fmt(a.lida_em)} · banco {a.conexoes}/{a.conexoes_max} conexões ({pct}%) · resposta {a.latencia_ms} ms · Storage {a.storage_calls_5min??"—"} consultas/5 min · esteira {a.esteira_erros_1h} erros/1h · Bling 429: {a.bling_429_1h}</div>
       {a.motivos&&Object.entries(a.motivos).flatMap(([n,lst])=>(lst||[]).map((m,i)=><div key={n+i} style={{fontSize:12.5,color:cor[n],marginTop:4}}>• {m}</div>))}
     </div>)}
+    <CreditoAnthropic/>
     <div style={{background:"#faf8f4",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
       <div style={{fontSize:13,fontWeight:700,color:"#2b2b2b",marginBottom:6}}>👥 Ativos agora <span style={{fontWeight:400,fontSize:11,color:"#a89f94"}}>(interagiram nos últimos 15 min)</span></div>
       {(d.ativos||[]).length===0&&<div style={{fontSize:12,color:"#a89f94"}}>ninguém</div>}
