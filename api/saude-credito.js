@@ -85,6 +85,16 @@ export default async function handler(req, res) {
     await supabase.from('saude_config').upsert([{ chave: 'credito_alerta_20', valor: '' }, { chave: 'credito_alerta_5', valor: '' }], { onConflict: 'chave' });
     return res.status(200).json({ ok: true });
   }
+  // diagnostico: qual chave o servidor ve e o que a Admin API responde
+  if (req.query?.quem === '1') {
+    const key = process.env.ANTHROPIC_ADMIN_API_KEY || '';
+    const h = { 'x-api-key': key, 'anthropic-version': '2023-06-01' };
+    const t = async (url) => { const r = await fetch(url, { headers: h }); return { http: r.status, corpo: (await r.text()).slice(0, 200) }; };
+    return res.status(200).json({ prefixo: key.slice(0, 14) + '…', tamanho: key.length,
+      org_me: await t('https://api.anthropic.com/v1/organizations/me'),
+      users: await t('https://api.anthropic.com/v1/organizations/users?limit=1'),
+      cost: await t('https://api.anthropic.com/v1/organizations/cost_report?starting_at=2026-09-10T00:00:00Z&bucket_width=1d&limit=3') });
+  }
   if (req.query?.sync === '1' || ehCron) { const s = await sincronizarCusto(10); if (req.query?.painel !== '1') return res.status(200).json(s); }
   return res.status(200).json(await painel());
 }
