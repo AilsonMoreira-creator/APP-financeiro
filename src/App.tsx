@@ -29,9 +29,31 @@ import ReviewsMeli from './Reviews_meli.jsx';
 import { listarCoresManuais, adicionarCorManual, removerCorManual, resolverHexCor } from './cores-manuais.js';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
+// ── 13/09 (Ailson): RELATO DE ERRO DO APP — telas que quebram, promessas
+// rejeitadas e "Erro no modulo" vao pra /api/app-erro (o monitor de saude conta
+// e a pagina Saude lista). Sem token: so manda. Dedupe no servidor (10 min).
+function amicaRelatarErro(mensagem,stack,origem){
+  try{
+    const msg=String(mensagem||"").slice(0,300);if(!msg)return;
+    if(/ResizeObserver loop|Script error\.?$|Load failed|NetworkError|Failed to fetch/i.test(msg))return; // ruido conhecido
+    const sess=(()=>{try{return JSON.parse(localStorage.getItem("amica_session")||"null");}catch{return null;}})();
+    let sw="";try{sw=localStorage.getItem("amica_sw_version")||"";}catch{}
+    fetch("/api/app-erro",{method:"POST",headers:{"Content-Type":"application/json"},keepalive:true,
+      body:JSON.stringify({mensagem:(origem?origem+": ":"")+msg,stack:String(stack||"").slice(0,1500),
+        usuario:sess?.usuario||null,modulo:window.__amicaModuloAtivo||null,
+        device_id:(()=>{try{return localStorage.getItem("amica_device_id")||null;}catch{return null;}})(),
+        aparelho:navigator.userAgent,url:location.pathname+location.search,versao_sw:sw})}).catch(()=>{});
+  }catch{}
+}
+if(typeof window!=="undefined"&&!window.__amicaErroLigado){
+  window.__amicaErroLigado=true;
+  window.addEventListener("error",e=>{amicaRelatarErro(e?.message||String(e?.error||""),e?.error?.stack,"js");});
+  window.addEventListener("unhandledrejection",e=>{const r=e?.reason;amicaRelatarErro(r?.message||String(r||""),r?.stack,"promise");});
+}
 class ModuleErrorBoundary extends Component{
   constructor(props){super(props);this.state={hasError:false,error:null};}
   static getDerivedStateFromError(error){return{hasError:true,error};}
+  componentDidCatch(error,info){try{amicaRelatarErro(error?.message||String(error),(error?.stack||"")+"\n"+String(info?.componentStack||"").slice(0,600),"modulo");}catch{}}
   render(){if(this.state.hasError)return<div style={{padding:30,textAlign:"center"}}><div style={{fontSize:16,color:"#c0392b",fontWeight:700,marginBottom:8}}>⚠ Erro no módulo</div><div style={{fontSize:12,color:"#666",marginBottom:12}}>{this.state.error?.message||"Erro desconhecido"}</div><button onClick={()=>this.setState({hasError:false,error:null})} style={{padding:"8px 16px",borderRadius:6,border:"1px solid #e8e2da",background:"#fff",cursor:"pointer",fontSize:12}}>Tentar novamente</button></div>;return this.props.children;}
 }
 
@@ -8471,7 +8493,10 @@ const SaudeApp=({isAdmin})=>{
         <div style={{position:"absolute",bottom:p,left:0,right:0,height:2,background:"#2f4a6a"}}/>
       </div>);})}
     </div>
-    <div style={{fontSize:13,fontWeight:700,color:"#2b2b2b",marginBottom:6}}>Incidentes</div>
+    <div style={{fontSize:13,fontWeight:700,color:"#2b2b2b",marginBottom:6}}>Erros relatados pelas telas <span style={{fontWeight:400,fontSize:11,color:"#a89f94"}}>(últimos 20)</span></div>
+    {(d.erros_app||[]).length===0&&<div style={{fontSize:12,color:"#a89f94",marginBottom:12}}>nenhum</div>}
+    {(d.erros_app||[]).slice(0,8).map((e,i)=>(<div key={i} style={{fontSize:12,color:"#2b2b2b",padding:"5px 0",borderBottom:"1px solid #f0ece6"}}><span style={{color:"#a89f94"}}>{fmt(e.criado_em)}</span> · <b>{e.usuario||"?"}</b>{e.modulo?` · ${e.modulo}`:""} — {String(e.mensagem||"").slice(0,120)}</div>))}
+    <div style={{fontSize:13,fontWeight:700,color:"#2b2b2b",margin:"14px 0 6px"}}>Incidentes</div>
     {(d.incidentes||[]).length===0&&<div style={{fontSize:12,color:"#a89f94",marginBottom:12}}>nenhum registrado</div>}
     {(d.incidentes||[]).map(inc=>(<div key={inc.codigo} style={{border:`1px solid ${cor[inc.nivel]}`,background:bg[inc.nivel],borderRadius:10,padding:"10px 12px",marginBottom:8}}>
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><b style={{color:cor[inc.nivel]}}>{inc.nivel==="vermelho"?"🔴":"🟡"} {inc.codigo}</b><span style={{fontSize:12,color:"#6b6259"}}>{fmt(inc.aberto_em)}</span><span style={{fontSize:11,marginLeft:"auto",color:inc.enviado_whats?"#1e8e4e":"#a89f94"}}>{inc.enviado_whats?"WhatsApp enviado":(inc.envio_erro?"envio falhou":"não enviado")}</span></div>

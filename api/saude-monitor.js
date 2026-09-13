@@ -54,11 +54,21 @@ async function coletar() {
   const h1 = new Date(Date.now() - 3600000).toISOString();
   const { count: erros1h } = await supabase.from('wms_nfe_log').select('id', { count: 'exact', head: true }).eq('resultado', 'erro').gte('criado_em', h1);
   const { count: e429 } = await supabase.from('wms_nfe_log').select('id', { count: 'exact', head: true }).gte('criado_em', h1).or('http.eq.429,mensagem.ilike.%429%');
+  // 13/09: erros relatados pelas TELAS na ultima hora (app_erros)
+  const q15 = new Date(Date.now() - 15 * 60000).toISOString();
+  const { data: errosApp } = await supabase.from('app_erros').select('assinatura, usuario, device_id, mensagem, modulo, criado_em').gte('criado_em', h1);
+  const ea = errosApp || [];
+  const recentes = ea.filter(e => e.criado_em >= q15);
+  const porAssin = {};
+  for (const e of recentes) { porAssin[e.assinatura] = porAssin[e.assinatura] || { msg: e.mensagem, modulo: e.modulo, aparelhos: new Set(), usuarios: new Set() }; porAssin[e.assinatura].aparelhos.add(e.device_id || e.usuario); if (e.usuario) porAssin[e.assinatura].usuarios.add(e.usuario); }
+  const pior = Object.values(porAssin).sort((a, b) => b.aparelhos.size - a.aparelhos.size)[0];
+  const app_erros = { total_1h: ea.length, ultimos_15min: recentes.length, distintos_15min: Object.keys(porAssin).length,
+    pior: pior ? { mensagem: pior.msg, modulo: pior.modulo, aparelhos: pior.aparelhos.size, usuarios: [...pior.usuarios] } : null };
   return {
     conexoes: s.conexoes, conexoes_max: s.conexoes_max, ativas: s.ativas, idle_tx: s.idle_tx,
     query_mais_longa_s: s.query_mais_longa_s, latencia_ms: latencia,
     db_calls_5min: delta('db_calls_total'), storage_calls_5min: delta('storage_calls_total'),
-    esteira_erros_1h: erros1h || 0, bling_429_1h: e429 || 0, bruto: s,
+    esteira_erros_1h: erros1h || 0, bling_429_1h: e429 || 0, app_erros, bruto: s,
   };
 }
 
@@ -122,6 +132,15 @@ async function classificar(m) {
   }
   if (m.idle_tx >= 10) motivos.amarelo.push(`${m.idle_tx} conexões presas em transação`);
   if (m.bling_429_1h >= 20) motivos.amarelo.push(`${m.bling_429_1h} respostas 429 do Bling na última hora`);
+  // ERROS DE TELA (13/09): mesmo erro em 3+ aparelhos em 15 min = app quebrando pra
+  // varias pessoas -> AMARELO (iminente); 5+ aparelhos -> VERMELHO; senao AVISO
+  const ae = m.app_erros;
+  if (ae?.pior) {
+    const txt = `erro de tela em ${ae.pior.aparelhos} aparelho(s)${ae.pior.modulo ? ' no módulo ' + ae.pior.modulo : ''}: "${String(ae.pior.mensagem).slice(0, 80)}"`;
+    if (ae.pior.aparelhos >= 5) motivos.vermelho.push(txt);
+    else if (ae.pior.aparelhos >= 3) motivos.amarelo.push(txt);
+    else motivos.aviso.push(txt);
+  }
   // AVISO (so na pagina)
   if (m.esteira_erros_1h >= 20 && m.esteira_erros_1h < 100) motivos.aviso.push(`${m.esteira_erros_1h} erros na esteira na última hora`);
   if (m.query_mais_longa_s >= 60) motivos.aviso.push(`consulta rodando há ${m.query_mais_longa_s}s`);
@@ -153,6 +172,7 @@ async function proximoCodigo() {
 function sugestaoPara(motivos) {
   const t = motivos.join(' ');
   if (/loop de fotos|Storage/.test(t)) return 'ver quem está com tela de fotos aberta (Bling Estoque/Calculadora) e fechar; se persistir, me chamar';
+  if (/erro de tela/.test(t)) return 'uma tela está quebrando pra mais de uma pessoa — me chamar com o código; a mensagem do erro está no dossiê';
   if (/× o normal/.test(t)) return 'volume alto de consultas — ver se há tela/cron fora do padrão; se o app está normal, sem ação';
   if (/conexões|banco/.test(t)) return 'abrir o painel do Supabase e me chamar com o código; se travado, reiniciar o banco';
   if (/429/.test(t)) return 'o Bling está limitando; aguardar 10 min e evitar varredura geral';
@@ -185,12 +205,13 @@ export default async function handler(req, res) {
   }
   if (req.query?.painel === '1') {
     const ativos = await usuariosAtivos();
+    const { data: errosApp } = await supabase.from('app_erros').select('criado_em, usuario, modulo, mensagem, aparelho').order('criado_em', { ascending: false }).limit(20);
     const [{ data: leituras }, { data: incidentes }, c] = await Promise.all([
       supabase.from('saude_leituras').select('*').order('lida_em', { ascending: false }).limit(288),
       supabase.from('saude_incidentes').select('*').order('aberto_em', { ascending: false }).limit(30),
       cfg(),
     ]);
-    return res.status(200).json({ ok: true, ativos, agora: leituras?.[0] || null, leituras: leituras || [], incidentes: incidentes || [], config: { ...c, whats_admin: c.whats_admin ? '•••' + String(c.whats_admin).slice(-4) : '' } });
+    return res.status(200).json({ ok: true, ativos, erros_app: errosApp || [], agora: leituras?.[0] || null, leituras: leituras || [], incidentes: incidentes || [], config: { ...c, whats_admin: c.whats_admin ? '•••' + String(c.whats_admin).slice(-4) : '' } });
   }
 
   // ── uma leitura ──
