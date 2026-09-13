@@ -218,6 +218,18 @@ async function processarMensagemRecebida(msg, valueCtx) {
   const nomeCliente = profile.name || null;
   log('msg-in', `from=${telefone} type=${msg.type} id=${msg.id}`);
 
+  // 12/09 (regra dele): o numero do ADMIN (cadastrado em saude_config.whats_admin,
+  // usado pelos alertas de saude) NAO entra no modulo Sofia — se ele responder
+  // ao alerta, a mensagem e ignorada aqui (nao cria conversa, nao vira lead).
+  try {
+    const { data: adm } = await supabase.from('saude_config').select('valor').eq('chave', 'whats_admin').maybeSingle();
+    const admTel = normalizarTelefone(adm?.valor || '');
+    if (admTel && telefone && (admTel === telefone || admTel.slice(-8) === telefone.slice(-8))) {
+      log('msg-in', 'numero do admin — ignorado (fora do modulo Sofia)');
+      return;
+    }
+  } catch { /* segue */ }
+
   // 1. Acha (ou cria) conversa pra esse telefone
   // Ailson 25/05/2026: passa referral + texto pra detectar origem (CTWA)
   const primeiraTextoMaybe = msg.type === 'text' ? msg.text?.body : null;
