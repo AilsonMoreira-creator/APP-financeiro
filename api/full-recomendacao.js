@@ -99,6 +99,20 @@ export default async function handler(req, res) {
         }
         await new Promise(r => setTimeout(r, 150));
       }
+      // 13/09 (Creme P "83 no Full" = estoque da fabrica): o available_quantity da
+      // variacao e o numero que o Bling empurra pro anuncio, NAO o do armazem. A
+      // verdade do Full e /inventories/{id}/stock/fulfillment. Consulta so as
+      // variacoes com inventory_id e quantidade > 0 (as zeradas ja sao zero).
+      const pendentes = Object.entries(fullPorSku).filter(([, v]) => v.inventory_id && n(v.qtd) > 0);
+      for (const [k, v] of pendentes) {
+        try {
+          const st = await (await fetch(`https://api.mercadolibre.com/inventories/${v.inventory_id}/stock/fulfillment`, { headers: h })).json();
+          if (st && typeof st.available_quantity === 'number') {
+            fullPorSku[k] = { ...v, qtd_anuncio: v.qtd, qtd: n(st.available_quantity), total_armazem: n(st.total), fonte: 'fulfillment' };
+          }
+        } catch { /* mantem o valor do anuncio */ }
+        await new Promise(r => setTimeout(r, 120));
+      }
     } catch (e) { /* segue sem o Full: a tela avisa */ }
 
     if (req.query?.debug_full === '1') return res.status(200).json({ anuncios: [...itensFullDebug], full: fullPorSku });
