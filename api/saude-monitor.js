@@ -136,6 +136,13 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
+  // 12/09: ?teste=1 (admin) — manda o template com nivel "teste" pro numero cadastrado
+  if (req.query?.teste === '1') {
+    const c = await cfg();
+    if (!c.whats_admin) return res.status(200).json({ ok: false, erro: 'sem numero cadastrado' });
+    const r = await enviarTemplate(String(c.whats_admin), c.template || 'alerta_saude_app_v3', ['teste', 'INC-TESTE']);
+    return res.status(200).json({ ok: !!(r?.messages || r?.ok || r?.id), resposta: r });
+  }
   if (req.query?.painel === '1') {
     const [{ data: leituras }, { data: incidentes }, c] = await Promise.all([
       supabase.from('saude_leituras').select('*').order('lida_em', { ascending: false }).limit(288),
