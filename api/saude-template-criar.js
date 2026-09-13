@@ -7,7 +7,7 @@
 import { validarUsuario, setCors } from './_lojas-helpers.js';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
-const NOME = 'alerta_saude_app';
+const NOME = 'alerta_saude_app_v2';   // v1 rejeitada: variavel {{3}} 'solta' numa linha sem texto
 
 export default async function handler(req, res) {
   setCors(res);
@@ -28,8 +28,8 @@ export default async function handler(req, res) {
     name: NOME, language: 'pt_BR', category: 'UTILITY',
     components: [{
       type: 'BODY',
-      text: 'Alerta de saúde do app Amícia\n\nNível: {{1}}\nCódigo: {{2}}\n\n{{3}}\n\nSugestão: {{4}}\n\nPara investigar, abra o Claude e informe o código.',
-      example: { body_text: [['🔴 VERMELHO', '#INC-0914-1', 'banco em 92% das conexões · Storage 7× o normal', 'fechar a tela de fotos no PC e me chamar com o código']] },
+      text: 'Alerta de saúde do app Amícia.\nNível do alerta: {{1}}.\nCódigo do incidente: {{2}}.\nO que foi detectado: {{3}}.\nSugestão: {{4}}.\nPara investigar, abra o Claude e informe o código do incidente.',
+      example: { body_text: [['VERMELHO', 'INC-0914-1', 'banco em 92% das conexoes e Storage 7 vezes acima do normal', 'fechar a tela de fotos no PC e chamar o Claude com o codigo']] },
     }],
   };
   const r = await fetch(`${GRAPH}/${WABA}/message_templates`, { method: 'POST', headers, body: JSON.stringify(body) });
