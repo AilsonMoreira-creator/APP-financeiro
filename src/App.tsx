@@ -6565,10 +6565,10 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
 // diferentes entre as 3 contas do Bling. O que vale é o SKU, então na lista
 // de cores existe UMA entrada por grupo e ela vale pelas duas grafias.
 // "Marrom Mescla" é cor própria e NÃO entra no grupo do Marrom.
-const SINONIMOS_COR_BLING={offwhite:"branco",azulbebe:"azulclaro",rosabebe:"rosaclaro",rosa:"rosaclaro",marromescuro:"marrom"};
+const SINONIMOS_COR_BLING={offwhite:"branco",azulbebe:"azulclaro",rosabebe:"rosaclaro",rosa:"rosaclaro",marromescuro:"marrom",verdesalviaescuro:"verdesalvia"}; // 14/09: Verde Sálvia Escuro -> Verde Sálvia
 // Nome que a lista mostra pro grupo (ordem dele 15/08: fica "Marrom" e
 // "Azul Claro", somem "Marrom Escuro" e "Azul bebê").
-const ROTULO_COR_BLING={branco:"Branco",azulclaro:"Azul Claro",azulmarinho:"Azul Marinho",rosaclaro:"Rosa Claro",marrom:"Marrom"};
+const ROTULO_COR_BLING={branco:"Branco",azulclaro:"Azul Claro",azulmarinho:"Azul Marinho",rosaclaro:"Rosa Claro",marrom:"Marrom",verdesalvia:"Verde Sálvia"};
 function normCorBling(s){
   const n=String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
   return SINONIMOS_COR_BLING[n]||n;

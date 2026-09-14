@@ -245,6 +245,10 @@ const SINONIMOS_COR = {
   rosa: 'rosaclaro',
   marromescuro: 'marrom',
   marrom: 'marrom',
+  // 14/09 (ordem dele): "Verde Sálvia Escuro" (com/sem acento) é a mesma cor
+  // que "Verde Sálvia" — a principal é Verde Sálvia
+  verdesalviaescuro: 'verdesalvia',
+  verdesalvia: 'verdesalvia',
 };
 
 const ROTULO_COR = {
@@ -253,6 +257,7 @@ const ROTULO_COR = {
   azulmarinho: 'Azul Marinho',
   rosaclaro: 'Rosa Claro',
   marrom: 'Marrom',
+  verdesalvia: 'Verde Sálvia',
 };
 
 /** Chave de COMPARAÇÃO de cor: sem acento, sem hífen/espaço, com sinônimos. */
