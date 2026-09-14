@@ -38,6 +38,16 @@ export default async function handler(req, res) {
     });
   }
 
+  // 14/09 (Ailson): GATILHO do cache do estoque real do Full (full-estoque-sync),
+  // 1x/dia, fora do WMS. Dispara em chamada SEPARADA e nao espera — se falhar,
+  // este cron nem fica sabendo. Sem slot de cron novo (limite de 100).
+  if (ehCron) {
+    try {
+      const base = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://app-financeiro-brown.vercel.app';
+      fetch(`${base}/api/full-estoque-sync`, { signal: AbortSignal.timeout(3000) }).catch(() => {});
+    } catch { /* nunca derruba o cron hospedeiro */ }
+  }
+
   const tInicio = Date.now();
   // Janela ampliada pra 30 dias (era 14) — Ailson 19/05/2026.
   // Casos como Samanta (carrinho 23/04, compra 27/04) ficavam fora porque
