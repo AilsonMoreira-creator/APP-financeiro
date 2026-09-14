@@ -19,11 +19,16 @@ export const config = { maxDuration: 300 };
 const n = (v) => Number(v) || 0;
 const pausa = (ms) => new Promise(r => setTimeout(r, ms));
 
-function refDe(item, variacao) {
-  const sku = String(variacao?.seller_custom_field || (variacao?.attributes || []).find(a => a.id === 'SELLER_SKU')?.value_name || item?.seller_custom_field || '');
-  const m1 = /^0*(\d{3,5})/.exec(sku.replace(/\D/g, '').slice(0, 5));
-  const t = /REF\.?\s*0*(\d{3,5})/i.exec(String(item?.title || ''));
-  return String(t?.[1] || m1?.[1] || '').replace(/^0+/, '') || null;
+// 13/09: a REF vem do CADASTRO DO BLING (bling_estoque.bling_sku -> ref), que
+// e a fonte certa. O SKU do ML nao segue o padrao numerico do Bling.
+function skuDe(variacao, item) {
+  return String(variacao?.seller_custom_field || (variacao?.attributes || []).find(a => a.id === 'SELLER_SKU')?.value_name || item?.seller_custom_field || '').trim();
+}
+function refDe(item, variacao, skuParaRef) {
+  const sku = skuDe(variacao, item);
+  if (sku && skuParaRef[sku]) return skuParaRef[sku];
+  const t = /REF\.?\s*0*(\d{3,5})\b/i.exec(String(item?.title || ''));
+  return t ? String(t[1]).replace(/^0+/, '') : null;
 }
 
 export default async function handler(req, res) {
@@ -39,6 +44,13 @@ export default async function handler(req, res) {
   }
 
   const inicio = Date.now();
+  // mapa SKU (Bling) -> REF, do cadastro
+  const skuParaRef = {};
+  for (let off = 0; off < 100000; off += 1000) {
+    const { data } = await supabase.from('bling_estoque').select('ref, bling_sku').not('bling_sku', 'is', null).range(off, off + 999);
+    for (const r of (data || [])) if (r.bling_sku) skuParaRef[String(r.bling_sku).trim()] = String(r.ref).replace(/^0+/, '');
+    if (!data || data.length < 1000) break;
+  }
   const token = await getValidToken('Exitus');
   const h = { Authorization: `Bearer ${token}` };
   const me = await (await fetch('https://api.mercadolibre.com/users/me', { headers: h })).json();
@@ -63,7 +75,7 @@ export default async function handler(req, res) {
       const tam = (combo.find(a => /size|tamanho/i.test(a.id || a.name)) || {}).value_name;
       if (!cor || !tam) continue;
       variacoes++;
-      const ref = refDe(it, v);
+      const ref = refDe(it, v, skuParaRef);
       if (!ref) { semRef++; continue; }
       let arm = 0, tot = 0;
       if (v.inventory_id) {
