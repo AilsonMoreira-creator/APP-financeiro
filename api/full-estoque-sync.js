@@ -51,7 +51,8 @@ export default async function handler(req, res) {
     for (const r of (data || [])) if (r.bling_sku) skuParaRef[String(r.bling_sku).trim()] = String(r.ref).replace(/^0+/, '');
     if (!data || data.length < 1000) break;
   }
-  const token = await getValidToken('Exitus');
+  const conta = String(req.query?.conta || 'Exitus');
+  const token = await getValidToken(conta);
   const h = { Authorization: `Bearer ${token}` };
   const me = await (await fetch('https://api.mercadolibre.com/users/me', { headers: h })).json();
   // todos os anuncios Full
@@ -69,6 +70,18 @@ export default async function handler(req, res) {
     if (Date.now() - inicio > 270000) break;   // deixa 30s de folga
     const it = await (await fetch(`https://api.mercadolibre.com/items/${itemId}?include_attributes=all`, { headers: h })).json();
     const linhas = [];
+    // 14/09: anuncio SEM variacao (item unico) — inventory_id fica no proprio item
+    if (!(it.variations || []).length && it.inventory_id) {
+      variacoes++;
+      let arm = 0, tot = 0, naoDisp = '';
+      try {
+        const st = await (await fetch(`https://api.mercadolibre.com/inventories/${it.inventory_id}/stock/fulfillment`, { headers: h })).json();
+        consultas++; arm = n(st?.available_quantity); tot = n(st?.total);
+        naoDisp = (st?.not_available_detail || []).map(d => `${d.status}:${d.quantity}`).join(',');
+      } catch { /* 0 */ }
+      const ref = refDe(it, null, skuParaRef) || ('?' + String(it.seller_custom_field || '').slice(0, 30));
+      linhas.push({ anuncio: itemId, ref, cor: 'unico', tam: 'U', inventory_id: it.inventory_id, qtd_anuncio: n(it.available_quantity), qtd_armazem: arm, total_armazem: tot, nao_disponivel: naoDisp || null, status_anuncio: it.status, conta, atualizado_em: new Date().toISOString() });
+    }
     for (const v of (it.variations || [])) {
       const combo = v.attribute_combinations || [];
       const cor = (combo.find(a => /cor|color/i.test(a.id || a.name)) || {}).value_name;
@@ -90,10 +103,10 @@ export default async function handler(req, res) {
         await pausa(80);
       }
       linhas.push({ anuncio: itemId, ref, cor: chaveCor(cor), tam: String(tam).toUpperCase().trim(), inventory_id: v.inventory_id || null,
-        qtd_anuncio: n(v.available_quantity), qtd_armazem: arm, total_armazem: tot, nao_disponivel: naoDisp || null, status_anuncio: it.status, atualizado_em: new Date().toISOString() });
+        qtd_anuncio: n(v.available_quantity), qtd_armazem: arm, total_armazem: tot, nao_disponivel: naoDisp || null, status_anuncio: it.status, conta, atualizado_em: new Date().toISOString() });
     }
     if (linhas.length) { const { error } = await supabase.from('full_estoque_cache').upsert(linhas, { onConflict: 'anuncio,cor,tam' }); if (!error) gravadas += linhas.length; }
     await pausa(100);
   }
-  return res.status(200).json({ ok: true, anuncios: ids.length, variacoes, consultas_armazem: consultas, gravadas, sem_ref: semRef, segundos: Math.round((Date.now() - inicio) / 1000) });
+  return res.status(200).json({ ok: true, conta, anuncios: ids.length, variacoes, consultas_armazem: consultas, gravadas, sem_ref: semRef, segundos: Math.round((Date.now() - inicio) / 1000) });
 }
