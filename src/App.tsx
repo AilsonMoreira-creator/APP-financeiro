@@ -5056,16 +5056,20 @@ const blingDb={
 const FotoProd=({sbUrl,refProd,onZoom})=>{
   const orig=String(refProd).toUpperCase();
   const norm=orig.replace(/^0+/,'');
+  // 14/09: o "sem foto" e estado do proprio componente. Antes ele escondia o <img> e ligava o
+  // placeholder IRMAO (do pai) na mao; no re-render seguinte o componente voltava com o placeholder
+  // proprio e o irmao continuava ligado — duas caixas vazias na lista de cortes.
+  const [semFoto,setSemFoto]=useState(()=>fotoSemFoto(norm));
   const storageBase=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/`:'';
   const cb='?v='+(()=>{const d=new Date();d.setDate(d.getDate()-d.getDay());return d.toISOString().slice(0,10);})();
   if(!storageBase)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
   // Sequência: norm → orig (se diferente) → zero-padded (4 e 5 dígitos) → placeholder
   // 11/09: memoria compartilhada — REF sem foto (por dia) nao tenta de novo; REF resolvida vai direto na URL boa
-  if(fotoSemFoto(norm))return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
+  if(semFoto||fotoSemFoto(norm))return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
   const conhecida=fotoUrlConhecida(norm);
   const urls=conhecida?[]:candidatosFoto(refProd,true);
   return <img src={conhecida||(storageBase+urls[0]+cb)} onLoad={(e)=>marcarFotoOk(norm,e.target.src)}
-    onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes('/'+u+'?')||cur.endsWith('/'+u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{marcarSemFoto(norm);e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
+    onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes('/'+u+'?')||cur.endsWith('/'+u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{marcarSemFoto(norm);setSemFoto(true);}}}
     onClick={(e)=>{e.stopPropagation();onZoom&&onZoom(e.target.src);}}
     style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0,cursor:"pointer"}}/>;
 };
