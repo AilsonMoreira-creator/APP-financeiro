@@ -3732,7 +3732,8 @@ export const SugestaoScreen = ({
           </>
         )}
 
-        {clienteEfetivo && !(clienteEfetivo.telefone_principal || '').trim() && (
+        {/* 14/09: aqui a variavel e `cliente` (clienteEfetivo so existe no modal de mensagem) — quebrava a tela inteira */}
+        {(cliente || sugestao.cliente) && !((cliente || sugestao.cliente).telefone_principal || '').trim() && (
           <div style={{ background: '#eef4fb', border: '1px solid #c9dbee', borderRadius: 10, padding: '11px 13px', marginBottom: 16, fontSize: fz(13), color: '#2f6fb0', lineHeight: 1.5 }}>
             📇 <b>Esta cliente ainda não tem WhatsApp cadastrado.</b> A tarefa de hoje com ela é <b>conseguir o contato</b> — na loja, com quem a atendeu ou pelo Instagram. Assim que cadastrar (botão de editar telefone), ela entra no rodízio e você consegue mandar mensagem.
           </div>
