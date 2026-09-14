@@ -220,6 +220,11 @@ export default async function handler(req, res) {
   try { if (new Date().getUTCMinutes() < 5) await sincronizarCusto(10); } catch { /* nao derruba a leitura */ }
   const m = await coletar();
   const { nivel, motivos } = await classificar(m);
+  // 14/09 (Ailson): amarelo so vira incidente/WhatsApp se PERSISTIR em 2 leituras
+  // seguidas (10 min) — uma medicao isolada (ex.: banco lento 3,8s uma vez) nao avisa.
+  // Vermelho continua imediato. A leitura em si e gravada como amarelo (aparece na pagina).
+  const { data: leituraAnt } = await supabase.from('saude_leituras').select('nivel').order('lida_em', { ascending: false }).limit(1).maybeSingle();
+  const amareloIsolado = nivel === 'amarelo' && leituraAnt?.nivel !== 'amarelo' && leituraAnt?.nivel !== 'vermelho';
   await supabase.from('saude_leituras').insert({
     nivel, conexoes: m.conexoes, conexoes_max: m.conexoes_max, ativas: m.ativas, idle_tx: m.idle_tx,
     latencia_ms: m.latencia_ms, db_calls_5min: m.db_calls_5min, storage_calls_5min: m.storage_calls_5min,
@@ -230,6 +235,7 @@ export default async function handler(req, res) {
 
   const out = { ok: true, nivel, motivos, medidas: { conexoes: m.conexoes, max: m.conexoes_max, latencia_ms: m.latencia_ms, storage_5min: m.storage_calls_5min, db_5min: m.db_calls_5min } };
   if (nivel !== 'amarelo' && nivel !== 'vermelho') return res.status(200).json(out);
+  if (amareloIsolado) return res.status(200).json({ ...out, nota: 'amarelo em 1 leitura só — aguarda a próxima pra confirmar' });
 
   // incidente: abre um por episodio (nao repete se o ultimo do mesmo nivel tem < 2h)
   const c = await cfg();
