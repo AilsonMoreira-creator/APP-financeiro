@@ -13,7 +13,7 @@ const C = {
 };
 const ORDEM_TAM = { PP: 0, P: 1, M: 2, G: 3, GG: 4, G1: 5, G2: 6, G3: 7 };
 
-export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj, onVerCortes, reposicao }) {
+export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj, onVerCortes, reposicao, corDot }) {
   const [d, setD] = useState(null);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
@@ -133,10 +133,14 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                       return (
                         <tr key={k} style={{ background: i % 2 ? C.bege : '#fff' }}>
                           <td style={{ ...cel, fontWeight: 700, color: C.navy }}>
-                            {l.cor}
+                            {/* 14/09: bolinha da cor (mesmo mapa do ranking de cores do Bling) + selo na linha de baixo */}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                              {corDot && <span style={{ width: 11, height: 11, borderRadius: '50%', background: corDot(l.cor), border: '1px solid rgba(0,0,0,.18)', flex: '0 0 auto' }} />}
+                              {l.cor}
+                            </span>
                             {l.nova_no_full && (
-                              <span style={{ fontSize: 9, fontWeight: 800, marginLeft: 6, padding: '2px 6px', borderRadius: 999,
-                                background: '#fdf0e3', color: '#9a5b00', border: '1px solid #f0d5b5' }}>NÃO TEM NO FULL</span>
+                              <div style={{ marginTop: 3 }}><span style={{ fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 999,
+                                background: '#fdf0e3', color: '#9a5b00', border: '1px solid #f0d5b5', whiteSpace: 'nowrap' }}>NÃO TEM NO FULL</span></div>
                             )}
                           </td>
                           <td style={{ ...cel, color: C.azul, fontWeight: 700, textAlign: 'center' }}>{l.tam}</td>
@@ -145,7 +149,7 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                           {(() => { const proj = getProj ? (getProj(l.cor, l.tam) || 0) : 0;
                             return <td onClick={proj > 0 && onVerCortes ? () => onVerCortes(l.cor, l.tam) : undefined} title={proj > 0 ? 'Ver cortes que geram a reposição' : undefined}
                               style={{ ...num, fontSize: 13, color: proj > 0 ? '#1e6e42' : C.suave, fontWeight: proj > 0 ? 800 : 400, cursor: proj > 0 ? 'pointer' : 'default', textDecoration: proj > 0 ? 'underline dotted' : 'none' }}>
-                              {proj > 0 ? `+${inteiro(proj)}` : '—'}</td>; })()}
+                              {proj > 0 ? `+${inteiro(proj)}` : ''}</td>; })()}
                           <td style={{ ...num, color: baixa ? C.erro : C.navy, fontWeight: baixa ? 800 : 500 }}
                             title={`Full: ${Number(l.vendaDiaFull || 0).toFixed(2)}/dia · todos os canais: ${Number(l.vendaDia || 0).toFixed(2)}/dia · cobertura ${l.cobertura_atual === null ? '—' : Math.round(l.cobertura_atual) + ' dias'}`}>
                             {inteiro((Number(l.vendaDiaFull) || 0) * 10)}

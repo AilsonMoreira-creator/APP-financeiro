@@ -6229,7 +6229,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         const mref=matrizProjPorRef[rn]||{};
         const getProjFull=(cor,tam)=>mref[`${normCorBling(cor)}|${String(tam||'').toLowerCase().trim()}`]||0;
         return <FullEnvio refProduto={fullOpen.ref} desc={fullOpen.desc} usuario={(typeof window!=='undefined'&&localStorage.getItem('amicia_usuario'))||'equipe'} onClose={()=>setFullOpen(null)}
-          getProj={getProjFull} reposicao={mref} onVerCortes={(cor,tam)=>setProjModal({refNorm:rn,cor,tam:String(tam||'').toUpperCase().trim()})}/>;
+          getProj={getProjFull} reposicao={mref} corDot={dotColorBling} onVerCortes={(cor,tam)=>setProjModal({refNorm:rn,cor,tam:String(tam||'').toUpperCase().trim()})}/>;
       })()}
       {raioxOpen && <RaioXProduto refProduto={raioxOpen.ref} desc={raioxOpen.desc} foto={raioxOpen.foto} onClose={()=>setRaioxOpen(null)}/>}
       {mapOpen && <MapeamentoSkus refProduto={mapOpen.ref} desc={mapOpen.desc} cores={mapOpen.cores} onClose={()=>setMapOpen(null)}/>}
