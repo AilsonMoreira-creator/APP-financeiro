@@ -264,6 +264,10 @@ export default async function handler(req, res) {
       const ativaNoFull = n(l.estoqueFull) > 0;
       if (n(l.qtd_enviar) > 0 || n(l.qtd_sugerida) > 0) return true;    // recomendada
       if (coresSugKeys.has(chaveCor(l.cor))) { l.cor_sugerida = true; return true; }   // 13/09: cor que deveria estar no Full
+      // 14/09 (regra dele): cor com DEMANDA ATIVA (vende >= o mínimo de entrada por
+      // semana, todos os canais) e ZERADA no Full — ou que nunca foi pro Full — nunca
+      // fica escondida: aparece com o motivo, mesmo que a régua tenha dado 0
+      if (l.nova_no_full && (semanaPorCor[chaveCor(l.cor)] || 0) >= (n(regras.entrada_nova_cor_semana) || 12)) { l.cor_sugerida = true; return true; }
       if (ativaNoFull && l.no_ranking) return true;                     // ativa e vendendo
       ocultas.push(`${l.cor} ${l.tam}`);
       return false;

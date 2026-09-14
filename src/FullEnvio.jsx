@@ -137,7 +137,7 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                           </td>
                           <td style={{ ...cel, color: C.azul, fontWeight: 700, textAlign: 'center' }}>{l.tam}</td>
                           <td style={{ ...num, fontWeight: 800, color: C.navy, background: '#eef5fb' }}>{inteiro(l.estoqueFull)}</td>
-                          <td style={{ ...num, fontSize: 13, fontWeight: 800, color: C.navy }}>{inteiro(l.estoqueFabrica)}</td>
+                          <td style={{ ...num, fontSize: 13, fontWeight: 400, color: C.navy }}>{inteiro(l.estoqueFabrica)}</td>
                           {(() => { const proj = getProj ? (getProj(l.cor, l.tam) || 0) : 0;
                             return <td onClick={proj > 0 && onVerCortes ? () => onVerCortes(l.cor, l.tam) : undefined} title={proj > 0 ? 'Ver cortes que geram a reposição' : undefined}
                               style={{ ...num, fontSize: 13, color: proj > 0 ? '#1e6e42' : C.suave, fontWeight: proj > 0 ? 800 : 400, cursor: proj > 0 ? 'pointer' : 'default', textDecoration: proj > 0 ? 'underline dotted' : 'none' }}>

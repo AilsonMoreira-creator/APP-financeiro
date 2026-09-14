@@ -11,7 +11,7 @@
  *   teto     = 25% do estoque do SKU · 50% se há corte chegando em ≤5 dias E o
  *              que sobra cobre a loja até o corte chegar
  *   piso     = 3 peças (abaixo disso não envia)
- *   arredonda: 4 e 6 → 5 · 8 e 9 → 10 · 7 fica 7 · acima de 10, múltiplos de 5
+ *   arredonda (14/09): final 1/2/6 desce, 3/4/7/8/9 sobe, múltiplos de 5
  */
 import { supabase } from './_bling-helpers.js';
 
@@ -19,18 +19,18 @@ const n = (v) => Number(v) || 0;
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
 export function arredondar(q, ehBasica = false) {
-  // 18/08 (ordem dele): preto e bege sempre em múltiplo de 5
-  if (ehBasica) {
-    if (q <= 0) return 0;
-    if (q < 3) return 0;
-    return Math.max(5, Math.round(q / 5) * 5);
-  }
-  if (q <= 0) return 0;
-  if (q < 3) return 0;                    // piso: menos de 3 não vai
-  if (q === 4 || q === 6) return 5;
-  if (q === 8 || q === 9) return 10;
-  if (q <= 10) return q;                  // 3, 5, 7 e 10 ficam como estão
-  return Math.round(q / 5) * 5;           // acima de 10, múltiplos de 5
+  // 14/09 (regra dele, substitui a de 18/08): 6 vira 5 · 7 vira 10 · final 1
+  // arredonda pra baixo (41 → 40). Regra geral pelo último algarismo:
+  // 1, 2 e 6 descem pro múltiplo de 5 anterior · 3, 4, 7, 8 e 9 sobem pro
+  // próximo · 0 e 5 ficam. Piso de 3 continua (menos de 3 não vai);
+  // 3 fica 3 (preto e bege, sempre múltiplo de 5: 3 e 4 viram 5).
+  q = Math.round(Number(q) || 0);
+  if (q < 3) return 0;
+  if (q === 3) return ehBasica ? 5 : 3;
+  const d = q % 10;
+  if (d === 0 || d === 5) return q;
+  if (d === 1 || d === 2 || d === 6) return Math.floor(q / 5) * 5;
+  return Math.ceil(q / 5) * 5;
 }
 
 export async function lerRegras() {
@@ -148,7 +148,7 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   if (qtd_sugerida > 0 && qtd_sugerida < piso10) {
     const alvo = Math.min(piso10, teto);
     if (alvo > qtd_sugerida) {
-      qtd_sugerida = Math.max(alvo, arredondar(alvo, ehBasica));
+      qtd_sugerida = Math.max(qtd_sugerida, arredondar(alvo, ehBasica));   // 14/09: o arredondamento vale também depois do piso (41 → 40, 6 → 5)
       motivos.push(`subiu pra cobrir os próximos 10 dias (${piso10} pç)`);
     }
   }
