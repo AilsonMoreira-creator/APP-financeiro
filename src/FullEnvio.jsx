@@ -80,7 +80,7 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
           <div style={{ fontSize: 15, fontWeight: 700, color: C.navy }}>{desc || ''}</div>
           <div style={{ fontSize: 11.5, color: C.suave, marginTop: 3 }}>
             {carregando ? 'calculando…'
-              : `cobertura de ${d?.regras?.cobertura ?? 14} dias (${d?.regras?.basicas ?? 20} nas básicas) + ${d?.regras?.transito ?? 5} de trânsito · Proj. 10 dias = quantas peças o FULL deve vender desta REF nos próximos 10 dias`}
+              : `cobertura de ${d?.regras?.cobertura ?? 14} dias (${d?.regras?.basicas ?? 20} nas básicas) + ${d?.regras?.transito ?? 5} de trânsito · Proj. 10 dias = venda do Full nos próximos 10 dias (cor nova ou Full com menos de 3 peças usa todos os canais)`}
           </div>
         </div>
 
@@ -151,8 +151,8 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                               style={{ ...num, fontSize: 13, color: proj > 0 ? '#1e6e42' : C.suave, fontWeight: proj > 0 ? 800 : 400, cursor: proj > 0 ? 'pointer' : 'default', textDecoration: proj > 0 ? 'underline dotted' : 'none' }}>
                               {proj > 0 ? `+${inteiro(proj)}` : ''}</td>; })()}
                           <td style={{ ...num, color: baixa ? C.erro : C.navy, fontWeight: baixa ? 800 : 500 }}
-                            title={`Full: ${Number(l.vendaDiaFull || 0).toFixed(2)}/dia · todos os canais: ${Number(l.vendaDia || 0).toFixed(2)}/dia · cobertura ${l.cobertura_atual === null ? '—' : Math.round(l.cobertura_atual) + ' dias'}`}>
-                            {inteiro((Number(l.vendaDiaFull) || 0) * 10)}
+                            title={`base: ${l.demanda_base === 'full' ? 'venda do Full' : 'todos os canais (Full com menos de 3 peças ou cor nova)'} · Full: ${Number(l.vendaDiaFull || 0).toFixed(2)}/dia · todos os canais: ${Number(l.vendaDia || 0).toFixed(2)}/dia · cobertura ${l.cobertura_atual === null ? '—' : Math.round(l.cobertura_atual) + ' dias'}`}>
+                            {inteiro((Number(l.demandaDia != null ? l.demandaDia : (l.demanda_base ? 0 : l.vendaDia)) || 0) * 10)}
                           </td>
                           <td style={{ ...num, color: C.suave }}>{l.qtd_ideal ? inteiro(l.qtd_ideal) : '—'}</td>
                           <td style={{ ...num }}>{l.qtd_possivel ? inteiro(l.qtd_possivel) : '—'}</td>

@@ -137,8 +137,16 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
     };
   }
 
+  // 14/09 (regra dele): cor que JÁ ESTÁ no Full com 3+ peças no tamanho usa a
+  // venda DO FULL como demanda — é o que diz quanto precisa ir pra lá. Com menos
+  // de 3 peças (ou sem histórico do Full) a venda do Full é baixa porque não tem
+  // peça, então usa a demanda global (todos os canais).
+  const usaFull = jaNoFull && !novaNoFull && estoqueFull >= 3 && vendaDiaFull != null;
+  const demanda = usaFull ? vendaDiaFull : vendaDia;
+  if (usaFull) motivos.push('demanda = venda do Full'); else motivos.push('demanda = todos os canais');
+
   // ── ideal ──
-  const necessario = vendaDia * alvoDias * fator;
+  const necessario = demanda * alvoDias * fator;
   const idealBruto = Math.max(0, necessario - estoqueFull - emTransito);
   const qtd_ideal = Math.ceil(idealBruto);
 
@@ -148,7 +156,7 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   if (temCorteProximo) {
     // só sobe pra 50% se o que sobrar cobrir a loja até o corte chegar
     const sobraCom50 = estoqueFabrica * 0.5;
-    const precisaAteCorte = vendaDia * diasAteCorte;
+    const precisaAteCorte = demanda * diasAteCorte;
     if (sobraCom50 >= precisaAteCorte) {
       tetoPct = n(regras.teto_com_corte_pct) || 50;
       motivos.push(`corte de ${corteChegando} chega em ${diasAteCorte}d — pode enviar até ${tetoPct}%`);
@@ -164,7 +172,7 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   // fabrica (teto) permitir.
   // 14/09 (regra dele): a projeção de 10 dias olha SÓ a venda do Full desta REF —
   // é o que diz quanto precisa ir pra lá. Sem histórico do Full, usa a venda geral.
-  const piso10 = Math.ceil((vendaDiaFull != null ? vendaDiaFull : vendaDia) * 10);
+  const piso10 = Math.ceil(demanda * 10);
   if (qtd_sugerida > 0 && qtd_sugerida < piso10) {
     const alvo = Math.min(piso10, teto);
     if (alvo > qtd_sugerida) {
@@ -174,13 +182,13 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   }
 
   // ── motivo em uma frase ──
-  const coberturaAtual = vendaDia > 0 ? +(estoqueFull / vendaDia).toFixed(1) : null;
+  const coberturaAtual = demanda > 0 ? +(estoqueFull / demanda).toFixed(1) : null;
   if (qtd_ideal > qtd_possivel && qtd_possivel > 0) {
     motivos.unshift(`limitado pelo estoque: ideal ${qtd_ideal}, teto ${tetoPct}% da fábrica`);
   } else if (qtd_sugerida === 0 && qtd_ideal > 0) {
     motivos.unshift(qtd_possivel < 3 ? 'daria menos de 3 peças — não compensa enviar' : 'sem estoque na fábrica');
   } else if (qtd_sugerida > 0) {
-    motivos.unshift(`cobre ${(alvoDias)}d vendendo ${vendaDia.toFixed(1)}/dia`);
+    motivos.unshift(`cobre ${(alvoDias)}d vendendo ${demanda.toFixed(1)}/dia`);
   } else {
     motivos.unshift(`já tem ${coberturaAtual ?? '—'} dias no Full`);
   }
@@ -189,6 +197,7 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
 
   return {
     cor, tam, vendaDia: +vendaDia.toFixed(2), estoqueFull, estoqueFabrica, emTransito, reposicao,
+    demandaDia: +demanda.toFixed(2), demanda_base: usaFull ? 'full' : 'geral',
     cobertura_atual: coberturaAtual, alvo_dias: alvoDias, fator_sazonal: +fator.toFixed(2),
     qtd_ideal, qtd_possivel, qtd_sugerida,
     motivo: motivos.join(' · '),
