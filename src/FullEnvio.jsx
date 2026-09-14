@@ -132,7 +132,7 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                       const baixa = l.cobertura_atual !== null && l.cobertura_atual < 7;
                       return (
                         <tr key={k} style={{ background: i % 2 ? C.bege : '#fff' }}>
-                          <td style={{ ...cel, fontWeight: 700, color: C.navy }}>
+                          <td style={{ ...cel, fontSize: 11.5, fontWeight: 700, color: C.navy, textAlign: 'left', paddingLeft: 12 }}>
                             {/* 14/09: bolinha da cor (mesmo mapa do ranking de cores do Bling) + selo na linha de baixo */}
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
                               {corDot && <span style={{ width: 11, height: 11, borderRadius: '50%', background: corDot(l.cor), border: '1px solid rgba(0,0,0,.18)', flex: '0 0 auto' }} />}
@@ -143,8 +143,8 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                                 background: '#fdf0e3', color: '#9a5b00', border: '1px solid #f0d5b5', whiteSpace: 'nowrap' }}>NÃO TEM NO FULL</span></div>
                             )}
                           </td>
-                          <td style={{ ...cel, color: C.azul, fontWeight: 700, textAlign: 'center' }}>{l.tam}</td>
-                          <td style={{ ...num, fontWeight: 800, color: C.navy, background: '#eef5fb' }}>{inteiro(l.estoqueFull)}</td>
+                          <td style={{ ...cel, fontSize: 11.5, color: C.azul, fontWeight: 700, textAlign: 'center' }}>{l.tam}</td>
+                          <td style={{ ...num, fontSize: 13.5, fontWeight: 800, color: C.navy, background: '#eef5fb' }}>{inteiro(l.estoqueFull)}</td>
                           <td style={{ ...num, fontSize: 13, fontWeight: 400, color: C.navy }}>{inteiro(l.estoqueFabrica)}</td>
                           {(() => { const proj = getProj ? (getProj(l.cor, l.tam) || 0) : 0;
                             return <td onClick={proj > 0 && onVerCortes ? () => onVerCortes(l.cor, l.tam) : undefined} title={proj > 0 ? 'Ver cortes que geram a reposição' : undefined}
@@ -154,8 +154,8 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                             title={`base: ${l.demanda_base === 'full' ? 'venda do Full' : 'todos os canais (Full com menos de 3 peças ou cor nova)'} · Full: ${Number(l.vendaDiaFull || 0).toFixed(2)}/dia · todos os canais: ${Number(l.vendaDia || 0).toFixed(2)}/dia · cobertura ${l.cobertura_atual === null ? '—' : Math.round(l.cobertura_atual) + ' dias'}`}>
                             {inteiro((Number(l.demandaDia != null ? l.demandaDia : (l.demanda_base ? 0 : l.vendaDia)) || 0) * 10)}
                           </td>
-                          <td style={{ ...num, color: C.suave }}>{l.qtd_ideal ? inteiro(l.qtd_ideal) : '—'}</td>
-                          <td style={{ ...num }}>{l.qtd_possivel ? inteiro(l.qtd_possivel) : '—'}</td>
+                          <td style={{ ...num, color: C.suave }}>{l.qtd_ideal ? inteiro(l.qtd_ideal) : ''}</td>
+                          <td style={{ ...num }}>{l.qtd_possivel ? inteiro(l.qtd_possivel) : ''}</td>
                           <td style={{ ...cel, textAlign: 'center' }}>
                             <input type="number" min="0" value={edit[k] ?? 0}
                               onChange={ev => setEdit(s => ({ ...s, [k]: ev.target.value }))}

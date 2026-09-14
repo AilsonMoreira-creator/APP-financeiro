@@ -234,9 +234,10 @@ export default async function handler(req, res) {
     // (4) cor fora do Full (armazem zerado) ou sub-estocada (soma < 5 pecas ou
     //     mais da metade dos tamanhos zerados). Botao preenche 5 por tamanho.
     let cores_sugeridas = [];
+    let topKeys = new Set();   // 14/09: também decide o que fica visível na tabela
     try {
       const { data: top } = await supabase.from('vw_ranking_cores_catalogo').select('cor_key, cor, vendas_30d, rank_global').lte('rank_global', 20);
-      const topKeys = new Set((top || []).map(t => chaveCor(t.cor)));
+      topKeys = new Set((top || []).map(t => chaveCor(t.cor)));
       const v15 = await vendaPorSku(ref, 15);
       const vendasCor15 = {};
       for (const [k, q] of Object.entries(v15)) { const c = k.split('|')[0]; vendasCor15[c] = (vendasCor15[c] || 0) + n(q); }
@@ -269,9 +270,25 @@ export default async function handler(req, res) {
     //   fica: cor ATIVA no Full (com quantidade) que esteja no ranking de
     //         cores, e cor FORA do Full que a régua recomenda enviar
     //   sai:  cor parada no Full que nem aparece no ranking de vendas
+    // 14/09 (regra dele): a decisão de mostrar é POR COR, com todos os tamanhos:
+    //   · cor que tem estoque no Full em qualquer tamanho → todos os tamanhos aparecem
+    //     (Amarelo GG e Branco P zerados não podem sumir; Azul Serenity aparece zerado)
+    //   · cor do TOP 20 do ranking do Bling com alguma sugestão → todos os tamanhos
+    //   · some só a cor zerada no Full em todos os tamanhos e que a régua não sugere
+    const fullPorCor = {}, sugPorCor = {};
+    for (const l of linhas) {
+      const c = chaveCor(l.cor);
+      fullPorCor[c] = (fullPorCor[c] || 0) + n(l.estoqueFull);
+      sugPorCor[c] = (sugPorCor[c] || 0) + n(l.qtd_enviar) + n(l.qtd_sugerida);
+    }
+    const minEntradaSem = n(regras.entrada_nova_cor_semana) || 12;
     const ocultas = [];
     const visiveis = linhas.filter(l => {
       const ativaNoFull = n(l.estoqueFull) > 0;
+      const corK = chaveCor(l.cor);
+      const corTemSugestao = sugPorCor[corK] > 0 || coresSugKeys.has(corK) || (semanaPorCor[corK] || 0) >= minEntradaSem;
+      if (fullPorCor[corK] > 0) return true;                                // cor presente no Full: grade inteira
+      if (topKeys.has(corK) && corTemSugestao) return true;               // top 20 com sugestão: grade inteira
       if (n(l.qtd_enviar) > 0 || n(l.qtd_sugerida) > 0) return true;    // recomendada
       if (coresSugKeys.has(chaveCor(l.cor))) { l.cor_sugerida = true; return true; }   // 13/09: cor que deveria estar no Full
       // 14/09 (regra dele): cor com DEMANDA ATIVA (vende >= o mínimo de entrada por
