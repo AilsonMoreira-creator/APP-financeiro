@@ -58,7 +58,7 @@ export default async function handler(req, res) {
   const ids = [];
   let offset = 0;
   while (true) {
-    const b = await (await fetch(`https://api.mercadolibre.com/users/${me.id}/items/search?logistic_type=fulfillment&status=active&limit=50&offset=${offset}`, { headers: h })).json();
+    const b = await (await fetch(`https://api.mercadolibre.com/users/${me.id}/items/search?logistic_type=fulfillment&limit=50&offset=${offset}`, { headers: h })).json();
     ids.push(...(b?.results || []));
     if (!b?.results?.length || ids.length >= n(b?.paging?.total)) break;
     offset += 50;
@@ -75,19 +75,22 @@ export default async function handler(req, res) {
       const tam = (combo.find(a => /size|tamanho/i.test(a.id || a.name)) || {}).value_name;
       if (!cor || !tam) continue;
       variacoes++;
-      const ref = refDe(it, v, skuParaRef);
-      if (!ref) { semRef++; continue; }
-      let arm = 0, tot = 0;
+      // 14/09: variacao sem REF no cadastro entra com ref '?' + sku do ML, pra
+      // a conta fechar e ele ver quais SKUs faltam mapear
+      let ref = refDe(it, v, skuParaRef);
+      if (!ref) { semRef++; ref = '?' + skuDe(v, it).slice(0, 30); }
+      let arm = 0, tot = 0, naoDisp = '';
       if (v.inventory_id) {
         try {
           const st = await (await fetch(`https://api.mercadolibre.com/inventories/${v.inventory_id}/stock/fulfillment`, { headers: h })).json();
           consultas++;
           arm = n(st?.available_quantity); tot = n(st?.total);
+          naoDisp = (st?.not_available_detail || []).map(d => `${d.status}:${d.quantity}`).join(',');
         } catch { /* fica 0 */ }
         await pausa(80);
       }
       linhas.push({ anuncio: itemId, ref, cor: chaveCor(cor), tam: String(tam).toUpperCase().trim(), inventory_id: v.inventory_id || null,
-        qtd_anuncio: n(v.available_quantity), qtd_armazem: arm, total_armazem: tot, atualizado_em: new Date().toISOString() });
+        qtd_anuncio: n(v.available_quantity), qtd_armazem: arm, total_armazem: tot, nao_disponivel: naoDisp || null, status_anuncio: it.status, atualizado_em: new Date().toISOString() });
     }
     if (linhas.length) { const { error } = await supabase.from('full_estoque_cache').upsert(linhas, { onConflict: 'anuncio,cor,tam' }); if (!error) gravadas += linhas.length; }
     await pausa(100);
