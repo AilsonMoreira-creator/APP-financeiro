@@ -217,6 +217,44 @@ export default async function handler(req, res) {
       }
     }
 
+    // ── 13/09 (regras dele): CORES QUE DEVERIAM ESTAR NO FULL ─────────────
+    // (1) cor entre as TOP 20 do ranking de cores do Bling (30d, todos os canais);
+    // (2) >= 20 vendas da cor NESTA REF nos ultimos 15 dias, todos os canais;
+    // (3) fabrica com >= 5 pecas em TODOS os tamanhos da grade da cor;
+    // (4) cor fora do Full (armazem zerado) ou sub-estocada (soma < 5 pecas ou
+    //     mais da metade dos tamanhos zerados). Botao preenche 5 por tamanho.
+    let cores_sugeridas = [];
+    try {
+      const { data: top } = await supabase.from('vw_ranking_cores_catalogo').select('cor_key, cor, vendas_30d, rank_global').lte('rank_global', 20);
+      const topKeys = new Set((top || []).map(t => chaveCor(t.cor)));
+      const v15 = await vendaPorSku(ref, 15);
+      const vendasCor15 = {};
+      for (const [k, q] of Object.entries(v15)) { const c = k.split('|')[0]; vendasCor15[c] = (vendasCor15[c] || 0) + n(q); }
+      const porCor = {};
+      for (const e of (estoque || [])) {
+        const c = chaveCor(e.cor_label || e.cor_norm); const t = String(e.tam || '').toUpperCase().trim();
+        if (!c || !t) continue;
+        porCor[c] = porCor[c] || { cor: e.cor_label || e.cor_norm, tams: {} };
+        porCor[c].tams[t] = { fabrica: n(e.qtd), full: n(fullPorSku[`${c}|${t}`]?.qtd) };
+      }
+      for (const [c, info] of Object.entries(porCor)) {
+        if (!topKeys.has(c)) continue;
+        const vendas = vendasCor15[c] || 0;
+        if (vendas < 20) continue;
+        const tams = Object.entries(info.tams);
+        if (!tams.length || tams.some(([, x]) => x.fabrica < 5)) continue;
+        const somaFull = tams.reduce((s, [, x]) => s + x.full, 0);
+        const zerados = tams.filter(([, x]) => x.full === 0).length;
+        const fora = somaFull === 0, sub = !fora && (somaFull < 5 || zerados > tams.length / 2);
+        if (!fora && !sub) continue;
+        cores_sugeridas.push({ cor: info.cor, cor_key: c, vendas_15d: vendas, situacao: fora ? 'fora do Full' : 'sub-estocada no Full',
+          full_total: somaFull, tamanhos: tams.map(([t, x]) => ({ tam: t, fabrica: x.fabrica, full: x.full, enviar: 5 })), total_enviar: tams.length * 5 });
+      }
+      cores_sugeridas.sort((a, b) => b.vendas_15d - a.vendas_15d);
+    } catch (e) { cores_sugeridas = []; }
+
+    const coresSugKeys = new Set(cores_sugeridas.map(c => c.cor_key));
+
     // ── o que aparece na tela (ordem dele 18/08) ──
     //   fica: cor ATIVA no Full (com quantidade) que esteja no ranking de
     //         cores, e cor FORA do Full que a régua recomenda enviar
@@ -225,6 +263,7 @@ export default async function handler(req, res) {
     const visiveis = linhas.filter(l => {
       const ativaNoFull = n(l.estoqueFull) > 0;
       if (n(l.qtd_enviar) > 0 || n(l.qtd_sugerida) > 0) return true;    // recomendada
+      if (coresSugKeys.has(chaveCor(l.cor))) { l.cor_sugerida = true; return true; }   // 13/09: cor que deveria estar no Full
       if (ativaNoFull && l.no_ranking) return true;                     // ativa e vendendo
       ocultas.push(`${l.cor} ${l.tam}`);
       return false;
@@ -237,6 +276,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ref: refNorm(ref),
+      cores_sugeridas,
       regras: { cobertura: n(regras.cobertura_dias), basicas: n(regras.cobertura_basicas), transito: n(regras.transito_dias) },
       total_sugerido: linhas.reduce((s, l) => s + n(l.qtd_enviar), 0),
       novas_no_full: linhas.filter(l => l.nova_no_full && n(l.qtd_enviar) > 0).length,

@@ -91,6 +91,25 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                   Esta referência já está confirmada para a semana — as quantidades abaixo são as que você definiu.
                 </div>
               )}
+              {Array.isArray(d.cores_sugeridas) && d.cores_sugeridas.length > 0 && (
+                <div style={{ margin: '0 0 14px', padding: '12px 14px', borderRadius: 12, background: '#eef8f0', border: '1px solid #bfe0c8' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#1e6e42', marginBottom: 2 }}>🎯 Cores que deveriam estar no Full</div>
+                  <div style={{ fontSize: 11, color: '#4f7a5c', marginBottom: 8 }}>top 20 do ranking · 20+ vendas na REF em 15 dias · fábrica com 5+ em todos os tamanhos · fora do Full ou sub-estocada</div>
+                  {d.cores_sugeridas.map(c => (
+                    <div key={c.cor_key} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 0', borderTop: '1px solid #d8ecdd' }}>
+                      <div style={{ minWidth: 120 }}><b style={{ color: C.navy, fontSize: 14 }}>{c.cor}</b><div style={{ fontSize: 11, color: c.situacao === 'fora do Full' ? '#c0392b' : '#b3541e' }}>{c.situacao}{c.full_total ? ` (${c.full_total} pç)` : ''}</div></div>
+                      <div style={{ fontSize: 12, color: C.suave }}>{c.vendas_15d} vendas em 15 dias</div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {c.tamanhos.map(t => <span key={t.tam} style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, background: '#fff', border: '1px solid #cfe3d5', color: C.navy }}><b>{t.tam}</b> fáb {t.fabrica}{t.full ? ` · full ${t.full}` : ''}</span>)}
+                      </div>
+                      <button onClick={() => { setEdit(s => { const e = { ...s }; for (const t of c.tamanhos) e[`${c.cor}|${t.tam}`] = t.enviar; return e; }); }}
+                        style={{ marginLeft: 'auto', padding: '7px 12px', borderRadius: 8, border: 'none', background: '#1e6e42', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
+                        Enviar {c.total_enviar} ({c.tamanhos.map(t => t.enviar).join('/')})
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div>{/* 13/09: sem overflow aqui — senao o cabecalho "sticky" nao gruda no scroll do modal */}
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
