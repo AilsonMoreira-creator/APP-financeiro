@@ -80,7 +80,7 @@ export default async function handler(req, res) {
         naoDisp = (st?.not_available_detail || []).map(d => `${d.status}:${d.quantity}`).join(',');
       } catch { /* 0 */ }
       const ref = refDe(it, null, skuParaRef) || ('?' + String(it.seller_custom_field || '').slice(0, 30));
-      linhas.push({ anuncio: itemId, ref, cor: 'unico', tam: 'U', inventory_id: it.inventory_id, qtd_anuncio: n(it.available_quantity), qtd_armazem: arm, total_armazem: tot, nao_disponivel: naoDisp || null, status_anuncio: it.status, conta, atualizado_em: new Date().toISOString() });
+      linhas.push({ anuncio: itemId, variation_id: 'item', cor_original: null, ref, cor: 'unico', tam: 'U', inventory_id: it.inventory_id, qtd_anuncio: n(it.available_quantity), qtd_armazem: arm, total_armazem: tot, nao_disponivel: naoDisp || null, status_anuncio: it.status, conta, atualizado_em: new Date().toISOString() });
     }
     for (const v of (it.variations || [])) {
       const combo = v.attribute_combinations || [];
@@ -102,10 +102,10 @@ export default async function handler(req, res) {
         } catch { /* fica 0 */ }
         await pausa(80);
       }
-      linhas.push({ anuncio: itemId, ref, cor: chaveCor(cor), tam: String(tam).toUpperCase().trim(), inventory_id: v.inventory_id || null,
+      linhas.push({ anuncio: itemId, variation_id: String(v.id), cor_original: cor, ref, cor: chaveCor(cor), tam: String(tam).toUpperCase().trim(), inventory_id: v.inventory_id || null,
         qtd_anuncio: n(v.available_quantity), qtd_armazem: arm, total_armazem: tot, nao_disponivel: naoDisp || null, status_anuncio: it.status, conta, atualizado_em: new Date().toISOString() });
     }
-    if (linhas.length) { const { error } = await supabase.from('full_estoque_cache').upsert(linhas, { onConflict: 'anuncio,cor,tam' }); if (!error) gravadas += linhas.length; }
+    if (linhas.length) { const { error } = await supabase.from('full_estoque_cache').upsert(linhas, { onConflict: 'anuncio,variation_id' }); if (!error) gravadas += linhas.length; }
     await pausa(100);
   }
   return res.status(200).json({ ok: true, conta, anuncios: ids.length, variacoes, consultas_armazem: consultas, gravadas, sem_ref: semRef, segundos: Math.round((Date.now() - inicio) / 1000) });
