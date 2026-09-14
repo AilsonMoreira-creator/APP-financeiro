@@ -43,7 +43,7 @@ export default async function handler(req, res) {
   // este cron nem fica sabendo. Sem slot de cron novo (limite de 100).
   if (ehCron) {
     try {
-      const base = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://app-financeiro-brown.vercel.app';
+      const base = 'https://app-financeiro-brown.vercel.app';   // dominio publico (a URL interna do deploy pode exigir login)
       fetch(`${base}/api/full-estoque-sync`, { signal: AbortSignal.timeout(3000) }).catch(() => {});
     } catch { /* nunca derruba o cron hospedeiro */ }
   }
