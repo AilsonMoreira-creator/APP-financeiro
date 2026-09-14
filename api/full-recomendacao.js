@@ -23,10 +23,12 @@ const refNorm = (r) => String(r || '').replace(/^0+/, '');
 const dia = (d) => new Date(d).toISOString().slice(0, 10);
 
 /** venda por cor+tamanho no período, somando TODAS as plataformas */
-async function vendaPorSku(ref, dias) {
+async function vendaPorSku(ref, dias, soFull = false) {
   const desde = dia(new Date(Date.now() - dias * 86400000));
-  const { data } = await supabase.from('bling_vendas_detalhe')
+  let q = supabase.from('bling_vendas_detalhe')
     .select('itens, data_pedido').gte('data_pedido', desde).limit(20000);
+  if (soFull) q = q.eq('canal_detalhe', 'ML Full');   // 14/09: projeção de 10 dias = só o Full
+  const { data } = await q;
   const m = {};
   for (const v of (data || [])) {
     for (const it of (v.itens || [])) {
@@ -40,8 +42,12 @@ async function vendaPorSku(ref, dias) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const ref = String(req.query?.ref || '').trim();
+  const ref = String(req.query?.ref || req.body?.ref || '').trim();
   if (!ref) return res.status(400).json({ erro: 'use ?ref=' });
+  // 14/09: a tela manda a MESMA matriz de reposição (cortes ativos) que exibe na
+  // coluna Reposição — chave "corNorm|tam" (normCorBling do front == chaveCor daqui)
+  const reposicaoFront = (req.body && typeof req.body.reposicao === 'object' && req.body.reposicao) || {};
+  const reposicaoDe = (cor, tam) => n(reposicaoFront[`${chaveCor(cor)}|${String(tam || '').toLowerCase().trim()}`]);
 
   try {
     const regras = await lerRegras();
@@ -53,7 +59,7 @@ export default async function handler(req, res) {
       .in('ref', [refNorm(ref), String(ref).padStart(5, '0')]);
 
     // 2) venda: 14 dias e os 14 anteriores (tendência)
-    const [v14, v28, v30] = await Promise.all([vendaPorSku(ref, 14), vendaPorSku(ref, 28), vendaPorSku(ref, 30)]);
+    const [v14, v28, v30, vFull14] = await Promise.all([vendaPorSku(ref, 14), vendaPorSku(ref, 28), vendaPorSku(ref, 30), vendaPorSku(ref, 14, true)]);
     // "ranking de cores" = cor que aparece nas vendas dos últimos 30 dias.
     // Cor parada no Full que nem no ranking está fica OCULTA (ordem dele 18/08).
     const noRanking = new Set();
@@ -118,7 +124,7 @@ export default async function handler(req, res) {
     if (req.query?.debug_full === '1') return res.status(200).json({ anuncios: [...itensFullDebug], full: fullPorSku });
     // 4) corte chegando (Oficinas) — quantas peças e em quantos dias
     const { data: cortes } = await supabase.from('ordens_corte')
-      .select('ref, cores, status, created_at, data_entrega')
+      .select('ref, cores, status, created_at')   // 14/09: data_entrega não existe na tabela — a consulta falhava calada
       .in('ref', [refNorm(ref), String(ref).padStart(5, '0')])
       .neq('status', 'cancelado').order('created_at', { ascending: false }).limit(6);
 
@@ -173,6 +179,9 @@ export default async function handler(req, res) {
       const linha = calcularLinha({
         cor: e.cor_label || e.cor_norm, tam: e.tam,
         vendaDia,
+        vendaDiaFull: (vFull14[k] || 0) / 14,
+        novaNoFull: !noFull || n(noFull.qtd) === 0,
+        reposicao: reposicaoDe(e.cor_label || e.cor_norm, e.tam),
         estoqueFull: n(noFull?.qtd),
         estoqueFabrica: n(e.qtd),
         emTransito: n(emTransitoPorSku[k]),
@@ -188,6 +197,7 @@ export default async function handler(req, res) {
         nova_no_full: !noFull || n(noFull.qtd) === 0,     // recomendação de cor nova
         no_ranking: noRanking.has(corK),
         ...linha, sku: e.bling_sku,
+        vendaDiaFull: +(((vFull14[k] || 0) / 14).toFixed(2)),
         tendencia_pct: Math.round(tendencia),
         ja_no_full: !!noFull,
         travado: trava ? { tipo: trava.tipo, qtd: trava.qtd, vence_em: trava.vence_em } : null,
@@ -235,20 +245,20 @@ export default async function handler(req, res) {
         const c = chaveCor(e.cor_label || e.cor_norm); const t = String(e.tam || '').toUpperCase().trim();
         if (!c || !t) continue;
         porCor[c] = porCor[c] || { cor: e.cor_label || e.cor_norm, tams: {} };
-        porCor[c].tams[t] = { fabrica: n(e.qtd), full: n(fullPorSku[`${c}|${t}`]?.qtd) };
+        porCor[c].tams[t] = { fabrica: n(e.qtd), full: n(fullPorSku[`${c}|${t}`]?.qtd), reposicao: reposicaoDe(e.cor_label || e.cor_norm, t) };
       }
       for (const [c, info] of Object.entries(porCor)) {
         if (!topKeys.has(c)) continue;
         const vendas = vendasCor15[c] || 0;
         if (vendas < 20) continue;
         const tams = Object.entries(info.tams);
-        if (!tams.length || tams.some(([, x]) => x.fabrica < 5)) continue;
+        if (!tams.length || tams.some(([, x]) => x.fabrica < 5 && !(x.reposicao > 0))) continue;   // 14/09: fábrica zerada com corte ativo conta
         const somaFull = tams.reduce((s, [, x]) => s + x.full, 0);
         const zerados = tams.filter(([, x]) => x.full === 0).length;
         const fora = somaFull === 0, sub = !fora && (somaFull < 5 || zerados > tams.length / 2);
         if (!fora && !sub) continue;
         cores_sugeridas.push({ cor: info.cor, cor_key: c, vendas_15d: vendas, situacao: fora ? 'fora do Full' : 'sub-estocada no Full',
-          full_total: somaFull, tamanhos: tams.map(([t, x]) => ({ tam: t, fabrica: x.fabrica, full: x.full, enviar: 5 })), total_enviar: tams.length * 5 });
+          full_total: somaFull, tamanhos: tams.map(([t, x]) => ({ tam: t, fabrica: x.fabrica, full: x.full, reposicao: x.reposicao, enviar: 5 })), total_enviar: tams.length * 5 });
       }
       cores_sugeridas.sort((a, b) => b.vendas_15d - a.vendas_15d);
     } catch (e) { cores_sugeridas = []; }

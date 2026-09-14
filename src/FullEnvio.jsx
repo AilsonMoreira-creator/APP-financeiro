@@ -13,7 +13,7 @@ const C = {
 };
 const ORDEM_TAM = { PP: 0, P: 1, M: 2, G: 3, GG: 4, G1: 5, G2: 6, G3: 7 };
 
-export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj, onVerCortes }) {
+export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj, onVerCortes, reposicao }) {
   const [d, setD] = useState(null);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
@@ -25,7 +25,11 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
     (async () => {
       setCarregando(true); setErro('');
       try {
-        const r = await fetch(`/api/full-recomendacao?ref=${encodeURIComponent(refProduto)}`);
+        // 14/09: manda a matriz de reposição (cortes ativos) pra régua considerar fábrica zerada com corte
+        const r = await fetch(`/api/full-recomendacao?ref=${encodeURIComponent(refProduto)}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: refProduto, reposicao: reposicao || {} }),
+        });
         const j = await r.json();
         if (!r.ok) throw new Error(j.erro || `HTTP ${r.status}`);
         if (!vivo) return;
@@ -76,7 +80,7 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
           <div style={{ fontSize: 15, fontWeight: 700, color: C.navy }}>{desc || ''}</div>
           <div style={{ fontSize: 11.5, color: C.suave, marginTop: 3 }}>
             {carregando ? 'calculando…'
-              : `cobertura de ${d?.regras?.cobertura ?? 14} dias (${d?.regras?.basicas ?? 20} nas básicas) + ${d?.regras?.transito ?? 5} de trânsito · Proj. 10 dias = quantas peças devem vender nos próximos 10 dias`}
+              : `cobertura de ${d?.regras?.cobertura ?? 14} dias (${d?.regras?.basicas ?? 20} nas básicas) + ${d?.regras?.transito ?? 5} de trânsito · Proj. 10 dias = quantas peças o FULL deve vender desta REF nos próximos 10 dias`}
           </div>
         </div>
 
@@ -94,7 +98,7 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
               {Array.isArray(d.cores_sugeridas) && d.cores_sugeridas.length > 0 && (
                 <div style={{ margin: '0 0 14px', padding: '12px 14px', borderRadius: 12, background: '#eef8f0', border: '1px solid #bfe0c8' }}>
                   <div style={{ fontSize: 13, fontWeight: 800, color: '#1e6e42', marginBottom: 2 }}>🎯 Cores que deveriam estar no Full</div>
-                  <div style={{ fontSize: 11, color: '#4f7a5c', marginBottom: 8 }}>top 20 do ranking · 20+ vendas na REF em 15 dias · fábrica com 5+ em todos os tamanhos · fora do Full ou sub-estocada</div>
+                  <div style={{ fontSize: 11, color: '#4f7a5c', marginBottom: 8 }}>top 20 do ranking · 20+ vendas na REF em 15 dias · fábrica com 5+ (ou corte ativo) em todos os tamanhos · fora do Full ou sub-estocada</div>
                   {d.cores_sugeridas.map(c => (
                     <div key={c.cor_key} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 0', borderTop: '1px solid #d8ecdd' }}>
                       <div style={{ minWidth: 120 }}><b style={{ color: C.navy, fontSize: 14 }}>{c.cor}</b><div style={{ fontSize: 11, color: c.situacao === 'fora do Full' ? '#c0392b' : '#b3541e' }}>{c.situacao}{c.full_total ? ` (${c.full_total} pç)` : ''}</div></div>
@@ -143,8 +147,8 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose, getProj,
                               style={{ ...num, fontSize: 13, color: proj > 0 ? '#1e6e42' : C.suave, fontWeight: proj > 0 ? 800 : 400, cursor: proj > 0 ? 'pointer' : 'default', textDecoration: proj > 0 ? 'underline dotted' : 'none' }}>
                               {proj > 0 ? `+${inteiro(proj)}` : '—'}</td>; })()}
                           <td style={{ ...num, color: baixa ? C.erro : C.navy, fontWeight: baixa ? 800 : 500 }}
-                            title={`venda/dia ${Number(l.vendaDia || 0).toFixed(2)} · cobertura ${l.cobertura_atual === null ? '—' : Math.round(l.cobertura_atual) + ' dias'}`}>
-                            {inteiro((Number(l.vendaDia) || 0) * 10)}
+                            title={`Full: ${Number(l.vendaDiaFull || 0).toFixed(2)}/dia · todos os canais: ${Number(l.vendaDia || 0).toFixed(2)}/dia · cobertura ${l.cobertura_atual === null ? '—' : Math.round(l.cobertura_atual) + ' dias'}`}>
+                            {inteiro((Number(l.vendaDiaFull) || 0) * 10)}
                           </td>
                           <td style={{ ...num, color: C.suave }}>{l.qtd_ideal ? inteiro(l.qtd_ideal) : '—'}</td>
                           <td style={{ ...num }}>{l.qtd_possivel ? inteiro(l.qtd_possivel) : '—'}</td>

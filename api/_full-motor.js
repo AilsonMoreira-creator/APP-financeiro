@@ -74,6 +74,9 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
     cor, tam, vendaDia, estoqueFull, estoqueFabrica,
     emTransito = 0, corteChegando = 0, diasAteCorte = 99, jaNoFull = true,
     vendaSemanaCor = null,   // venda da COR inteira (soma dos tamanhos)
+    novaNoFull = false,      // 14/09: cor nunca enviada OU zerada no armazém do Full
+    reposicao = 0,           // 14/09: peças deste SKU em cortes ativos (mesma matriz da tela)
+    vendaDiaFull = null,     // 14/09: venda/dia SÓ do Full desta REF (projeção de 10 dias)
   } = dados;
 
   // 17/08 (correção): os gatilhos de entrada no Full e de permanência fora de
@@ -106,17 +109,32 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
     motivos.push('fora de estação, mas mantém venda');
   }
 
-  // cor que ainda não está no Full precisa de venda mínima pra entrar
-  if (!jaNoFull) {
+  // cor que ainda não está no Full (ou zerada lá) precisa de venda mínima pra entrar
+  if (!jaNoFull || novaNoFull) {
     const minEntrada = n(regras.entrada_nova_cor_semana) || 12;
     if (semanaCor < minEntrada) {
       return {
-        cor, tam, vendaDia, estoqueFull, estoqueFabrica,
+        cor, tam, vendaDia, estoqueFull, estoqueFabrica, reposicao,
         cobertura_atual: null, qtd_ideal: 0, qtd_possivel: 0, qtd_sugerida: 0,
         motivo: `cor fora do Full vendendo ${semanaCor.toFixed(1)}/semana (entra com ${minEntrada})`,
       };
     }
-    motivos.push('cor nova no Full: vende bem nos outros canais');
+    // 14/09 (regra dele): cor nova no Full COMEÇA com 5 peças por tamanho.
+    // Fábrica sem as 5 mas com corte ativo (reposição) também sugere — sai quando o corte chegar.
+    const ENTRADA = n(regras.entrada_nova_cor_qtd) || 5;
+    const temFabrica = estoqueFabrica >= ENTRADA;
+    const temReposicao = reposicao > 0;
+    const qtd = (temFabrica || temReposicao) ? ENTRADA : 0;
+    const motivo = qtd === 0
+      ? `cor nova: fábrica com ${estoqueFabrica} (precisa ${ENTRADA}) e sem corte ativo`
+      : temFabrica ? `cor nova no Full: entra com ${ENTRADA} por tamanho (vende ${semanaCor.toFixed(1)}/semana)`
+      : `cor nova no Full: entra com ${ENTRADA} — fábrica com ${estoqueFabrica}, aguarda corte (+${reposicao})`;
+    return {
+      cor, tam, vendaDia: +vendaDia.toFixed(2), estoqueFull, estoqueFabrica, emTransito, reposicao,
+      cobertura_atual: null, alvo_dias: alvoDias, fator_sazonal: +fator.toFixed(2),
+      qtd_ideal: qtd, qtd_possivel: qtd, qtd_sugerida: qtd, aguarda_corte: qtd > 0 && !temFabrica,
+      motivo,
+    };
   }
 
   // ── ideal ──
@@ -144,7 +162,9 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   // 13/09 (regra dele): quando JA VAI TER ENVIO, a quantidade tem que cobrir
   // pelo menos as vendas dos proximos 10 dias — sempre que o estoque da
   // fabrica (teto) permitir.
-  const piso10 = Math.ceil(vendaDia * 10);
+  // 14/09 (regra dele): a projeção de 10 dias olha SÓ a venda do Full desta REF —
+  // é o que diz quanto precisa ir pra lá. Sem histórico do Full, usa a venda geral.
+  const piso10 = Math.ceil((vendaDiaFull != null ? vendaDiaFull : vendaDia) * 10);
   if (qtd_sugerida > 0 && qtd_sugerida < piso10) {
     const alvo = Math.min(piso10, teto);
     if (alvo > qtd_sugerida) {
@@ -168,7 +188,7 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   if (ehBasica) motivos.push('cor básica: cobertura de 20 dias');
 
   return {
-    cor, tam, vendaDia: +vendaDia.toFixed(2), estoqueFull, estoqueFabrica, emTransito,
+    cor, tam, vendaDia: +vendaDia.toFixed(2), estoqueFull, estoqueFabrica, emTransito, reposicao,
     cobertura_atual: coberturaAtual, alvo_dias: alvoDias, fator_sazonal: +fator.toFixed(2),
     qtd_ideal, qtd_possivel, qtd_sugerida,
     motivo: motivos.join(' · '),
