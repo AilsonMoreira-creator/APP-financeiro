@@ -40,7 +40,7 @@ function FotoRef({ refProd, size = 54 }) {
       style={{ width: size, height: Math.round(size * 1.27), borderRadius: 6, objectFit: 'cover', border: '1px solid #e8e2da', flexShrink: 0, background: '#f4f0ea' }}
       onError={(e) => {
         const cur = e.target.src;
-        const idx = urls.findIndex(u => cur.includes(u));
+        const idx = urls.findIndex(u => cur.includes('/' + u));
         if (idx >= 0 && idx < urls.length - 1) e.target.src = base + urls[idx + 1] + cb;
         else { e.target.style.display = 'none'; }
       }} />

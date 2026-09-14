@@ -497,7 +497,7 @@ function FotoPassadoria({ refProd, w = 44, h = 56 }) {
       <img src={conhecida || (base + urls[0] + cb)} onLoad={(e) => marcarFotoOk(norm, e.target.src)} alt={`REF ${refProd}`}
         onError={(e) => {
           const cur = e.target.src;
-          const idx = urls.findIndex(u => cur.includes(u));
+          const idx = urls.findIndex(u => cur.includes('/' + u));
           if (idx >= 0 && idx < urls.length - 1) e.target.src = base + urls[idx + 1] + cb;
           else { marcarSemFoto(norm); e.target.style.display = 'none'; const n = e.target.nextSibling; if (n) n.style.display = 'flex'; }
         }}

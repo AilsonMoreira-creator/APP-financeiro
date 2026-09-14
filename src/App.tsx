@@ -5065,7 +5065,7 @@ const FotoProd=({sbUrl,refProd,onZoom})=>{
   const conhecida=fotoUrlConhecida(norm);
   const urls=conhecida?[]:candidatosFoto(refProd,true);
   return <img src={conhecida||(storageBase+urls[0]+cb)} onLoad={(e)=>marcarFotoOk(norm,e.target.src)}
-    onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u+'?')||cur.endsWith(u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{marcarSemFoto(norm);e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
+    onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes('/'+u+'?')||cur.endsWith('/'+u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{marcarSemFoto(norm);e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
     onClick={(e)=>{e.stopPropagation();onZoom&&onZoom(e.target.src);}}
     style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0,cursor:"pointer"}}/>;
 };
@@ -5081,7 +5081,7 @@ const FotoProdLarge=({sbUrl,refProd,onZoom})=>{
   if(!conhecida&&!urls.length)return(<div style={{width:"100%",aspectRatio:"3/4",background:"linear-gradient(135deg,#f0ebe3,#e8e2da)",display:"flex",alignItems:"center",justifyContent:"center",color:"#c0b8b0",fontSize:10,fontFamily:"Georgia,serif",fontStyle:"italic"}}>foto ref {norm}</div>);
   return(<div style={{width:"100%",aspectRatio:"3/4",position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#f0ebe3,#e8e2da)"}}>
     <img src={conhecida||(storageBase+urls[0]+cb)} onLoad={(e)=>marcarFotoOk(norm,e.target.src)}
-      onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u+'?')||cur.endsWith(u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{marcarSemFoto(norm);e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
+      onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes('/'+u+'?')||cur.endsWith('/'+u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{marcarSemFoto(norm);e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
       onClick={onZoom?(e)=>{e.stopPropagation();onZoom(e.target.src);}:undefined}
       style={{width:"100%",height:"100%",objectFit:"cover",cursor:onZoom?"pointer":"inherit",display:"block"}}/>
     <div style={{display:"none",width:"100%",height:"100%",alignItems:"center",justifyContent:"center",color:"#c0b8b0",fontSize:10,fontFamily:"Georgia,serif",fontStyle:"italic"}}>foto ref {String(refProd)}</div>
@@ -5102,7 +5102,7 @@ const FotoBlingThumb=({refProd,w=38,h=50})=>{
   const urls=conhecida?[]:candidatosFoto(refProd,false);
   return(<div style={{position:"relative",width:w,height:h}}>
     <img src={conhecida||(base+urls[0])} onLoad={(e)=>marcarFotoOk(norm,e.target.src)}
-      onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u+'?')||cur.endsWith(u));if(idx>=0&&idx<urls.length-1){e.target.src=base+urls[idx+1];}else{marcarSemFoto(norm);e.target.style.display='none';const p=e.target.nextSibling;if(p)p.style.display='flex';}}}
+      onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes('/'+u+'?')||cur.endsWith('/'+u));if(idx>=0&&idx<urls.length-1){e.target.src=base+urls[idx+1];}else{marcarSemFoto(norm);e.target.style.display='none';const p=e.target.nextSibling;if(p)p.style.display='flex';}}}
       style={{width:w,height:h,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",display:"block"}}/>
     <div style={{...phStyle,display:"none",position:"absolute",inset:0}}><span style={{fontSize:Math.round(w*0.37),opacity:0.3}}>📷</span></div>
   </div>);

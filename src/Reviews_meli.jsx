@@ -76,7 +76,7 @@ function FotoRef({ sbUrl, refProd, size = 80 }) {
       alt={`REF ${refProd}`}
       onError={(e) => {
         const cur = e.target.src;
-        const idx = urls.findIndex(u => cur.includes(u));
+        const idx = urls.findIndex(u => cur.includes('/' + u));
         if (idx >= 0 && idx < urls.length - 1) {
           e.target.src = storageBase + urls[idx + 1] + cb;
         } else {

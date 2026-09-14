@@ -1088,7 +1088,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
       e.target.src = storageBase + urls[0] + cb;
       return;
     }
-    const idx = urls.findIndex(u => cur.includes(u));
+    const idx = urls.findIndex(u => cur.includes('/' + u));
     if (idx >= 0 && idx < urls.length - 1) {
       e.target.src = storageBase + urls[idx + 1] + cb;
     } else if (sofiaUrl && e.target.dataset.sofiaFalhou !== '1') {
