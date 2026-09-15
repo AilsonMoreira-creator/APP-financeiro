@@ -74,6 +74,26 @@ export default async function handler(req, res) {
       return res.status(200).json(out);
     }
 
+    // 15/09: ?logisticas=1 — SO LEITURA: lista as logisticas e servicos cadastrados
+    // na conta (pra ver se Magalu Entregas existe e esta ativa)
+    if (req.query?.logisticas) {
+      const out = { conta };
+      const lR = await blingFetch('https://api.bling.com.br/Api/v3/logisticas?limite=100', headers);
+      const lj = typeof lR.json === 'function' ? await lR.json().catch(() => ({})) : {};
+      out.logisticas = { http: lR.status, lista: (lj?.data || []).map(l => ({ id: l.id, descricao: l.descricao, tipo: l.tipoIntegracao, situacao: l.situacao })) };
+      await new Promise(r => setTimeout(r, 400));
+      const sR = await blingFetch('https://api.bling.com.br/Api/v3/logisticas/servicos?limite=100', headers);
+      const sj = typeof sR.json === 'function' ? await sR.json().catch(() => ({})) : {};
+      out.servicos = { http: sR.status, lista: (sj?.data || []).map(x => ({ id: x.id, descricao: x.descricao, logistica: x.logistica?.id, ativo: x.ativo, aliases: x.aliases, freteItem: x.freteItem })) };
+      if (req.query?.lojas) {
+        await new Promise(r => setTimeout(r, 400));
+        const cR = await blingFetch('https://api.bling.com.br/Api/v3/canais-venda?limite=100', headers);
+        const cj = typeof cR.json === 'function' ? await cR.json().catch(() => ({})) : {};
+        out.canais = { http: cR.status, lista: (cj?.data || []).map(c => ({ id: c.id, descricao: c.descricao, tipo: c.tipo, situacao: c.situacao })) };
+      }
+      return res.status(200).json(out);
+    }
+
     // 14/09 (Magalu nunca saiu casada — relato da Sthefany): ?etiqueta_pedido=PEDIDO_ID
     // SO LEITURA: mostra o bloco transporte do pedido e o que /logisticas/etiquetas
     // devolve pra ele (link, tipo e cabecalho do arquivo). Usar so em pedido ja enviado.
