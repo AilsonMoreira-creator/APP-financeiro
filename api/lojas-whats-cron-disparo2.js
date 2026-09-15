@@ -79,12 +79,20 @@ export default async function handler(req, res) {
     }
 
     const template = (await getConfig('sofia_disparo2_template', TEMPLATE_DEFAULT)) || TEMPLATE_DEFAULT;
+    // 15/09 (Ailson): versao SEM NOME pra cliente sem primeiro nome no cadastro
+    // (antes era pulada). Config sofia_disparo2_template_sem_nome; vazia = pula como antes.
+    const templateSemNome = (await getConfig('sofia_disparo2_template_sem_nome', '')) || '';
 
     // Template precisa estar aprovado e ativo.
-    const { data: tpl } = await supabase
-      .from('lojas_whats_templates')
-      .select('name, language, status, ativo, body_text, header')
-      .eq('name', template).maybeSingle();
+    const carregarTpl = async (nomeTpl) => {
+      if (!nomeTpl) return null;
+      const { data } = await supabase
+        .from('lojas_whats_templates')
+        .select('name, language, status, ativo, body_text, header')
+        .eq('name', nomeTpl).maybeSingle();
+      return data || null;
+    };
+    const tpl = await carregarTpl(template);
     if (!tpl) return res.status(200).json({ ok: false, motivo: 'template_nao_encontrado', template });
     if (tpl.status !== 'aprovado' || !tpl.ativo) {
       return res.status(200).json({ ok: false, motivo: 'template_nao_aprovado_ou_inativo', status: tpl.status, ativo: tpl.ativo });
@@ -93,6 +101,14 @@ export default async function handler(req, res) {
     const headerImage = await resolverCriativoHeader(tpl);
     if (tpl.header?.format === 'IMAGE' && !headerImage) {
       return res.status(200).json({ ok: false, motivo: 'criativo_header_nao_encontrado', ref: tpl.header?.sample_ref });
+    }
+    // versao sem nome: so entra se estiver aprovada e ativa; senao continua pulando (comportamento antigo)
+    let tplSemNome = await carregarTpl(templateSemNome);
+    let headerImageSemNome = null;
+    if (tplSemNome && (tplSemNome.status !== 'aprovado' || !tplSemNome.ativo)) tplSemNome = null;
+    if (tplSemNome) {
+      headerImageSemNome = await resolverCriativoHeader(tplSemNome);
+      if (tplSemNome.header?.format === 'IMAGE' && !headerImageSemNome) tplSemNome = null;
     }
 
     // Alvos: CARRINHOS que receberam o 1º disparo há >24h e não responderam.
@@ -117,32 +133,36 @@ export default async function handler(req, res) {
     for (const conv of (alvos || [])) {
       if (!conv.telefone) { pulados++; detalhe.push({ id: conv.id, motivo: 'sem_telefone' }); continue; }
       const nome = primeiroNome(conv.nome_cliente);
-      if (!nome) { pulados++; detalhe.push({ id: conv.id, motivo: 'sem_nome' }); continue; }
+      if (!nome && !tplSemNome) { pulados++; detalhe.push({ id: conv.id, motivo: 'sem_nome' }); continue; }
+      const usaSemNome = !nome;
+      const tplUsado = usaSemNome ? tplSemNome : tpl;
+      const templateUsado = tplUsado.name;
+      const headerUsado = usaSemNome ? headerImageSemNome : headerImage;
 
       try {
-        const opts = headerImage ? { headerImage } : {};
+        const opts = headerUsado ? { headerImage: headerUsado } : {};
         // 26/08 (carrinhos presos desde 19/08): o tpl.variables NUNCA veio —
         // a coluna nao estava no select e o fallback de 2 variaveis fazia a
         // Meta rejeitar TODO envio do balone ({{1}} apenas) com o erro 132000.
         // Agora o numero sai do PROPRIO texto do template: a fonte da verdade.
-        const nVars = Math.max(1, ...((tpl.body_text || '').match(/\{\{(\d+)\}\}/g) || ['{{1}}']).map(x => parseInt(x.replace(/\D/g, ''), 10)));
-        const vars = [nome, saud].slice(0, nVars);
-        const r = await enviarTemplate(conv.telefone, template, vars, tpl.language || 'pt_BR', opts);
+        const nVars = Math.max(0, ...((tplUsado.body_text || '').match(/\{\{(\d+)\}\}/g) || []).map(x => parseInt(x.replace(/\D/g, ''), 10)));
+        const vars = (usaSemNome ? [saud] : [nome, saud]).slice(0, nVars);
+        const r = await enviarTemplate(conv.telefone, templateUsado, vars, tplUsado.language || 'pt_BR', opts);
         const metaMsgId = r?.messages?.[0]?.id || null;
         if (!metaMsgId) throw new Error('meta_sem_message_id');
 
         const agora = new Date().toISOString();
         await supabase.from('lojas_whats_mensagens').insert({
           conversa_id: conv.id, direcao: 'saida', autor: 'assistente', enviada_modo: 'aprovada', enviada_login: null,
-          tipo_midia: headerImage ? 'image' : 'template',
-          template_name: template,
+          tipo_midia: headerUsado ? 'image' : 'template',
+          template_name: templateUsado,
           texto: renderBody(tpl.body_text, nome, saud),
           midia_url: headerImage || null,
           template_vars: Object.fromEntries(vars.map((v, i) => [String(i + 1), v])),
           meta_message_id: metaMsgId, status: 'enviando', enviada_em: agora,
         });
         await supabase.from('lojas_whats_conversas').update({
-          disparo2_em: agora, disparo2_template: template,
+          disparo2_em: agora, disparo2_template: templateUsado,
           ultima_msg_direcao: 'saida', ultima_atividade_em: agora, responder_em: null,
         }).eq('id', conv.id);
 
