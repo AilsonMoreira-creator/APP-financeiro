@@ -104,7 +104,8 @@ export default async function handler(req, res) {
       const pj = typeof pR.json === 'function' ? await pR.json().catch(() => ({})) : {};
       const d = pj?.data || {};
       out.loja = d.loja; out.transporte = d.transporte; out.notaFiscal = d.notaFiscal;
-      const etqR = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${pid}`, headers);
+      const fmt = String(req.query?.formato || 'PDF').toUpperCase() === 'ZPL' ? 'ZPL' : 'PDF';
+      const etqR = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=${fmt}&idsVendas[]=${pid}`, headers);
       const etq = typeof etqR.json === 'function' ? await etqR.json().catch(() => ({})) : {};
       out.etiquetas = { http: etqR.status, resposta: JSON.stringify(etq).slice(0, 600) };
       // objeto logistico do volume (mostra situacao/rastreio/erro do lado do Bling)
@@ -119,6 +120,7 @@ export default async function handler(req, res) {
         const f = await fetch(link); const b = new Uint8Array(await f.arrayBuffer());
         const head = Buffer.from(b.slice(0, 4)).toString('latin1');
         out.arquivo = { http: f.status, content_type: f.headers.get('content-type'), bytes: b.length, inicio: head, tipo: head.startsWith('PK') ? 'zip' : head.startsWith('%PDF') ? 'pdf' : head.startsWith('^X') ? 'zpl' : 'outro' };
+        if (out.arquivo.tipo !== 'pdf' && out.arquivo.tipo !== 'zip') out.arquivo.inicio_texto = Buffer.from(b.slice(0, 700)).toString('latin1');
         if (out.arquivo.tipo === 'pdf') {
           try { const { PDFDocument } = await import('pdf-lib'); const doc = await PDFDocument.load(Buffer.from(b)); const pg = doc.getPages()[0]; out.arquivo.paginas = doc.getPageCount(); out.arquivo.tamanho_pt = { w: +pg.getWidth().toFixed(0), h: +pg.getHeight().toFixed(0) }; } catch (e) { out.arquivo.pdf_erro = e.message; }
         }
