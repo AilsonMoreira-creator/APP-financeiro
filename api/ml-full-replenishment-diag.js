@@ -49,6 +49,20 @@ export default async function handler(req, res) {
     if (req.query?.variantes && vars[0]?.user_product_id) {
       const up = vars.find(v => v.inventory_id)?.user_product_id || vars[0].user_product_id;
       out.variantes = {};
+      const base = `https://api.mercadolibre.com/marketplace/fbm/user-products/${up}/replenishment?country=BR`;
+      const hdrs = [
+        ['so_bearer', { Authorization: `Bearer ${token}` }],
+        ['bearer_accept_json', { Authorization: `Bearer ${token}`, Accept: 'application/json' }],
+        ['caller_lower', { Authorization: `Bearer ${token}`, 'x-caller-id': String(sid), 'x-caller-siteid': 'MLB' }],
+        ['caller_scopes', { Authorization: `Bearer ${token}`, 'x-caller-id': String(sid), 'x-caller-siteId': 'MLB', 'x-caller-scopes': 'admin' }],
+        ['caller_e_site', { Authorization: `Bearer ${token}`, 'x-caller-id': String(sid), 'x-caller-siteId': 'MLB', 'x-site-id': 'MLB' }],
+      ];
+      out.headers_variantes = {};
+      for (const [tag, hh] of hdrs) {
+        try { const r = await fetch(base, { headers: hh }); out.headers_variantes[tag] = { http: r.status, corpo: (await r.text()).slice(0, 300) }; }
+        catch (e) { out.headers_variantes[tag] = { erro: String(e.message).slice(0, 80) }; }
+        await new Promise(x => setTimeout(x, 250));
+      }
       const alts = [
         ['sem_country', `https://api.mercadolibre.com/marketplace/fbm/user-products/${up}/replenishment`],
         ['fbm_raiz', `https://api.mercadolibre.com/fbm/user-products/${up}/replenishment?country=BR`],
