@@ -74,6 +74,34 @@ export default async function handler(req, res) {
       return res.status(200).json(out);
     }
 
+    // 14/09 (Magalu nunca saiu casada — relato da Sthefany): ?etiqueta_pedido=PEDIDO_ID
+    // SO LEITURA: mostra o bloco transporte do pedido e o que /logisticas/etiquetas
+    // devolve pra ele (link, tipo e cabecalho do arquivo). Usar so em pedido ja enviado.
+    if (req.query?.etiqueta_pedido) {
+      const pid = String(req.query.etiqueta_pedido);
+      const out = { pedido_id: pid, conta };
+      const pR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, headers);
+      const pj = typeof pR.json === 'function' ? await pR.json().catch(() => ({})) : {};
+      const d = pj?.data || {};
+      out.loja = d.loja; out.transporte = d.transporte; out.notaFiscal = d.notaFiscal;
+      const etqR = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${pid}`, headers);
+      const etq = typeof etqR.json === 'function' ? await etqR.json().catch(() => ({})) : {};
+      out.etiquetas = { http: etqR.status, resposta: JSON.stringify(etq).slice(0, 600) };
+      const link = etq?.data?.[0]?.link;
+      if (link) {
+        const f = await fetch(link); const b = new Uint8Array(await f.arrayBuffer());
+        const head = Buffer.from(b.slice(0, 4)).toString('latin1');
+        out.arquivo = { http: f.status, content_type: f.headers.get('content-type'), bytes: b.length, inicio: head, tipo: head.startsWith('PK') ? 'zip' : head.startsWith('%PDF') ? 'pdf' : head.startsWith('^X') ? 'zpl' : 'outro' };
+        if (out.arquivo.tipo === 'pdf') {
+          try { const { PDFDocument } = await import('pdf-lib'); const doc = await PDFDocument.load(Buffer.from(b)); const pg = doc.getPages()[0]; out.arquivo.paginas = doc.getPageCount(); out.arquivo.tamanho_pt = { w: +pg.getWidth().toFixed(0), h: +pg.getHeight().toFixed(0) }; } catch (e) { out.arquivo.pdf_erro = e.message; }
+        }
+        if (out.arquivo.tipo === 'zip') {
+          try { const { unzipSync } = await import('fflate'); const z = unzipSync(b); out.arquivo.conteudo_zip = Object.keys(z).map(n => `${n} (${z[n].length} b)`); } catch (e) { out.arquivo.zip_erro = e.message; }
+        }
+      }
+      return res.status(200).json(out);
+    }
+
     // 10/09 (TikTok amostra): ?amostra_nf=PEDIDO_ID — monta a NF de remessa de
     // amostra (natureza "Amostra") a partir do pedido. Sem executar=1 so DEVOLVE
     // o payload. Com executar=1 cria a nota como RASCUNHO (POST /nfe) — NAO
