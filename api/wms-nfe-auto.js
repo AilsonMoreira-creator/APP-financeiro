@@ -99,7 +99,11 @@ export default async function handler(req, res) {
         .order('data_pedido', { ascending: true })
         .limit(limite * 2);
 
-      for (const p of (peds || [])) {
+      // 15/09: ?pedido=ID restringe a rodada a UM pedido (teste do Magalu) — mesmas regras
+      const soPedido = String(req.query?.pedido || '').trim();
+      const lista = soPedido ? (peds || []).filter(p => String(p.pedido_id) === soPedido) : (peds || []);
+      if (soPedido && !lista.length) resumo.detalhe.push({ conta, aviso: `pedido ${soPedido} nao esta na fila (sem nf, aberto/em_separacao, ate 3 dias)` });
+      for (const p of lista) {
         if (Date.now() - inicio > 250000) { resumo.detalhe.push({ conta, aviso: 'tempo esgotado — continua na próxima rodada' }); break; }
         if (geradosNaConta >= limite) break;
 
