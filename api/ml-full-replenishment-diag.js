@@ -45,6 +45,24 @@ export default async function handler(req, res) {
       }
       out.variacoes.push(r);
     }
+    // ?variantes=1: testa caminhos alternativos na primeira variacao com inventory_id
+    if (req.query?.variantes && vars[0]?.user_product_id) {
+      const up = vars.find(v => v.inventory_id)?.user_product_id || vars[0].user_product_id;
+      out.variantes = {};
+      const alts = [
+        ['sem_country', `https://api.mercadolibre.com/marketplace/fbm/user-products/${up}/replenishment`],
+        ['fbm_raiz', `https://api.mercadolibre.com/fbm/user-products/${up}/replenishment?country=BR`],
+        ['fulfillment_up', `https://api.mercadolibre.com/fulfillment/user-products/${up}/replenishment?country=BR`],
+        ['up_replenishment', `https://api.mercadolibre.com/user-products/${up}/replenishment?country=BR`],
+        ['up_replenishment_site', `https://api.mercadolibre.com/user-products/${up}/replenishment?site_id=MLB`],
+        ['inventories_replenishment', `https://api.mercadolibre.com/inventories/${vars.find(v => v.inventory_id)?.inventory_id}/replenishment`],
+      ];
+      for (const [tag, url] of alts) {
+        try { const r = await fetch(url, { headers: hRep }); out.variantes[tag] = { http: r.status, corpo: (await r.text()).slice(0, 300) }; }
+        catch (e) { out.variantes[tag] = { erro: String(e.message).slice(0, 80) }; }
+        await new Promise(x => setTimeout(x, 250));
+      }
+    }
     return res.status(200).json(out);
   } catch (e) { return res.status(500).json({ erro: e.message }); }
 }
