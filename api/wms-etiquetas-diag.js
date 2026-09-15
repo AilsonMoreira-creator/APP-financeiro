@@ -107,6 +107,13 @@ export default async function handler(req, res) {
       const etqR = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${pid}`, headers);
       const etq = typeof etqR.json === 'function' ? await etqR.json().catch(() => ({})) : {};
       out.etiquetas = { http: etqR.status, resposta: JSON.stringify(etq).slice(0, 600) };
+      // objeto logistico do volume (mostra situacao/rastreio/erro do lado do Bling)
+      const volId = d?.transporte?.volumes?.[0]?.id;
+      if (volId) {
+        const oR = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/objetos/${volId}`, headers);
+        const oj = typeof oR.json === 'function' ? await oR.json().catch(() => ({})) : {};
+        out.objeto = { http: oR.status, resposta: JSON.stringify(oj).slice(0, 900) };
+      }
       const link = etq?.data?.[0]?.link;
       if (link) {
         const f = await fetch(link); const b = new Uint8Array(await f.arrayBuffer());
