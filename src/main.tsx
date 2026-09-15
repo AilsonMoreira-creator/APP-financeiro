@@ -48,14 +48,16 @@ if ('serviceWorker' in navigator) {
       console.log('[App] SW atualizado, reload adiado pra quando a aba ficar oculta');
     }
   };
-  const tentarPendente = () => {
-    if (reloadPendente && document.hidden && !recarregouUmaVez && !estaOcupado()) {
+  const tentarPendente = (ev?: Event) => {
+    const momentoSeguro = ev?.type === 'amicia-momento-seguro';   // 15/09: troca de modulo
+    if (reloadPendente && (document.hidden || momentoSeguro) && !recarregouUmaVez && !estaOcupado()) {
       recarregouUmaVez = true;
       registrarEvento('service worker novo (pendente)', 'oculta=true');
       setTimeout(() => window.location.reload(), 150);
     }
   };
   document.addEventListener('visibilitychange', tentarPendente);
+  window.addEventListener('amicia-momento-seguro', tentarPendente);
   setInterval(tentarPendente, 30000);   // 15/09: aba oculta e trabalho acabou → agora pode
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data?.type === 'SW_UPDATED') {

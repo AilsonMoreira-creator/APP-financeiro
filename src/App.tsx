@@ -10569,7 +10569,15 @@ export default function App(){
     }
   },[active,usuarioLogado]);
   // Persiste o modulo ativo pra sobreviver ao reload do auto-update
-  useEffect(()=>{try{localStorage.setItem("amica_active_module",active);}catch{}},[active]);
+  const primeiraTrocaRef=useRef(true);
+  useEffect(()=>{try{localStorage.setItem("amica_active_module",active);}catch{}
+    // 15/09 (Ailson): trocar de modulo e um "momento seguro" pra pegar versao nova
+    // pendente — a pessoa esta saindo da tela. O modulo novo ja foi salvo acima, entao
+    // o app reabre nele. Nao vale na abertura do app, nem com trabalho em andamento
+    // (lote de etiquetas) — quem decide isso e o listener em version-check/main.
+    if(primeiraTrocaRef.current){primeiraTrocaRef.current=false;return;}
+    try{window.dispatchEvent(new CustomEvent("amicia-momento-seguro"));}catch{}
+  },[active]);
 
   // Listener: SW dispara 'amicia-navegar' quando user clica em push notification
   // (aba ja estava aberta). main.tsx propaga o postMessage do SW como custom event.

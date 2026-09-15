@@ -55,11 +55,14 @@ function executarReload(motivo: string): void {
   registrarEvento(motivo, `oculta=${document.hidden} ocupado=${window.__amiciaOcupado || ''}`);
   setTimeout(() => window.location.reload(), 150);   // da tempo do registro sair (keepalive)
 }
-function tentarReloadPendente(): void {
-  if (reloadPendente && document.hidden && !estaOcupado() && !jaRecarregouRecente()) { const m = reloadPendente; reloadPendente = ''; executarReload(m); }
+function tentarReloadPendente(momentoSeguro = false): void {
+  // momentoSeguro = troca de modulo (Ailson 15/09): a pessoa esta saindo da tela,
+  // entao pode atualizar mesmo com a aba visivel — desde que nada esteja em andamento.
+  if (reloadPendente && (document.hidden || momentoSeguro) && !estaOcupado() && !jaRecarregouRecente()) { const m = reloadPendente; reloadPendente = ''; executarReload(m + (momentoSeguro ? ' · na troca de modulo' : '')); }
 }
 export function iniciarChecagemVersao(): void {
   document.addEventListener('visibilitychange', () => { if (document.hidden) tentarReloadPendente(); });
+  window.addEventListener('amicia-momento-seguro', () => tentarReloadPendente(true));
   setInterval(tentarReloadPendente, 30000);   // aba oculta ha um tempo e o trabalho acabou
   checar();
   window.addEventListener('focus', checar);
