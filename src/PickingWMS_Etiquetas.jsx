@@ -10,6 +10,7 @@
  * casamento peça↔etiqueta acontece na arara, um grupo por vez.
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import { marcarOcupado, liberarOcupado } from './ocupado.ts';
 import { Printer, RefreshCw } from 'lucide-react';
 import qzTray from 'qz-tray';
 import { palette, FONT } from './Lojas_Shared.jsx';
@@ -393,6 +394,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         .filter(g => g.qtd > 0);
     if (gruposLote.length) setLote({ grupos: gruposLote, enviadas: 0, rodando: true });
     let jobId = null;
+    marcarOcupado('impressao de etiquetas');   // 15/09: nenhum reload automatico durante o lote
     try {
       setImprimindo('Preparando as etiquetas…');
 
@@ -588,6 +590,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       setImprimindo(`⚠ ${e.message}`);
       onErro?.(e.message);
       setTimeout(() => setImprimindo(''), 12000);
+    } finally {
+      liberarOcupado();
     }
   };
 

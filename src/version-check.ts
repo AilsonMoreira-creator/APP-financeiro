@@ -11,6 +11,7 @@
 // recarrega buscando o HTML fresco (no-store). Ailson 28/06/2026.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { estaOcupado, registrarEvento } from './ocupado.ts';
 declare const __APP_BUILD__: string;
 const LOCAL = (typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : '');
 
@@ -36,13 +37,30 @@ async function checar(): Promise<void> {
     const j = await r.json();
     if (j && j.build && j.build !== LOCAL) {
       if (jaRecarregouRecente()) return;     // evita loop em propagação lenta
-      try { sessionStorage.setItem('amica_last_reload', String(Date.now())); } catch {}
-      window.location.reload();
+      // 15/09 (Ailson): NUNCA recarregar na cara de quem esta trabalhando — a
+      // Sthefany perdia o lote de etiquetas no meio. Mesma regra do SW: so com a
+      // aba oculta e sem trabalho em andamento; senao fica pendente.
+      pedirReload(`versao nova (local ${LOCAL} / servidor ${j.build})`);
     }
   } catch { /* offline / falha de rede -> ignora, tenta de novo depois */ }
 }
 
+let reloadPendente = '';
+function pedirReload(motivo: string): void {
+  if (document.hidden && !estaOcupado()) { executarReload(motivo); return; }
+  reloadPendente = motivo;
+}
+function executarReload(motivo: string): void {
+  try { sessionStorage.setItem('amica_last_reload', String(Date.now())); } catch {}
+  registrarEvento(motivo, `oculta=${document.hidden} ocupado=${window.__amiciaOcupado || ''}`);
+  setTimeout(() => window.location.reload(), 150);   // da tempo do registro sair (keepalive)
+}
+function tentarReloadPendente(): void {
+  if (reloadPendente && document.hidden && !estaOcupado() && !jaRecarregouRecente()) { const m = reloadPendente; reloadPendente = ''; executarReload(m); }
+}
 export function iniciarChecagemVersao(): void {
+  document.addEventListener('visibilitychange', () => { if (document.hidden) tentarReloadPendente(); });
+  setInterval(tentarReloadPendente, 30000);   // aba oculta ha um tempo e o trabalho acabou
   checar();
   window.addEventListener('focus', checar);
   document.addEventListener('visibilitychange', () => {

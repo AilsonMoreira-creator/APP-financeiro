@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { iniciarChecagemVersao } from './version-check.ts'
+import { estaOcupado, registrarEvento } from './ocupado.ts'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -37,21 +38,25 @@ if ('serviceWorker' in navigator) {
   let reloadPendente = false;
   const reloadSeguro = () => {
     if (recarregouUmaVez) return;
-    if (document.hidden) {
+    if (document.hidden && !estaOcupado()) {   // 15/09: nunca com trabalho em andamento
       recarregouUmaVez = true;
       console.log('[App] SW atualizado, recarregando (aba oculta)…');
-      window.location.reload();
+      registrarEvento('service worker novo', 'oculta=true');
+      setTimeout(() => window.location.reload(), 150);
     } else {
       reloadPendente = true;
       console.log('[App] SW atualizado, reload adiado pra quando a aba ficar oculta');
     }
   };
-  document.addEventListener('visibilitychange', () => {
-    if (reloadPendente && document.hidden && !recarregouUmaVez) {
+  const tentarPendente = () => {
+    if (reloadPendente && document.hidden && !recarregouUmaVez && !estaOcupado()) {
       recarregouUmaVez = true;
-      window.location.reload();
+      registrarEvento('service worker novo (pendente)', 'oculta=true');
+      setTimeout(() => window.location.reload(), 150);
     }
-  });
+  };
+  document.addEventListener('visibilitychange', tentarPendente);
+  setInterval(tentarPendente, 30000);   // 15/09: aba oculta e trabalho acabou → agora pode
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data?.type === 'SW_UPDATED') {
       reloadSeguro();
