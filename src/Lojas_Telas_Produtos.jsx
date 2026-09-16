@@ -451,6 +451,8 @@ const RankingCores = ({ loja, userId }) => {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(null);
   const [editando, setEditando] = useState(null);   // { codigo, nome, hex }
+  // 16/09 (pedido dele): clicar na cor abre os PRODUTOS que formaram aquelas peças
+  const [detalhe, setDetalhe] = useState(null);     // { cor, dados|null, erro|null }
   const admin = String(userId || '') === 'ailson';
   const carregar = () => {
     setErro(null);
@@ -463,6 +465,13 @@ const RankingCores = ({ loja, userId }) => {
     if (!editando) return;
     await fetch('/api/lojas-ranking-cores', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User': userId || 'ailson' }, body: JSON.stringify(editando) });
     setEditando(null); carregar();
+  };
+  const abrirDetalhe = (r) => {
+    setDetalhe({ cor: r, dados: null, erro: null });
+    fetch(`/api/lojas-ranking-cores?loja=${loja}&dias=${dias}&detalhe=${r.codigo}`, { headers: { 'X-User': userId || 'ailson' } })
+      .then(x => x.json())
+      .then(d => setDetalhe(v => v && v.cor.codigo === r.codigo ? { ...v, dados: d?.ok ? d : null, erro: d?.ok ? null : (d?.error || 'erro') } : v))
+      .catch(e => setDetalhe(v => v ? { ...v, erro: String(e?.message || e) } : v));
   };
   const max = Math.max(1, ...((dados?.ranking || []).map(r => r.pecas)));
   const chip = (ativo) => ({ padding: '5px 12px', borderRadius: 999, border: `1px solid ${ativo ? palette.accent : palette.beige}`, background: ativo ? palette.accent : '#fff', color: ativo ? '#fff' : palette.inkSoft, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT });
@@ -487,12 +496,13 @@ const RankingCores = ({ loja, userId }) => {
       )}
       <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginBottom: 6 }}>A seta (<span style={{ color: '#1e8e4e', fontWeight: 800 }}>↑</span> / <span style={{ color: '#c0392b', fontWeight: 800 }}>↓</span>) marca uma tendência relevante de subida ou declínio: a participação da cor mudou 25% ou mais nos últimos 15 dias em relação aos 15 anteriores. Sem seta = movimento normal.</div>
       {(dados?.ranking || []).map(r => (
-        <div key={r.codigo} style={{ display: 'grid', gridTemplateColumns: '18px 150px 1fr 70px 46px 22px', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f0ece6' }}>
+        <div key={r.codigo} onClick={() => abrirDetalhe(r)} title="ver os produtos que venderam nesta cor"
+          style={{ display: 'grid', gridTemplateColumns: '18px 150px 1fr 70px 46px 22px', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f0ece6', cursor: 'pointer' }}>
           <span style={{ width: 16, height: 16, borderRadius: 8, background: r.hex || '#e6e6e6', border: '1px solid #d6d0c8', display: 'inline-block' }} />
           <span style={{ fontSize: 13, fontFamily: FONT, color: r.nome ? palette.ink : palette.inkMuted, fontStyle: r.nome ? 'normal' : 'italic', display: 'flex', alignItems: 'center', gap: 6 }}
             title={`código ${r.codigo} · ${r.refs} ref${r.refs > 1 ? 's' : ''} · Bom Retiro ${r.bom_retiro} · Silva Teles ${r.silva_teles}`}>
             {r.nome || `cor ${r.codigo}`}
-            {admin && <button onClick={() => setEditando({ codigo: r.codigo, nome: r.nome || '', hex: r.hex || '#cccccc' })} title="nomear / editar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: palette.inkMuted }}>✏️</button>}
+            {admin && <button onClick={e => { e.stopPropagation(); setEditando({ codigo: r.codigo, nome: r.nome || '', hex: r.hex || '#cccccc' }); }} title="nomear / editar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: palette.inkMuted }}>✏️</button>}
           </span>
           <div style={{ height: 10, background: '#f0ece6', borderRadius: 5, overflow: 'hidden' }}>
             <div style={{ width: `${Math.round(100 * r.pecas / max)}%`, height: '100%', background: r.hex || palette.accent, borderRadius: 5, opacity: r.nome ? 1 : 0.5 }} />
@@ -505,6 +515,36 @@ const RankingCores = ({ loja, userId }) => {
           </span>
         </div>
       ))}
+      {detalhe && (
+        <div onClick={() => setDetalhe(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, width: 'min(560px, 96vw)', maxHeight: '86vh', overflowY: 'auto', fontFamily: FONT }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ width: 16, height: 16, borderRadius: 8, background: detalhe.cor.hex || '#e6e6e6', border: '1px solid #d6d0c8' }} />
+              <span style={{ fontSize: 15, fontWeight: 800, color: palette.ink }}>{detalhe.cor.nome || `cor ${detalhe.cor.codigo}`}</span>
+              <span style={{ fontSize: 13, color: palette.inkMuted }}>· {detalhe.cor.pecas.toLocaleString('pt-BR')} peças</span>
+              <button onClick={() => setDetalhe(null)} style={{ marginLeft: 'auto', border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: palette.inkMuted }}>×</button>
+            </div>
+            <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 10 }}>
+              Produtos que venderam nesta cor · {dias} dias · {loja === 'todas' ? 'Bom Retiro + Silva Teles' : loja === 'BR' ? 'Bom Retiro' : 'Silva Teles'}
+              {detalhe.dados ? ` · ${detalhe.dados.refs} refs` : ''}
+            </div>
+            {detalhe.erro && <div style={{ color: '#c0392b', fontSize: 13 }}>⚠ {detalhe.erro}</div>}
+            {!detalhe.dados && !detalhe.erro && <div style={{ fontSize: 13, color: palette.inkMuted, padding: '10px 0' }}>carregando…</div>}
+            {(detalhe.dados?.produtos || []).map(p => (
+              <div key={p.ref} style={{ display: 'grid', gridTemplateColumns: '54px 1fr 58px 44px', gap: 8, alignItems: 'baseline', padding: '6px 0', borderBottom: '1px solid #f4f1ec' }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: palette.accent }}>{p.ref}</span>
+                <span style={{ fontSize: 12.5, color: p.descricao ? palette.ink : palette.inkMuted, fontStyle: p.descricao ? 'normal' : 'italic' }}
+                  title={loja === 'todas' ? `Bom Retiro ${p.bom_retiro} · Silva Teles ${p.silva_teles}` : ''}>
+                  {p.descricao || 'sem descrição no catálogo'}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: palette.ink, textAlign: 'right' }}>{p.pecas.toLocaleString('pt-BR')}</span>
+                <span style={{ fontSize: 11.5, color: palette.inkMuted, textAlign: 'right' }}>{p.pct}%</span>
+              </div>
+            ))}
+            {detalhe.dados && !detalhe.dados.produtos.length && <div style={{ fontSize: 13, color: palette.inkMuted, padding: '10px 0' }}>nenhuma venda nesta janela.</div>}
+          </div>
+        </div>
+      )}
       {editando && (
         <div onClick={() => setEditando(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, width: 'min(360px, 94vw)', fontFamily: FONT }}>

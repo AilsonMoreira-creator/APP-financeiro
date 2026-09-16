@@ -40,6 +40,10 @@ export default async function handler(req, res) {
   }
 
   const dias = Math.min(180, parseInt(req.query?.dias, 10) || 30);
+  // 16/09 (pedido dele): ?detalhe=COD — quais PRODUTOS formaram as peças daquela
+  // cor no período (ex.: Preto 300 → 395 body regata 105 · 1871 calça pantalona 107).
+  // Mesmas regras do ranking: mesma janela, mesmas lojas, básicas fora, cores fundidas.
+  const detalheCod = String(req.query?.detalhe || '').replace(/\D/g, '').padStart(3, '0').slice(-3);
   const incluirBasicos = req.query?.incluir_basicos === '1';
   const lojaFiltro = ['todas', 'BR', 'ST'].includes(req.query?.loja) ? req.query.loja : 'todas';
   const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
@@ -110,6 +114,40 @@ export default async function handler(req, res) {
       if (it.ref) porCor[cod].refs.add(String(it.ref));
       porCor[cod].por_loja[it.loja] = (porCor[cod].por_loja[it.loja] || 0) + qtd;
     }
+    if (req.query?.detalhe) {
+      const porRef = {};
+      let totalCor = 0;
+      for (const it of itens) {
+        const cod0 = codCor(it.sku); if (!cod0) continue;
+        if (!incluirBasicos && ehBasica(it.ref)) continue;
+        if (alvo(cod0) !== detalheCod) continue;
+        const ref = String(it.ref || '').replace(/^0+/, '') || '—';
+        const qtd = Number(it.qtd) || 0;
+        totalCor += qtd;
+        porRef[ref] = porRef[ref] || { ref, pecas: 0, valor: 0, por_loja: {} };
+        porRef[ref].pecas += qtd;
+        porRef[ref].valor += qtd * (Number(it.liquido_unit) || 0);
+        porRef[ref].por_loja[it.loja] = (porRef[ref].por_loja[it.loja] || 0) + qtd;
+      }
+      const refs = Object.keys(porRef);
+      const desc = {};
+      for (let i = 0; i < refs.length; i += 200) {
+        const fatia = refs.slice(i, i + 200);
+        const { data: prods } = await supabase.from('lojas_produtos').select('ref, descricao, categoria')
+          .in('ref', [...fatia, ...fatia.map(r => r.padStart(4, '0'))]);
+        for (const pr of (prods || [])) desc[String(pr.ref || '').replace(/^0+/, '')] = pr;
+      }
+      const produtos = Object.values(porRef).map(x => ({
+        ref: x.ref, descricao: desc[x.ref]?.descricao || null, categoria: desc[x.ref]?.categoria || null,
+        pecas: x.pecas, valor: Math.round(x.valor * 100) / 100,
+        pct: totalCor ? Math.round(1000 * x.pecas / totalCor) / 10 : 0,
+        bom_retiro: x.por_loja[LOJA_BR] || 0, silva_teles: x.por_loja[LOJA_ST] || 0,
+      })).sort((a, b) => b.pecas - a.pecas);
+      return res.status(200).json({ ok: true, detalhe: detalheCod, nome: mapa[detalheCod]?.nome || null,
+        hex: mapa[detalheCod]?.hex || null, dias, loja: lojaFiltro, desde,
+        total_pecas: totalCor, refs: produtos.length, produtos });
+    }
+
     const ranking = Object.values(porCor).map(c => ({
       codigo: c.codigo, nome: mapa[c.codigo]?.nome || null, hex: mapa[c.codigo]?.hex || null,
       pecas: c.pecas, valor: Math.round(c.valor * 100) / 100, refs: c.refs.size,
