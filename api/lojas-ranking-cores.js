@@ -44,6 +44,10 @@ export default async function handler(req, res) {
   // cor no período (ex.: Preto 300 → 395 body regata 105 · 1871 calça pantalona 107).
   // Mesmas regras do ranking: mesma janela, mesmas lojas, básicas fora, cores fundidas.
   const detalheCod = String(req.query?.detalhe || '').replace(/\D/g, '').padStart(3, '0').slice(-3);
+  // 16/09 (pedido dele): ?cores_da_ref=REF — o caminho inverso: quais CORES formaram
+  // as peças daquela REF no período. Aqui as básicas NÃO são excluídas: se ele clicou
+  // na 0050, é a 0050 que ele quer ver.
+  const refAlvo = String(req.query?.cores_da_ref || '').replace(/\D/g, '').replace(/^0+/, '');
   const incluirBasicos = req.query?.incluir_basicos === '1';
   const lojaFiltro = ['todas', 'BR', 'ST'].includes(req.query?.loja) ? req.query.loja : 'todas';
   const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
@@ -114,6 +118,29 @@ export default async function handler(req, res) {
       if (it.ref) porCor[cod].refs.add(String(it.ref));
       porCor[cod].por_loja[it.loja] = (porCor[cod].por_loja[it.loja] || 0) + qtd;
     }
+    if (refAlvo) {
+      const porCorRef = {};
+      let totalRef = 0;
+      for (const it of itens) {
+        if (String(it.ref || '').replace(/^0+/, '') !== refAlvo) continue;
+        const cod0 = codCor(it.sku); if (!cod0) continue;
+        const cod = alvo(cod0); const qtd = Number(it.qtd) || 0;
+        totalRef += qtd;
+        porCorRef[cod] = porCorRef[cod] || { codigo: cod, pecas: 0, valor: 0, por_loja: {} };
+        porCorRef[cod].pecas += qtd;
+        porCorRef[cod].valor += qtd * (Number(it.liquido_unit) || 0);
+        porCorRef[cod].por_loja[it.loja] = (porCorRef[cod].por_loja[it.loja] || 0) + qtd;
+      }
+      const cores = Object.values(porCorRef).map(c => ({
+        codigo: c.codigo, nome: mapa[c.codigo]?.nome || null, hex: mapa[c.codigo]?.hex || null,
+        pecas: c.pecas, valor: Math.round(c.valor * 100) / 100,
+        pct: totalRef ? Math.round(1000 * c.pecas / totalRef) / 10 : 0,
+        bom_retiro: c.por_loja[LOJA_BR] || 0, silva_teles: c.por_loja[LOJA_ST] || 0,
+      })).sort((a, b) => b.pecas - a.pecas);
+      return res.status(200).json({ ok: true, ref: refAlvo, dias, loja: lojaFiltro, desde,
+        total_pecas: totalRef, cores: cores.length, ranking: cores });
+    }
+
     if (req.query?.detalhe) {
       const porRef = {};
       let totalCor = 0;

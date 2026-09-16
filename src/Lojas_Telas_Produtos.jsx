@@ -35,6 +35,16 @@ const ProdutosTab = ({ userId }) => {
   const [carregando30, setCarregando30] = useState(false);
   const [erro30, setErro30] = useState(null);
   const [ajudaAberta, setAjudaAberta] = useState(null); // null | 'vendidas' | 'compras' | 'primeira' | 'recompra' | 'matches'
+  // 16/09 (pedido dele): clicar num produto das Top vendidas abre as CORES que
+  // formaram aquelas peças (caminho inverso do Ranking de cores).
+  const [coresRef, setCoresRef] = useState(null);   // { item, dias, dados|null, erro|null }
+  const abrirCoresDaRef = (item, diasJanela) => {
+    setCoresRef({ item, dias: diasJanela, dados: null, erro: null });
+    fetch(`/api/lojas-ranking-cores?loja=${loja}&dias=${diasJanela}&cores_da_ref=${encodeURIComponent(item.ref)}`, { headers: { 'X-User': userId || 'ailson' } })
+      .then(r => r.json())
+      .then(d => setCoresRef(v => v && v.item.ref === item.ref ? { ...v, dados: d?.ok ? d : null, erro: d?.ok ? null : (d?.error || 'erro') } : v))
+      .catch(e => setCoresRef(v => v ? { ...v, erro: String(e?.message || e) } : v));
+  };
 
   useEffect(() => {
     let cancelado = false;
@@ -137,6 +147,7 @@ const ProdutosTab = ({ userId }) => {
               metricaLabel="peças vendidas"
               metricaCampo="pecas"
               mostrarPosicao
+              onClickItem={item => abrirCoresDaRef(item, em30('vendidas') ? 30 : 60)}
             />}
           </>
         )}
@@ -241,6 +252,46 @@ const ProdutosTab = ({ userId }) => {
       </div>
       {/* Modal de ajuda — abre quando clica no '?' */}
       <ModalAjuda aba={ajudaAberta} onClose={() => setAjudaAberta(null)} />
+      {coresRef && (
+        <div onClick={() => setCoresRef(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, width: 'min(520px, 96vw)', maxHeight: '86vh', overflowY: 'auto', fontFamily: FONT }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <FotoProdutoLojas refProd={coresRef.item.ref} size={44} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink }}>REF {refDisplay(coresRef.item.ref)}
+                  <span style={{ fontSize: 13, fontWeight: 400, color: palette.inkMuted }}> · {Number(coresRef.item.pecas || 0).toLocaleString('pt-BR')} peças</span>
+                </div>
+                {coresRef.item.descricao && <div style={{ fontSize: 12, color: palette.inkSoft }}>{coresRef.item.descricao}</div>}
+              </div>
+              <button onClick={() => setCoresRef(null)} style={{ marginLeft: 'auto', border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: palette.inkMuted }}>×</button>
+            </div>
+            <div style={{ fontSize: 11, color: palette.inkMuted, margin: '8px 0 10px' }}>
+              Cores que venderam desta REF · {coresRef.dias} dias · {loja === 'todas' ? 'Bom Retiro + Silva Teles' : loja === 'BR' ? 'Bom Retiro' : 'Silva Teles'}
+              {coresRef.dados ? ` · ${coresRef.dados.cores} cores` : ''}
+            </div>
+            {coresRef.erro && <div style={{ color: '#c0392b', fontSize: 13 }}>⚠ {coresRef.erro}</div>}
+            {!coresRef.dados && !coresRef.erro && <div style={{ fontSize: 13, color: palette.inkMuted, padding: '10px 0' }}>carregando…</div>}
+            {(coresRef.dados?.ranking || []).map(c => {
+              const maxC = Math.max(1, ...(coresRef.dados.ranking.map(x => x.pecas)));
+              return (
+                <div key={c.codigo} style={{ display: 'grid', gridTemplateColumns: '18px 140px 1fr 52px 44px', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f4f1ec' }}>
+                  <span style={{ width: 16, height: 16, borderRadius: 8, background: c.hex || '#e6e6e6', border: '1px solid #d6d0c8', display: 'inline-block' }} />
+                  <span style={{ fontSize: 12.5, color: c.nome ? palette.ink : palette.inkMuted, fontStyle: c.nome ? 'normal' : 'italic' }}
+                    title={loja === 'todas' ? `Bom Retiro ${c.bom_retiro} · Silva Teles ${c.silva_teles}` : ''}>
+                    {c.nome || `cor ${c.codigo}`}
+                  </span>
+                  <div style={{ height: 9, background: '#f0ece6', borderRadius: 5, overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.round(100 * c.pecas / maxC)}%`, height: '100%', background: c.hex || palette.accent, borderRadius: 5, opacity: c.nome ? 1 : 0.5 }} />
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: palette.ink, textAlign: 'right' }}>{c.pecas.toLocaleString('pt-BR')}</span>
+                  <span style={{ fontSize: 11.5, color: palette.inkMuted, textAlign: 'right' }}>{c.pct}%</span>
+                </div>
+              );
+            })}
+            {coresRef.dados && !coresRef.dados.ranking.length && <div style={{ fontSize: 13, color: palette.inkMuted, padding: '10px 0' }}>nenhuma venda desta REF nesta janela.</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -635,7 +686,7 @@ const ToggleGeralVesti = ({ tipo, setTipo }) => (
 );
 
 // ─── Lista de produtos (linha = card horizontal) ───────────────────────────
-const ListaProdutos = ({ itens, metricaLabel, metricaCampo, mostrarPosicao }) => {
+const ListaProdutos = ({ itens, metricaLabel, metricaCampo, mostrarPosicao, onClickItem = null }) => {
   if (!itens || itens.length === 0) {
     return <Vazio msg="Sem dados pra esse filtro." />;
   }
@@ -648,17 +699,20 @@ const ListaProdutos = ({ itens, metricaLabel, metricaCampo, mostrarPosicao }) =>
           posicao={mostrarPosicao ? (item.posicao || idx + 1) : null}
           metricaLabel={metricaLabel}
           metricaValor={item[metricaCampo]}
+          onClick={onClickItem ? () => onClickItem(item) : null}
         />
       ))}
     </div>
   );
 };
 
-const CardProduto = ({ item, posicao, metricaLabel, metricaValor }) => (
-  <div style={{
+const CardProduto = ({ item, posicao, metricaLabel, metricaValor, onClick = null }) => (
+  <div onClick={onClick || undefined} title={onClick ? 'ver as cores que venderam desta REF' : undefined}
+    style={{
     display: 'flex', alignItems: 'center', gap: 12,
     background: palette.surface, borderRadius: 10,
     border: `1px solid ${palette.beige}`, padding: 10,
+    cursor: onClick ? 'pointer' : 'default',
   }}>
     {posicao != null && (
       <div style={{
