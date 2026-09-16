@@ -453,6 +453,7 @@ const RankingCores = ({ loja, userId }) => {
   const [editando, setEditando] = useState(null);   // { codigo, nome, hex }
   // 16/09 (pedido dele): clicar na cor abre os PRODUTOS que formaram aquelas peças
   const [detalhe, setDetalhe] = useState(null);     // { cor, dados|null, erro|null }
+  const [buscaRef, setBuscaRef] = useState('');     // 16/09: filtro por REF/descrição no detalhe
   const admin = String(userId || '') === 'ailson';
   const carregar = () => {
     setErro(null);
@@ -467,7 +468,7 @@ const RankingCores = ({ loja, userId }) => {
     setEditando(null); carregar();
   };
   const abrirDetalhe = (r) => {
-    setDetalhe({ cor: r, dados: null, erro: null });
+    setDetalhe({ cor: r, dados: null, erro: null }); setBuscaRef('');
     fetch(`/api/lojas-ranking-cores?loja=${loja}&dias=${dias}&detalhe=${r.codigo}`, { headers: { 'X-User': userId || 'ailson' } })
       .then(x => x.json())
       .then(d => setDetalhe(v => v && v.cor.codigo === r.codigo ? { ...v, dados: d?.ok ? d : null, erro: d?.ok ? null : (d?.error || 'erro') } : v))
@@ -528,10 +529,21 @@ const RankingCores = ({ loja, userId }) => {
               Produtos que venderam nesta cor · {dias} dias · {loja === 'todas' ? 'Bom Retiro + Silva Teles' : loja === 'BR' ? 'Bom Retiro' : 'Silva Teles'}
               {detalhe.dados ? ` · ${detalhe.dados.refs} refs` : ''}
             </div>
+            {detalhe.dados?.produtos?.length > 0 && (
+              <input value={buscaRef} onChange={e => setBuscaRef(e.target.value)} placeholder="filtrar por REF ou descrição…"
+                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 11px', borderRadius: 8, border: `1.5px solid ${palette.beige}`, fontSize: 13, fontFamily: FONT, marginBottom: 10 }} />
+            )}
             {detalhe.erro && <div style={{ color: '#c0392b', fontSize: 13 }}>⚠ {detalhe.erro}</div>}
             {!detalhe.dados && !detalhe.erro && <div style={{ fontSize: 13, color: palette.inkMuted, padding: '10px 0' }}>carregando…</div>}
-            {(detalhe.dados?.produtos || []).map(p => (
-              <div key={p.ref} style={{ display: 'grid', gridTemplateColumns: '54px 1fr 58px 44px', gap: 8, alignItems: 'baseline', padding: '6px 0', borderBottom: '1px solid #f4f1ec' }}>
+            {(detalhe.dados?.produtos || [])
+              .filter(p => { const t = buscaRef.trim().toLowerCase(); if (!t) return true;
+                return String(p.ref).toLowerCase().includes(t) || String(p.descricao || '').toLowerCase().includes(t); })
+              .map(p => (
+              <div key={p.ref} style={{ display: 'grid', gridTemplateColumns: '46px 54px 1fr 58px 44px', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #f4f1ec' }}>
+                {/* 16/09: thumb pelo MESMO componente do módulo Lojas (Sofia mídias e, se faltar,
+                    bucket produtos da Ficha Técnica) — ele já tem o teto de tentativas e a memória
+                    de "sem foto" que resolveram o loop do Storage em 08/09. */}
+                <FotoProdutoLojas refProd={p.ref} size={44} />
                 <span style={{ fontSize: 13, fontWeight: 800, color: palette.accent }}>{p.ref}</span>
                 <span style={{ fontSize: 12.5, color: p.descricao ? palette.ink : palette.inkMuted, fontStyle: p.descricao ? 'normal' : 'italic' }}
                   title={loja === 'todas' ? `Bom Retiro ${p.bom_retiro} · Silva Teles ${p.silva_teles}` : ''}>
