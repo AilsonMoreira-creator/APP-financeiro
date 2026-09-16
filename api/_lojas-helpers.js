@@ -42,7 +42,8 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
 // pra Edge Function não precisar importar JSX)
 // 'admin' = login default do app principal (admin do amicia_data)
 // ingrid = admin do modulo Lojas (somente Lojas, nao admin global). Ailson 16/07/2026.
-const USUARIOS_ACESSO_TOTAL_LOJAS = ['amicia-admin', 'admin', 'ailson', 'tamara', 'ingrid'];
+// emanuelle = acesso a aba Produtos (Raio-X) pela Sofia — mesmo caminho da ingrid. Ailson 15/09/2026.
+const USUARIOS_ACESSO_TOTAL_LOJAS = ['amicia-admin', 'admin', 'ailson', 'tamara', 'ingrid', 'emanuelle'];
 
 export function ehAdminLojas(userId) {
   if (!userId) return false;
