@@ -299,7 +299,16 @@ async function linksEtiqueta(peds, tokenPorConta, motivo = 'impressao') {
   for (const conta of new Set(peds.map(p => p.conta))) {
     if (!tokenPorConta[conta]) continue;
     const hb = { Authorization: 'Bearer ' + tokenPorConta[conta], Accept: 'application/json' };
-    const ids = peds.filter(p => p.conta === conta).map(p => p.pedido_id);
+    // 15/09 (pedido dele): MAGALU pede formato=ZPL — a integracao Magalu Entregas
+    // esta em "Padrao logistica ZPL" e o A4 escalado nunca ficou bom. Todos os
+    // outros canais seguem EXATAMENTE como antes (formato=PDF, mesma chamada).
+    const daConta = peds.filter(p => p.conta === conta);
+    const grupos = [
+      ['PDF', daConta.filter(p => String(p.canal_geral || '') !== 'Magalu').map(p => p.pedido_id)],
+      ['ZPL', daConta.filter(p => String(p.canal_geral || '') === 'Magalu').map(p => p.pedido_id)],
+    ];
+    for (const [formato, ids] of grupos) {
+    if (!ids.length) continue;
     // ATENÇÃO (13/08): se UM id do lote não tiver logística cadastrada, o
     // Bling rejeita o LOTE INTEIRO. Então: tenta em lote (rápido quando todos
     // têm) e, se falhar, cai pra individual — assim um pedido sem etiqueta
@@ -308,7 +317,7 @@ async function linksEtiqueta(peds, tokenPorConta, motivo = 'impressao') {
       const fatia = ids.slice(i, i + 20);
       let achouNoLote = false;
       try {
-        const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&${fatia.map(id => `idsVendas[]=${id}`).join('&')}`;
+        const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=${formato}&${fatia.map(id => `idsVendas[]=${id}`).join('&')}`;
         const r = await blingFetch(url, hb);
         const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
         for (const e of (j?.data || [])) {
@@ -327,13 +336,14 @@ async function linksEtiqueta(peds, tokenPorConta, motivo = 'impressao') {
       for (const id of fatia) {
         if (mapa[String(id)]) continue;
         try {
-          const r = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${id}`, hb);
+          const r = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=${formato}&idsVendas[]=${id}`, hb);
           const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
           const link = j?.data?.[0]?.link;
           if (link) mapa[String(id)] = link;
         } catch { /* segue */ }
         await new Promise(r2 => setTimeout(r2, 340));
       }
+    }
     }
   }
   return mapa;
@@ -1446,7 +1456,12 @@ export default async function handler(req, res) {
             }
             else if (nomeP) { ehPdf = true; pdf64 = Buffer.from(z0[nomeP]).toString('base64'); }
           } else if (b0[0] === 0x25) { ehPdf = true; pdf64 = Buffer.from(b0).toString('base64'); }
-          else if (String.fromCharCode(b0[0], b0[1]) === '^X') zplDoPedido = Buffer.from(b0).toString('utf8');
+          else if (String.fromCharCode(b0[0], b0[1]) === '^X') {
+            zplDoPedido = Buffer.from(b0).toString('utf8');
+            // 15/09: o ZPL do Magalu vem sem ^PW/^LL (medido no 71923: cabe em 812x1218) —
+            // fixa a folha 10x15 pra nao depender do que a impressora estava usando. So Magalu.
+            if (String(p.canal_geral || '') === 'Magalu' && !/\^PW/.test(zplDoPedido)) zplDoPedido = zplDoPedido.replace(/\^XA/, '^XA^PW812^LL1218');
+          }
         } catch (e) { if (!e?.pulaDownload) { /* sem etiqueta */ } }
         if (!zplDoPedido && !ehPdf) continue;
 
