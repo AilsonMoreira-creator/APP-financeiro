@@ -207,13 +207,24 @@ export default async function handler(req, res) {
         lista = lista.filter(p => !resolvidos.has(String(p.pedido_id)));
       }
 
+      // 16/09 (Ailson): MAGALU pede formato=ZPL (ZD220 203 dpi imprime o ZPL nativo no
+      // tamanho certo; o PDF escalado saía pequeno). Mesma regra do wms-etiquetas.
+      // Demais canais seguem em PDF, exatamente como antes.
+      const fmtDe = p => (String(p.canal_geral || '') === 'Magalu' ? 'ZPL' : 'PDF');
+      // lote so agrupa quem tem o MESMO formato (a chamada leva um formato so)
+      lista = [...lista.filter(p => fmtDe(p) === 'PDF'), ...lista.filter(p => fmtDe(p) === 'ZPL')];
+
       // demais: Bling em lote de 20 (rápido); se recusar, cai pra individual
       for (let i = 0; i < lista.length; i += 20) {
         if (Date.now() - inicio > 250000) { c.aviso = 'tempo esgotado — rode de novo pra continuar'; break; }
-        const fatia = lista.slice(i, i + 20);
+        let fatia = lista.slice(i, i + 20);
+        // nao misturar formatos na mesma chamada
+        if (fatia.some(p => fmtDe(p) !== fmtDe(fatia[0]))) fatia = fatia.filter(p => fmtDe(p) === fmtDe(fatia[0]));
+        const fmtFatia = fmtDe(fatia[0]);
+        i -= (lista.slice(i, i + 20).length - fatia.length);   // o que sobrou entra na proxima volta
         const links = {};
         try {
-          const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&${fatia.map(p => `idsVendas[]=${p.pedido_id}`).join('&')}`;
+          const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=${fmtFatia}&${fatia.map(p => `idsVendas[]=${p.pedido_id}`).join('&')}`;
           const rr = await blingFetch(url, h);
           const j = typeof rr.json === 'function' ? await rr.json().catch(() => ({})) : {};
           for (const e of (j?.data || [])) {
@@ -230,7 +241,7 @@ export default async function handler(req, res) {
           let link = links[String(p.pedido_id)];
           if (!link) {
             try {
-              const rr = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${p.pedido_id}`, h);
+              const rr = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=${fmtDe(p)}&idsVendas[]=${p.pedido_id}`, h);
               const j = typeof rr.json === 'function' ? await rr.json().catch(() => ({})) : {};
               link = j?.data?.[0]?.link;
               await espera(340);
