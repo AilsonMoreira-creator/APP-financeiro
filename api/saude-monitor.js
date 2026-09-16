@@ -59,11 +59,16 @@ async function coletar() {
   const q15 = new Date(Date.now() - 15 * 60000).toISOString();
   const { data: errosApp } = await supabase.from('app_erros').select('assinatura, usuario, device_id, mensagem, modulo, criado_em').gte('criado_em', h1);
   const ea = errosApp || [];
-  const recentes = ea.filter(e => e.criado_em >= q15);
+  // 16/09 (Ailson): os registros "reload:" sao TELEMETRIA de atualizacao do app
+  // (versao nova / SW novo), nao erro — 6 aparelhos pegando a versao nova ao mesmo
+  // tempo e o comportamento esperado depois de um deploy. Ficam de fora da
+  // classificacao; continuam gravados e visiveis na pagina de Saude.
+  const ehReload = e => String(e.mensagem || '').startsWith('reload:');
+  const recentes = ea.filter(e => e.criado_em >= q15 && !ehReload(e));
   const porAssin = {};
   for (const e of recentes) { porAssin[e.assinatura] = porAssin[e.assinatura] || { msg: e.mensagem, modulo: e.modulo, aparelhos: new Set(), usuarios: new Set() }; porAssin[e.assinatura].aparelhos.add(e.device_id || e.usuario); if (e.usuario) porAssin[e.assinatura].usuarios.add(e.usuario); }
   const pior = Object.values(porAssin).sort((a, b) => b.aparelhos.size - a.aparelhos.size)[0];
-  const app_erros = { total_1h: ea.length, ultimos_15min: recentes.length, distintos_15min: Object.keys(porAssin).length,
+  const app_erros = { total_1h: ea.filter(e => !ehReload(e)).length, reloads_1h: ea.filter(ehReload).length, ultimos_15min: recentes.length, distintos_15min: Object.keys(porAssin).length,
     pior: pior ? { mensagem: pior.msg, modulo: pior.modulo, aparelhos: pior.aparelhos.size, usuarios: [...pior.usuarios] } : null };
   return {
     conexoes: s.conexoes, conexoes_max: s.conexoes_max, ativas: s.ativas, idle_tx: s.idle_tx,
