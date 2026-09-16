@@ -51,6 +51,12 @@ export default async function handler(req, res) {
       out.variantes = {};
       const base = `https://api.mercadolibre.com/marketplace/fbm/user-products/${up}/replenishment?country=BR`;
       const hdrs = [
+        ['query_site_id', null, `${base}&site_id=MLB`],
+        ['query_siteId', null, `${base}&siteId=MLB`],
+        ['query_site_e_caller', { Authorization: `Bearer ${token}`, 'x-caller-id': String(sid), 'x-caller-siteId': 'MLB' }, `${base}&site_id=MLB`],
+        ['header_capitalizado', { Authorization: `Bearer ${token}`, 'X-Caller-Id': String(sid), 'X-Caller-SiteId': 'MLB' }],
+        ['header_site_id_dash', { Authorization: `Bearer ${token}`, 'x-caller-id': String(sid), 'x-caller-site-id': 'MLB', 'x-caller-siteId': 'MLB' }],
+        ['header_x_site', { Authorization: `Bearer ${token}`, 'x-caller-id': String(sid), 'x-caller-siteId': 'MLB', 'x-site': 'MLB', 'site-id': 'MLB' }],
         ['so_bearer', { Authorization: `Bearer ${token}` }],
         ['bearer_accept_json', { Authorization: `Bearer ${token}`, Accept: 'application/json' }],
         ['caller_lower', { Authorization: `Bearer ${token}`, 'x-caller-id': String(sid), 'x-caller-siteid': 'MLB' }],
@@ -58,8 +64,9 @@ export default async function handler(req, res) {
         ['caller_e_site', { Authorization: `Bearer ${token}`, 'x-caller-id': String(sid), 'x-caller-siteId': 'MLB', 'x-site-id': 'MLB' }],
       ];
       out.headers_variantes = {};
-      for (const [tag, hh] of hdrs) {
-        try { const r = await fetch(base, { headers: hh }); out.headers_variantes[tag] = { http: r.status, corpo: (await r.text()).slice(0, 300) }; }
+      for (const [tag, hh0, url0] of hdrs) {
+        const hh = hh0 || { Authorization: `Bearer ${token}` };
+        try { const r = await fetch(url0 || base, { headers: hh }); out.headers_variantes[tag] = { http: r.status, corpo: (await r.text()).slice(0, 300) }; }
         catch (e) { out.headers_variantes[tag] = { erro: String(e.message).slice(0, 80) }; }
         await new Promise(x => setTimeout(x, 250));
       }
