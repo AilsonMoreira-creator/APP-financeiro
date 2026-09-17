@@ -4,7 +4,7 @@
 // lista, via _meluni-pendencias-core), pra o badge e a lista nunca divergirem.
 // Uma leitura de meluni_conversas + uma de carrinhos convertidos. Ailson 24/06/2026.
 import { supabase } from './_meluni-whats-helpers.js';
-import { telefonesConvertidos, naoVista, pendenciaCarrinho } from './_meluni-pendencias-core.js';
+import { telefonesConvertidos, naoVista, pendenciaCarrinho, idsComAutoResposta } from './_meluni-pendencias-core.js';
 
 export const config = { maxDuration: 30 };   // 11/09: rota de tela — nao segura conexao por 5 min
 
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   try {
     const { data: convs, error } = await supabase
       .from('meluni_conversas')
-      .select('origem, canal, ultima_msg_direcao, ultima_msg_em, visto_em, telefone')
+      .select('id, origem, canal, ultima_msg_direcao, ultima_msg_em, visto_em, telefone')
       .in('ultima_msg_direcao', ['in', 'entrada'])
       .limit(5000);
     if (error) return res.status(500).json({ ok: false, erro: error.message });
@@ -22,10 +22,12 @@ export default async function handler(req, res) {
     // mesma exclusão de convertidos que a lista usa (fonte única)
     const convTel = await telefonesConvertidos(supabase);
 
+    // 17/09: mesma exclusão de auto-resposta da lista, pros dois nunca divergirem
+    const auto = await idsComAutoResposta(supabase, (convs || []).filter(c => c.origem === 'carrinho' && pendenciaCarrinho(c, convTel)).map(c => c.id));
     let sac = 0, clientes = 0, carrinho = 0;
     for (const c of (convs || [])) {
       // carrinho: regra compartilhada (não-vista + não é quem já comprou)
-      if (c.origem === 'carrinho') { if (pendenciaCarrinho(c, convTel)) carrinho++; continue; }
+      if (c.origem === 'carrinho') { if (pendenciaCarrinho(c, convTel) && !auto.has(c.id)) carrinho++; continue; }
       if (!naoVista(c)) continue;
       if (c.origem === 'cliente') { clientes++; continue; }
       // SAC = site + Direct (whatsapp/direct_insta), exclui carrinho/cliente, entrada não-vista

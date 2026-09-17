@@ -9,7 +9,7 @@
 import { supabase } from './_bling-helpers.js';
 import { chaveTel } from './_meluni-tel.js';
 import { anexarTags } from './_meluni-tags-anexar.js';
-import { telefonesConvertidos, pendenciaCarrinho } from './_meluni-pendencias-core.js';
+import { telefonesConvertidos, pendenciaCarrinho, idsComAutoResposta } from './_meluni-pendencias-core.js';
 
 export const config = { maxDuration: 30 };   // 11/09: rota de tela — nao segura conexao por 5 min
 
@@ -74,14 +74,17 @@ export default async function handler(req, res) {
 
     // conversa sem resposta (origem carrinho, última msg "in")
     const { data: convsPend } = await supabase.from('meluni_conversas')
-      .select('cliente_id, telefone, etapa, visto_em, ultima_msg_em')
+      .select('id, cliente_id, telefone, etapa, visto_em, ultima_msg_em')
       .eq('origem', 'carrinho')
       .in('ultima_msg_direcao', ['in', 'entrada']);
+    // 17/09 (Ailson): auto-resposta da cliente não conta como pendência
+    const auto = await idsComAutoResposta(supabase, (convsPend || []).filter(c => pendenciaCarrinho(c, convTel)).map(c => c.id));
     const pendCli = new Set(), pendTel = new Set();
     const pendEmCli = new Map(), pendEmTel = new Map(); // quando a cliente mandou a última msg
     const unread = {};
     for (const c of (convsPend || [])) {
       if (!pendenciaCarrinho(c, convTel)) continue;   // não-vista E não é quem já comprou
+      if (auto.has(c.id)) continue;                  // última msg dela é auto-resposta
       const k = chaveTel(c.telefone);
       if (c.cliente_id) { pendCli.add(c.cliente_id); pendEmCli.set(c.cliente_id, c.ultima_msg_em); }
       if (k) { pendTel.add(k); pendEmTel.set(k, c.ultima_msg_em); }
