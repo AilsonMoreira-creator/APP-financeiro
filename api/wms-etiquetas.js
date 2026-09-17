@@ -444,6 +444,13 @@ export function ehAgendadaPendente(p, hojeBRT) {
   const eAgendada = agendadoFuturo
     || p.ml_ship_substatus === 'buffered'
     || p.print_regra === 'MELI_AGENDADO';
+  // 17/09 (regra dele): a data de ENVIO do rodapé NUNCA pode ser hoje. Se o ML
+  // já marcou o envio pra hoje (ou pra uma data passada), o pedido saiu do
+  // agendamento e tem que ir no lote normal, casado com a etiqueta — senão a
+  // DANFE sai aqui e sai de novo no par, que é a repetição que a Sthefany viu.
+  // Vale mesmo quando print_regra ainda está MELI_AGENDADO ou o substatus é
+  // buffered: a data manda.
+  if (p.ml_agendado_em && String(p.ml_agendado_em) <= hojeBRT) return false;
   return !!(eAgendada
     && p.nf_id
     && p.nf_situacao === 5
@@ -1183,6 +1190,14 @@ export default async function handler(req, res) {
             zpl: String(dRes.conteudo).replace('^XZ', rodape + '^XZ') });
           idsOk.push(p.pedido_id); refsOk.push(String(p.ref || ''));
         } catch (e) { semDanfeAg.push(`${p.numero} (${e?.message || 'erro'})`); }
+      }
+      // 17/09 (pedido dele): registrar QUAIS pedidos saíram no lote de agendadas —
+      // os outros tipos já gravavam; sem isso não dava pra provar repetição.
+      if (q.job && idsOk.length) {
+        await supabase.from('wms_print_log').insert({
+          job_id: parseInt(q.job, 10), evento: 'rodada',
+          detalhe: { tipo: 'nf_agendada', pares: idsOk.length, pedidos: idsOk, numeros: blocos.map(b => b.pedido) },
+        }).then?.(() => {}, () => {});
       }
       const restAg = Math.max(0, alvoAg.length - idsOk.length);
       return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, refs: refsOk, em_pdf: [], sem_danfe: semDanfeAg, sem_etiqueta: [], restantes: restAg, ultimo_grupo: '' });
