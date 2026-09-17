@@ -36,7 +36,27 @@ export default async function handler(req, res) {
     if (error) throw new Error(error.message);
     let lista = data || [];
 
+    // 17/09 (Ailson): carrinho com CONVERSA SEM RESPOSTA aparece mesmo fora da
+    // janela de dias. O badge da aba conta as pendências sem olhar o período, então
+    // com o filtro em 30d a aba mostrava "1" e a lista vinha vazia — sem conversa
+    // pra abrir, a pendência nunca saía. Aqui trazemos esses carrinhos de volta.
+    let extras = [];
+    if (dias > 0 && offset === 0) {
+      const desde = new Date(Date.now() - dias * 86400000).toISOString();
+      const { data: pendAntigos } = await supabase.from('vw_meluni_carrinhos')
+        .select('id,cliente_id,nome,telefone,email,valor,itens,data_carrinho,status,planilha_ref,n_itens,is_cliente,enviado_em,segundo_envio_em,ultima_interacao_em,convertido_em,origem,cliente_nome,cliente_whatsapp')
+        .eq('status', status).eq('origem', origem)
+        .lt('data_carrinho', desde)
+        .order('data_carrinho', { ascending: false, nullsFirst: false })
+        .limit(200);
+      extras = pendAntigos || [];
+    }
+    const idsNaLista = new Set(lista.map(c => c.id));
+    const listaComExtras = [...lista, ...extras.filter(c => !idsNaLista.has(c.id))];
+    const marcarExtra = new Set(extras.map(c => c.id));
+
     // enriquece com nome/whatsapp do cliente vinculado (quando houver)
+    lista = listaComExtras;
     const ids = [...new Set(lista.map(c => c.cliente_id).filter(Boolean))];
     if (ids.length) {
       const { data: cls } = await supabase.from('meluni_clientes').select('id,nome,whatsapp').in('id', ids);
@@ -74,6 +94,9 @@ export default async function handler(req, res) {
       const pendente_em = pend ? ((c.cliente_id && pendEmCli.get(c.cliente_id)) || (k && pendEmTel.get(k)) || null) : null;
       return { ...c, conversa_pendente: !!pend, pendente_em };
     });
+    // dos "extras" (fora da janela) fica só quem tem pendência de verdade
+    lista = lista.filter(c => !marcarExtra.has(c.id) || c.conversa_pendente)
+      .map(c => marcarExtra.has(c.id) ? { ...c, fora_da_janela: true } : c);
 
     // SKU -> ref + descrição (mesmo caminho do módulo Bling vendas: ml_sku_ref_map)
     const skus = [...new Set(
