@@ -2270,14 +2270,25 @@ async function montarContextoMensagem(sug, contextoExtra) {
 
     // 4. TOP CATEGORIAS — o que cliente mais compra
     try {
+      // 17/09: lojas_vendas_itens NÃO tem coluna categoria (a consulta falhava calada
+      // desde sempre — 42703 no log do Postgres, topCategorias ficava vazio). A
+      // categoria vive em lojas_produtos, ligada pela REF.
       const { data: itens } = await supabase
         .from('lojas_vendas_itens')
-        .select('categoria, qtd, lojas_vendas!inner(cliente_id)')
+        .select('ref, qtd, lojas_vendas!inner(cliente_id)')
         .eq('lojas_vendas.cliente_id', cliente.id);
       if (itens?.length) {
+        const refs = [...new Set(itens.map(i => String(i.ref || '').replace(/^0+/, '')).filter(Boolean))];
+        const catPorRef = {};
+        for (let i = 0; i < refs.length; i += 200) {
+          const fatia = refs.slice(i, i + 200);
+          const { data: prods } = await supabase.from('lojas_produtos').select('ref, categoria')
+            .in('ref', [...fatia, ...fatia.map(r => r.padStart(4, '0'))]);
+          for (const pr of (prods || [])) catPorRef[String(pr.ref || '').replace(/^0+/, '')] = pr.categoria;
+        }
         const counts = {};
         itens.forEach(i => {
-          const cat = i.categoria || 'outros';
+          const cat = catPorRef[String(i.ref || '').replace(/^0+/, '')] || 'outros';
           counts[cat] = (counts[cat] || 0) + (i.qtd || 1);
         });
         topCategorias = Object.entries(counts)
