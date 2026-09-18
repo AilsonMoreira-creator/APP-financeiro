@@ -71,6 +71,15 @@ export default async function handler(req, res) {
         await new Promise(x => setTimeout(x, 250));
       }
       const alts = [
+        // 17/09: caminhos alternativos citados na doc/for'uns do ML pra reposicao do Full
+        ['restock_suggestions', `https://api.mercadolibre.com/marketplace/fbm/restock/suggestions?country=BR&user_product_id=${up}`],
+        ['inventories_suggestion', `https://api.mercadolibre.com/inventories/suggestions/search?seller_id=${sid}&site_id=MLB`],
+        ['stock_recommendations', `https://api.mercadolibre.com/marketplace/fbm/stock/recommendations?country=BR`],
+        ['user_products_bulk', `https://api.mercadolibre.com/marketplace/fbm/user-products/replenishment?country=BR&ids=${up}`],
+        ['replenishment_v2', `https://api.mercadolibre.com/marketplace/fbm/v2/user-products/${up}/replenishment?country=BR`],
+        ['sites_replenishment', `https://api.mercadolibre.com/sites/MLB/fbm/user-products/${up}/replenishment`],
+        ['users_replenishment', `https://api.mercadolibre.com/users/${sid}/fbm/replenishment?country=BR`],
+        ['fbm_summary', `https://api.mercadolibre.com/marketplace/fbm/user-products/${up}?country=BR`],
         ['sem_country', `https://api.mercadolibre.com/marketplace/fbm/user-products/${up}/replenishment`],
         ['fbm_raiz', `https://api.mercadolibre.com/fbm/user-products/${up}/replenishment?country=BR`],
         ['fulfillment_up', `https://api.mercadolibre.com/fulfillment/user-products/${up}/replenishment?country=BR`],
