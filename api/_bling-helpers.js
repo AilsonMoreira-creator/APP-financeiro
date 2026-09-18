@@ -249,6 +249,10 @@ const SINONIMOS_COR = {
   // que "Verde Sálvia" — a principal é Verde Sálvia
   verdesalviaescuro: 'verdesalvia',
   verdesalvia: 'verdesalvia',
+  // 18/09: no Bling também aparece SEM o "Verde" — "Sálvia Escuro" / "Salvia".
+  // (o acento já cai na normalização; aqui é a grafia curta.)
+  salviaescuro: 'verdesalvia',
+  salvia: 'verdesalvia',
 };
 
 const ROTULO_COR = {
