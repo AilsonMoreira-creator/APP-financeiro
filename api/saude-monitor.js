@@ -125,8 +125,19 @@ async function classificar(m) {
   if (baseStorage && m.storage_calls_5min > 10 * baseStorage && m.storage_calls_5min > 2000) motivos.vermelho.push(`Storage ${Math.round(m.storage_calls_5min / baseStorage)}× o normal (${m.storage_calls_5min} em 5 min) — padrão de loop de fotos`);
   if (m.esteira_erros_1h >= 100) motivos.vermelho.push(`${m.esteira_erros_1h} erros na esteira na última hora`);
   // AMARELO (iminente)
-  if (pct >= 75 && pct < 90) motivos.amarelo.push(`banco em ${pct}% das conexões (${m.conexoes}/${m.conexoes_max})`);
+  // 17/09 (Ailson): o amarelo de conexões era 75%, calibrado no Micro (60 conexões).
+  // No Small (90) a tarde cheia chega a 77% e volta sozinha — virou alerta diário sem
+  // nada errado. Sobe pra 85%, que no Small são ~77 conexões e já é risco de verdade;
+  // vermelho segue em 90%. Entre 75 e 85 continua aparecendo como AVISO na página.
+  if (pct >= 85 && pct < 90) motivos.amarelo.push(`banco em ${pct}% das conexões (${m.conexoes}/${m.conexoes_max})`);
+  else if (pct >= 75 && pct < 85) motivos.aviso.push(`banco em ${pct}% das conexões (${m.conexoes}/${m.conexoes_max})`);
   if (m.latencia_ms >= 3000 && m.latencia_ms < 8000) motivos.amarelo.push(`banco lento: ${(m.latencia_ms / 1000).toFixed(1)}s`);
+  // 17/09: conexões só viram amarelo se ALGO MAIS estiver ruim junto (latência acima
+  // de 1s ou transações presas). Conexão alta com o banco respondendo rápido é uso
+  // normal de tarde cheia, não risco iminente.
+  if (motivos.amarelo.length === 1 && /% das conexões/.test(motivos.amarelo[0]) && m.latencia_ms < 1000 && m.idle_tx < 5) {
+    motivos.aviso.push(motivos.amarelo.pop() + ' (banco respondendo normal — só aviso)');
+  }
   const bancoEstressado = pct >= 50 || m.latencia_ms >= 1000;
   if (baseStorage && m.storage_calls_5min > 5 * baseStorage && m.storage_calls_5min > 1000 && !motivos.vermelho.length) {
     const txt = `Storage ${Math.round(m.storage_calls_5min / baseStorage)}× o normal (${m.storage_calls_5min} em 5 min)`;
