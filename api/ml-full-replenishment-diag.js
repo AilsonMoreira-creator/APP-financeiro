@@ -50,6 +50,13 @@ export default async function handler(req, res) {
       const up = vars.find(v => v.inventory_id)?.user_product_id || vars[0].user_product_id;
       out.variantes = {};
       const base = `https://api.mercadolibre.com/marketplace/fbm/user-products/${up}/replenishment?country=BR`;
+      const paisTeste = ['BR','br','BRA','MLB','ARG'];
+      out.country_variantes = {};
+      for (const c of paisTeste) {
+        try { const r = await fetch(`https://api.mercadolibre.com/marketplace/fbm/user-products/${up}/replenishment?country=${c}`, { headers: { Authorization: `Bearer ${token}`, 'x-caller-id': String(sid), 'x-caller-siteId': 'MLB' } });
+          out.country_variantes[c] = { http: r.status, corpo: (await r.text()).slice(0, 200) }; } catch (e) { out.country_variantes[c] = { erro: String(e.message).slice(0,60) }; }
+        await new Promise(x => setTimeout(x, 200));
+      }
       const hdrs = [
         ['query_site_id', null, `${base}&site_id=MLB`],
         ['query_siteId', null, `${base}&siteId=MLB`],
