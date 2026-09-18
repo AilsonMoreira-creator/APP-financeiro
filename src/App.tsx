@@ -9,6 +9,8 @@ import MLPerguntas from './MLPerguntas';
 import OrdemDeCorte, { ModalGerarOficina } from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
 import { corTecido } from './corTecido.js';   // 17/09: realce por tecido
+// 17/09 (Ailson): oficina temporária — cadastra o corte sem travar; fora de ranking
+export const OFICINA_A_DEFINIR="A definir";
 import EstoqueTecido from './EstoqueTecido';
 import MapeamentoSkus from './MapeamentoSkus';
 import RaioXProduto from './RaioXProduto';
@@ -4130,7 +4132,14 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
     if(!form.ref||!form.oficina||!form.qtd||!form.valorUnit)return;
     const qtd=parseFloat(form.qtd)||0,vu=parseFloat(form.valorUnit)||0;
     const item={id:editId||Date.now(),nCorte:form.nCorte,ref:form.ref,descricao:form.descricao,marca:form.marca,qtd,valorUnit:vu,valorTotal:Math.round(qtd*vu*100)/100,oficina:form.oficina,data:form.data,qtdEntregue:qtd,entregue:false,dataEntrega:null,pago:false,dataPagamento:null,obs:"",_mod:Date.now()};
-    if(editId)setCortes(prev=>prev.map(c=>c.id===editId?{...c,...item}:c));
+    // 17/09 (Ailson): EDITAR preco, oficina, etc NAO pode mexer no status. Antes o
+    // item nascia com entregue:false/pago:false e o spread zerava a entrega — corte
+    // entregue voltava pra em aberto. Pra tirar a entrega, desmarca na lista.
+    if(editId)setCortes(prev=>prev.map(c=>{
+      if(c.id!==editId)return c;
+      const qtdE=c.entregue?(c.qtdEntregue!=null?c.qtdEntregue:qtd):qtd;
+      return {...c,...item,entregue:c.entregue,dataEntrega:c.dataEntrega,pago:c.pago,dataPagamento:c.dataPagamento,qtdEntregue:qtdE,obs:c.obs??""};
+    }));
     else setCortes(prev=>[...prev,item]);
     logCorteAcao(editId?'editou':'criou',item,`${qtd} pç × R$ ${vu} · retirada ${String(item.data).split('-').reverse().join('/')}`);
     setForm({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});
@@ -4235,7 +4244,10 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
   const filtroPeriodo=(c)=>{if(dashPeriodo==="ano")return c.data.startsWith(anoStr);if(dashPeriodo==="custom"&&dashDe&&dashAte)return c.data>=dashDe&&c.data<=dashAte;return true;};
   // 📦 ARQUIVADO: dashboard e agregações por oficina nunca incluem arquivados
   const cortesDash=cortes.filter(c=>!c.arquivado&&filtroPeriodo(c)&&(dashMarca==="todas"||c.marca===dashMarca)&&(dashOf==="todas"||c.oficina===dashOf));
-  const oficinasUnicas=[...new Set(cortes.filter(c=>!c.arquivado).map(c=>c.oficina))].filter(Boolean);
+  // 17/09 (Ailson): "A definir" é um marcador temporário — permite cadastrar o corte
+  // e a matriz de cores antes de saber a oficina. NÃO entra em ranking, KPI nem alerta;
+  // quando ele editar e trocar pela oficina certa, entra normalmente.
+  const oficinasUnicas=[...new Set(cortes.filter(c=>!c.arquivado).map(c=>c.oficina))].filter(Boolean).filter(o=>o!==OFICINA_A_DEFINIR);
   const kpiOficina=(of)=>{
     const cs=cortesDash.filter(c=>c.oficina===of);
     const totalEnviadas=cs.reduce((s,c)=>s+c.qtd,0);
@@ -4401,7 +4413,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
                 <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Marca</div><select value={form.marca} onChange={e=>setForm(p=>({...p,marca:e.target.value}))} style={{...iStyle,width:"100%"}}><option>Amícia</option><option>Meluni</option></select></div>
                 <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Qtd</div><input value={form.qtd} onChange={e=>setForm(p=>({...p,qtd:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
                 <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Vl.Unit</div><input value={form.valorUnit} onChange={e=>setForm(p=>({...p,valorUnit:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
-                <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Oficina</div><select value={form.oficina} onChange={e=>setForm(p=>({...p,oficina:e.target.value}))} style={{...iStyle,width:"100%"}}><option value="">Selecionar</option>{oficinasCAD.map(o=><option key={o.codigo} value={o.descricao}>{o.descricao}</option>)}</select></div>
+                <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Oficina</div><select value={form.oficina} onChange={e=>setForm(p=>({...p,oficina:e.target.value}))} style={{...iStyle,width:"100%"}}><option value="">Selecionar</option><option value={OFICINA_A_DEFINIR}>{OFICINA_A_DEFINIR} (defino depois)</option>{oficinasCAD.map(o=><option key={o.codigo} value={o.descricao}>{o.descricao}</option>)}</select></div>
                 <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Data envio</div><input type="date" value={form.data} onChange={e=>setForm(p=>({...p,data:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
                 <div style={{display:"flex",alignItems:"flex-end"}}><button onClick={salvarCorte} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",width:"100%"}}>{editId?"Atualizar":"Salvar"}</button></div>
               </div>
