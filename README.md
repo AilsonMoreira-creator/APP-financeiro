@@ -1,3 +1,13 @@
+# APP financeiro — Grupo Amícia
+
+> ⚠️ **ANTES DE MEXER EM Oficinas (cortes e cadastros), Calculadora, Agenda ou
+> Lançamentos/Despesas: leia [ESPELHOS.md](./ESPELHOS.md).**
+> Esses módulos têm espelho relacional fora do payload `amicia_data` pra não
+> perder dado quando um aparelho salva por cima do outro. Mexeu no módulo,
+> atualize o espelho junto.
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

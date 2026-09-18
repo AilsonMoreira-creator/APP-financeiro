@@ -10,6 +10,10 @@ import OrdemDeCorte, { ModalGerarOficina } from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
 import { corTecido } from './corTecido.js';   // 17/09: realce por tecido
 import { lerEspelhoMes, gravarEspelho, compararComEspelho } from './espelhoDespesas.js';   // 17/09: espelho das celulas de Despesas
+// ⚠️ ESPELHOS — ver ESPELHOS.md na raiz do repo. Oficinas (cortes e cadastros),
+// Calculadora, Agenda e Despesas têm espelho relacional FORA do payload
+// amicia_data. Mexeu num desses módulos (campo novo, formato, exclusão)?
+// Atualize o espelho junto, senão ele restaura dado velho.
 import { gravarCadastro, restaurarCadastro, marcarExcluido } from './espelhoCadastros.js';   // 18/09: espelho dos cadastros (produtos, tecidos, oficinas)
 import { gravarCardsCalc, restaurarCardsCalc } from './espelhoCadastros.js';   // 18/09: espelho dos cards da Calculadora
 // 17/09 (Ailson): oficina temporária — cadastra o corte sem travar; fora de ranking
@@ -3115,6 +3119,36 @@ const AgendaContent=()=>{
     return inicial;
   });
 
+  // ── ESPELHO DA AGENDA (18/09) ──────────────────────────────────────────────
+  // Guarda a LISTA de compromissos fora do payload. O campo `feito` fica de fora
+  // de proposito: a agenda zera todo comeco de mes por regra, entao restaurar
+  // `feito` seria reviver marcacao do mes passado. Compromisso apagado grava
+  // lapide (marcarExcluido) e nao volta.
+  const espelhoAgendaPronto=useRef(false);
+  useEffect(()=>{
+    if(espelhoAgendaPronto.current||!itens?.length)return;
+    espelhoAgendaPronto.current=true;
+    (async()=>{
+      try{
+        const r=await restaurarCadastro(supabase,'agenda',itens);
+        if(r.restaurados.length||r.campos.length){
+          // item restaurado entra como NAO feito (mes corrente)
+          const lista=r.lista.map(i=>({...i,feito:i.feito===true}));
+          setItens(lista);salvarLocal(lista,Date.now());
+          console.log('espelho agenda: restaurado '+(r.restaurados.length+r.campos.length)+' item(ns)');
+          await gravarCadastro(supabase,'agenda',lista);
+        } else {
+          await gravarCadastro(supabase,'agenda',itens);
+        }
+      }catch(e){console.error('espelho agenda:',e?.message||e);}
+    })();
+  },[itens]);
+  useEffect(()=>{
+    if(!espelhoAgendaPronto.current)return;
+    const t=setTimeout(()=>{gravarCadastro(supabase,'agenda',itens);},1500);
+    return()=>clearTimeout(t);
+  },[itens]);
+
   // ── Sync com Supabase ao montar + visibilitychange ──
   const itensRef=useRef(itens);
   itensRef.current=itens; // sempre atualizado pra flush
@@ -3207,7 +3241,7 @@ const AgendaContent=()=>{
     setTimeout(()=>setSaveStatus("saved"),600);
   };
   const toggle=(id)=>{setItens(prev=>{const novo=prev.map(i=>i.id===id?{...i,feito:!i.feito}:i);salvarTudo(novo);return novo;});setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
-  const remover=(id)=>{setConfirm({msg:"Apagar este compromisso?",onYes:()=>{setItens(prev=>{const item=prev.find(x=>x.id===id);if(item)setLixeira(l=>[...l,item]);const novo=prev.filter(x=>x.id!==id);salvarTudo(novo);return novo;});setConfirm(null);markChange();}});};
+  const remover=(id)=>{setConfirm({msg:"Apagar este compromisso?",onYes:()=>{setItens(prev=>{const item=prev.find(x=>x.id===id);if(item)setLixeira(l=>[...l,item]);const novo=prev.filter(x=>x.id!==id);salvarTudo(novo);marcarExcluido(supabase,'agenda',id);/* 18/09: lapide no espelho */return novo;});setConfirm(null);markChange();}});};
   const desfazer=()=>{if(!lixeira.length)return;const u=lixeira[lixeira.length-1];setItens(prev=>{const novo=[...prev,u].sort((a,b)=>a.dia-b.dia);salvarTudo(novo);return novo;});setLixeira(l=>l.slice(0,-1));};
   const adicionar=()=>{if(!novoItem.dia||!novoItem.descricao.trim())return;setItens(prev=>{const novo=[...prev,{id:Date.now(),dia:parseInt(novoItem.dia),descricao:novoItem.descricao.trim(),feito:false}];salvarTudo(novo);return novo;});setNovoItem({dia:"",descricao:""});markChange();};
   const sorted=[...itens].sort((a,b)=>a.dia-b.dia);

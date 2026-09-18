@@ -21,6 +21,10 @@
 
 const CFG = {
   produtos: { tabela: 'cadastro_produtos_espelho', chave: 'ref',    norm: r => String(r.ref || '').trim() },
+  // agenda (18/09): guarda a LISTA de compromissos. O campo `feito` NÃO entra —
+  // a agenda zera todo começo de mês por regra, e restaurar `feito` seria reviver
+  // marcação do mês passado.
+  agenda:   { tabela: 'agenda_itens_espelho',      chave: 'id',     norm: r => r.id },
   tecidos:  { tabela: 'cadastro_tecidos_espelho',  chave: 'id',     norm: r => r.id },
   oficinas: { tabela: 'cadastro_oficinas_espelho', chave: 'codigo', norm: r => String(r.codigo || '').trim() },
 };
@@ -33,6 +37,7 @@ function quem() {
 function linhaDe(tipo, reg) {
   const base = { dados: reg, atualizado_em: new Date().toISOString(), atualizado_por: quem() };
   if (tipo === 'produtos') return { ...base, ref: String(reg.ref || '').trim(), descricao: reg.descricao ?? null, marca: reg.marca ?? null, tecido: reg.tecido ?? null, valor_unit: Number(reg.valorUnit) || 0 };
+  if (tipo === 'agenda')   return { ...base, id: reg.id, dia: Number(reg.dia) || null, descricao: reg.descricao ?? null, dados: { id: reg.id, dia: reg.dia, descricao: reg.descricao } };
   if (tipo === 'tecidos')  return { ...base, id: reg.id, descricao: reg.descricao ?? null, metragem_rolo: Number(reg.metragemRolo) || 0, valor_metro: Number(reg.valorMetro) || 0, cor: reg.cor ?? null };
   return { ...base, codigo: String(reg.codigo || '').trim(), descricao: reg.descricao ?? null };
 }
