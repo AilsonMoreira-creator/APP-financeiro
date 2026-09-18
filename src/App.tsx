@@ -8,6 +8,7 @@ import { CalcAnaliseMeluni } from "./CalcAnaliseMeluni";
 import MLPerguntas from './MLPerguntas';
 import OrdemDeCorte, { ModalGerarOficina } from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
+import { corTecido } from './corTecido.js';   // 17/09: realce por tecido
 import EstoqueTecido from './EstoqueTecido';
 import MapeamentoSkus from './MapeamentoSkus';
 import RaioXProduto from './RaioXProduto';
@@ -4038,7 +4039,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
   const [formOf,setFormOf]=useState({codigo:"",descricao:""});
   const [editProdRef,setEditProdRef]=useState(null);
   const [editOfCod,setEditOfCod]=useState(null);
-  const [formTec,setFormTec]=useState({descricao:"",metragemRolo:"",valorMetro:""});
+  const [formTec,setFormTec]=useState({descricao:"",metragemRolo:"",valorMetro:"",cor:""});
   const [editTecId,setEditTecId]=useState(null);
   const [buscaProd,setBuscaProd]=useState("");
   const [trocaDe,setTrocaDe]=useState("");
@@ -4714,13 +4715,14 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
                 <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"end"}}>
                   <div style={{flex:"2 1 120px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Descrição</div><input value={formTec.descricao} onChange={e=>setFormTec(p=>({...p,descricao:e.target.value}))} placeholder="Ex: Linho" style={{...iStyle,width:"100%"}}/></div>
                   <div style={{flex:"1 1 80px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Metragem/Rolo</div><input type="number" value={formTec.metragemRolo} onChange={e=>setFormTec(p=>({...p,metragemRolo:e.target.value}))} placeholder="50" style={{...iStyle,width:"100%",textAlign:"center"}}/></div>
+                  <div style={{flex:"0 0 92px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}} title="cor de realce usada na Ordem de Corte">Cor</div><input type="color" value={formTec.cor||corTecido(formTec.descricao||"x",tecidosCAD)} onChange={e=>setFormTec(p=>({...p,cor:e.target.value}))} style={{width:"100%",height:32,padding:2,border:"1px solid #d8d0c8",borderRadius:6,cursor:"pointer",background:"#fff"}}/></div>
                   <div style={{flex:"1 1 80px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Valor/Metro</div><input value={formTec.valorMetro} onChange={e=>setFormTec(p=>({...p,valorMetro:e.target.value}))} placeholder="28,50" style={{...iStyle,width:"100%",textAlign:"center"}}/></div>
-                  <div style={{flex:"0 0 80px"}}><button onClick={()=>{if(!formTec.descricao.trim())return;const t={id:editTecId||Date.now(),descricao:formTec.descricao.trim(),metragemRolo:Number(formTec.metragemRolo)||0,valorMetro:Number(String(formTec.valorMetro).replace(",","."))||0};if(editTecId&&setTecidosCAD)setTecidosCAD(prev=>prev.map(x=>x.id===editTecId?t:x));else if(setTecidosCAD)setTecidosCAD(prev=>[...prev,t]);setFormTec({descricao:"",metragemRolo:"",valorMetro:""});setEditTecId(null);}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",width:"100%"}}>{editTecId?"Atualizar":"Adicionar"}</button></div>
+                  <div style={{flex:"0 0 80px"}}><button onClick={()=>{if(!formTec.descricao.trim())return;const t={id:editTecId||Date.now(),descricao:formTec.descricao.trim(),metragemRolo:Number(formTec.metragemRolo)||0,valorMetro:Number(String(formTec.valorMetro).replace(",","."))||0,cor:formTec.cor||corTecido(formTec.descricao.trim(),tecidosCAD)};if(editTecId&&setTecidosCAD)setTecidosCAD(prev=>prev.map(x=>x.id===editTecId?t:x));else if(setTecidosCAD)setTecidosCAD(prev=>[...prev,t]);setFormTec({descricao:"",metragemRolo:"",valorMetro:"",cor:""});setEditTecId(null);}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",width:"100%"}}>{editTecId?"Atualizar":"Adicionar"}</button></div>
                 </div>
               </div>
               <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:400}}><thead><tr style={{background:"#4a7fa5"}}>{["Tecido","Metragem/Rolo","Valor/Metro","Custo/Rolo",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",color:"#fff",fontSize:10,fontWeight:600}}>{h}</th>)}</tr></thead>
-                  <tbody>{(tecidosCAD||[]).length===0&&<tr><td colSpan={5} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum tecido cadastrado</td></tr>}{(tecidosCAD||[]).map(t=>(<tr key={t.id} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{t.descricao}</td><td style={{padding:"8px 12px",color:"#6b7c8a"}}>{t.metragemRolo}m</td><td style={{padding:"8px 12px",fontFamily:_FN,fontWeight:700,color:"#2c3e50"}}>{fmt(t.valorMetro)}</td><td style={{padding:"8px 12px",fontFamily:_FN,fontWeight:700,color:"#4a7fa5"}}>{fmt(t.valorMetro*t.metragemRolo)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{setFormTec({descricao:t.descricao,metragemRolo:String(t.metragemRolo),valorMetro:String(t.valorMetro)});setEditTecId(t.id);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>{if(setTecidosCAD)setTecidosCAD(prev=>prev.filter(x=>x.id!==t.id));}} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
+                  <tbody>{(tecidosCAD||[]).length===0&&<tr><td colSpan={5} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum tecido cadastrado</td></tr>}{(tecidosCAD||[]).map(t=>(<tr key={t.id} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50",background:t.cor||corTecido(t.descricao,tecidosCAD)}}>{t.descricao}</td><td style={{padding:"8px 12px",color:"#6b7c8a"}}>{t.metragemRolo}m</td><td style={{padding:"8px 12px",fontFamily:_FN,fontWeight:700,color:"#2c3e50"}}>{fmt(t.valorMetro)}</td><td style={{padding:"8px 12px",fontFamily:_FN,fontWeight:700,color:"#4a7fa5"}}>{fmt(t.valorMetro*t.metragemRolo)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{setFormTec({descricao:t.descricao,metragemRolo:String(t.metragemRolo),valorMetro:String(t.valorMetro),cor:t.cor||corTecido(t.descricao,tecidosCAD)});setEditTecId(t.id);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>{if(setTecidosCAD)setTecidosCAD(prev=>prev.filter(x=>x.id!==t.id));}} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
                 </table>
               </div>
             </div>
@@ -7903,13 +7905,17 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   useEffect(()=>{let vivo=true;(async()=>{try{
     // via API (service key): ordens_corte tem RLS sem policy e o select
     // direto do front voltava vazio em silencio. Mais novos primeiro.
-    const ids=[...concluidos].sort((a,b)=>Number(b.id)-Number(a.id)).map(c=>String(c.id)).slice(0,80);
+    // 17/09 (Ailson): os PENDENTES tambem mostram o GRUPO da ordem no card, entao
+    // entram na busca de vinculos junto com os concluidos. pendentesIds vem por
+    // parametro do efeito (declarado abaixo) — nao referenciar `pendentes` aqui.
+    const pend=(cortesSala||[]).filter(c=>c.status==="pendente").map(c=>String(c.id));
+    const ids=[...pend,...[...concluidos].sort((a,b)=>Number(b.id)-Number(a.id)).map(c=>String(c.id))].filter((v,i,a)=>a.indexOf(v)===i).slice(0,120);
     if(!ids.length){if(vivo)setOrdemDoCorte({});return;}
     const r=await fetch(`/api/ordens-corte-gerar-oficina?vinculos=${ids.join(',')}`);
     const d=await r.json();
     if(!vivo)return;
     setOrdemDoCorte(d?.mapa||{});
-  }catch(e){console.error('ponte oficinas:',e);}})();return()=>{vivo=false};},[cortesSala.length,concluidos.map(c=>c.id).join(',')]);
+  }catch(e){console.error('ponte oficinas:',e);}})();return()=>{vivo=false};},[cortesSala.length,concluidos.map(c=>c.id).join(','),(cortesSala||[]).filter(c=>c.status==="pendente").map(c=>c.id).join(',')]);
   const abrirPonte=async()=>{
     if(carregandoPonte||!selPonte.size)return;
     const ordemIds=[...selPonte].map(cid=>ordemDoCorte[String(cid)]?.id).filter(Boolean);
@@ -8183,7 +8189,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
                   <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:mobile?16:14,fontWeight:700,color:"#2c3e50"}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}{!descCorte(c)&&<span style={{fontSize:11,color:"#a89f94",fontStyle:"italic",marginLeft:6}}>sem cadastro</span>}</div>
-                    <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:mobile?13:12,color:"#6b7c8a"}}>{c.qtdRolos} rolos · toque para informar peças</span></div>
+                    <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#2c3e50",fontWeight:700,background:corTecido(tecCorte(c),tecidosCAD),border:"1px solid rgba(0,0,0,.08)",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}{ordemDoCorte[String(c.id)]?.grupo&&<span style={{fontSize:10,fontWeight:800,color:"#2c3e50",background:"#eef3f8",border:"1px solid #cfe0ee",borderRadius:3,padding:"1px 7px"}}>GRUPO {ordemDoCorte[String(c.id)].grupo}</span>}<span style={{fontSize:mobile?13:12,color:"#6b7c8a"}}>{c.qtdRolos} rolos · toque para informar peças</span></div>
                   </div>
                 </div>
               </div>
@@ -8193,14 +8199,14 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
           {/* Últimos concluídos */}
           {concluidos.length>0&&(<div style={{marginTop:16}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>Últimos concluídos</div>
+              <div style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>Últimos 10 concluídos</div>
               {selPonte.size>0&&(
                 <button onClick={abrirPonte} disabled={carregandoPonte} style={{display:"inline-flex",alignItems:"center",gap:7,background:"#1e8e4e",color:"#fff",border:"none",borderRadius:9,padding:"7px 13px",fontSize:12.5,fontWeight:700,cursor:carregandoPonte?"wait":"pointer",fontFamily:"Georgia,serif",opacity:carregandoPonte?0.6:1}}>
                   <SvgCortes size={17}/>{carregandoPonte?"Conferindo…":`Gerar corte oficina (${selPonte.size})`}
                 </button>
               )}
             </div>
-            {[...concluidos].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,5).map(c=>(
+            {[...concluidos].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,10).map(c=>(
               <div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:"1px solid #e8e2da",marginBottom:6}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                   <div style={{display:"flex",gap:10,flex:1,alignItems:"center"}}>
@@ -8217,7 +8223,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
                         <span style={{fontSize:11,color:"#a89f94"}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span>
                       </div>
                       <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:2}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}</div>
-                      <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#a89f94"}}>{c.qtdRolos}r → {fmt(c.qtdPecas)} pç</span>{(()=>{const o=ordemDoCorte[String(c.id)];if(!o)return null;return(<>
+                      <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#2c3e50",fontWeight:700,background:corTecido(tecCorte(c),tecidosCAD),border:"1px solid rgba(0,0,0,.08)",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#a89f94"}}>{c.qtdRolos}r → {fmt(c.qtdPecas)} pç</span>{(()=>{const o=ordemDoCorte[String(c.id)];if(!o)return null;return(<>
                       {o.grupo&&<span style={{fontSize:10,fontWeight:800,color:"#2c3e50",background:"#eef3f8",border:"1px solid #cfe0ee",borderRadius:3,padding:"1px 7px"}}>GRUPO {o.grupo}</span>}
                       {o.oficina_corte_num&&<span title="Corte já gerado no módulo Oficinas" style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#1e8e4e",background:"#eaf6ee",border:"1px solid #bfe3cc",borderRadius:3,padding:"1px 7px"}}><SvgCortes size={13}/>{o.oficina_nome} · {o.oficina_corte_num}</span>}
                     </>);})()}</div>
@@ -8364,7 +8370,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
                   {refMedia&&refMedia.media>0&&(<span style={{fontSize:10,color:c.alerta?"#c0392b":"#8a9aa4",fontFamily:_FN,fontWeight:c.alerta?700:500}}>média {refMedia.media}{diffPct!==null&&diffPct>0?` · −${diffPct}%`:""}{diffPct!==null&&diffPct<0?` · +${-diffPct}%`:""}</span>)}
                 </div></div>
               <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:3}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}</div>
-              <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#6b7c8a"}}>{c.qtdRolos} rolos → {fmt(c.qtdPecas)} peças</span></div>
+              <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#2c3e50",fontWeight:700,background:corTecido(tecCorte(c),tecidosCAD),border:"1px solid rgba(0,0,0,.08)",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#6b7c8a"}}>{c.qtdRolos} rolos → {fmt(c.qtdPecas)} peças</span></div>
               {custo&&(<div style={{marginTop:6}}><div onClick={()=>setCustoAberto(aberto?null:c.id)} style={{cursor:"pointer",fontSize:11,color:"#4a7fa5",display:"flex",alignItems:"center",gap:4}}>💰 {aberto?"▲ Ocultar custo":"▼ Ver custo tecido"}</div>
                 {aberto&&(<div style={{marginTop:6,background:"#f7f4f0",borderRadius:10,padding:12}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
                   <div><div style={{fontSize:9,color:"#a89f94",textTransform:"uppercase",letterSpacing:1}}>Custo/Rolo</div><div style={{fontSize:14,fontWeight:800,color:"#6b7c8a",fontFamily:_FN}}>{fmtR(custo.custoRolo)}</div></div>
@@ -8409,7 +8415,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
         </div>)}
 
         {/* ═══ ORDEM DE CORTE (admin + pedro + corte) ═══ */}
-        {tela==="ordem"&&podeOrdem&&(<OrdemDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}} mediaRef={mediaRef}/>)}
+        {tela==="ordem"&&podeOrdem&&(<OrdemDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}} mediaRef={mediaRef} tecidosCAD={tecidosCAD}/>)}
 
         {/* ═══ ESTOQUE DE TECIDO (13/08) ═══ */}
         {tela==="tecido"&&(<EstoqueTecido usuarioLogado={{usuario,admin:isAdmin}} onVoltar={()=>setTela("ordem")}/>)}

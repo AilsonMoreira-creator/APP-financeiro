@@ -14,6 +14,7 @@ import { compartilharElementoComoImagem, gerarPngDeElemento, compartilharArquivo
 import { listarCoresManuais, adicionarCorManual, removerCorManual, resolverHexCor } from './cores-manuais.js';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import { ModalDefinirSala, SALAS_PADRAO } from './FilaDeCorte';
+import { corTecido } from './corTecido.js';   // 17/09: realce por tecido (cor do cadastro)
 
 const FN = "Calibri,'Segoe UI',Arial,sans-serif";
 const SERIF = "Georgia,'Times New Roman',serif";
@@ -157,7 +158,7 @@ function loadCoresRanking() {
 // COMPONENTE PRINCIPAL
 // ════════════════════════════════════════════════════════════════════════════
 
-export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} }) {
+export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {}, tecidosCAD = [] }) {
   const [ordens, setOrdens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -376,6 +377,7 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {ordensFiltradas.map(o => (
           <OrdemCard
+            tecidosCAD={tecidosCAD}
             key={o.id}
             ordem={o}
             expandida={expandidas.has(o.id)}
@@ -483,7 +485,7 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
 // CARD DE ORDEM (intocado)
 // ════════════════════════════════════════════════════════════════════════════
 
-function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAbrirMatrix, onDefinirSala, selecionado, onToggleSelecionado, registrarRef }) {
+function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAbrirMatrix, onDefinirSala, selecionado, onToggleSelecionado, registrarRef, tecidosCAD = [] }) {
   const status = STATUS_PILL[ordem.status] || STATUS_PILL.aguardando;
   const carimboOficina = ordem.oficina_corte_num ? `✂️ ${ordem.oficina_nome} · ${ordem.oficina_corte_num}` : null;
   const cores = ordem.cores || [];
@@ -567,7 +569,9 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
             </span>
           </div>
           <div style={{ fontSize: 11, color: '#8a9aa4', marginBottom: cores.length > 0 ? 8 : 0 }}>
-            🧵 {ordem.tecido} · <span style={{ color: '#5a6470', fontWeight: 600, fontSize: 12 }}>Grade {ordenarTamanhos(Object.entries(ordem.grade || {})).map(([t, v]) => `${v}${t}`).join(' · ')}</span>
+            {/* 17/09 (Ailson): tecido grifado com a cor do cadastro — sempre a mesma
+                cor pro mesmo tecido, pra ninguem confundir na hora de cortar */}
+            <span style={{ background: corTecido(ordem.tecido, tecidosCAD) || 'transparent', borderRadius: 4, padding: '1px 7px', fontWeight: 700, color: '#2c3e50', fontSize: 12 }}>🧵 {ordem.tecido}</span> · <span style={{ color: '#5a6470', fontWeight: 600, fontSize: 12 }}>Grade {ordenarTamanhos(Object.entries(ordem.grade || {})).map(([t, v]) => `${v}${t}`).join(' · ')}</span>
             {ordem.created_at && <span> · 📅 criada {new Date(ordem.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>}
           </div>
           {cores.length > 0 && (
