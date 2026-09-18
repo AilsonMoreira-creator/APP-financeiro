@@ -10,6 +10,8 @@ import OrdemDeCorte, { ModalGerarOficina } from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
 import { corTecido } from './corTecido.js';   // 17/09: realce por tecido
 import { lerEspelhoMes, gravarEspelho, compararComEspelho } from './espelhoDespesas.js';   // 17/09: espelho das celulas de Despesas
+import { gravarCadastro, restaurarCadastro, marcarExcluido } from './espelhoCadastros.js';   // 18/09: espelho dos cadastros (produtos, tecidos, oficinas)
+import { gravarCardsCalc, restaurarCardsCalc } from './espelhoCadastros.js';   // 18/09: espelho dos cards da Calculadora
 // 17/09 (Ailson): oficina temporária — cadastra o corte sem travar; fora de ranking
 export const OFICINA_A_DEFINIR="A definir";
 import EstoqueTecido from './EstoqueTecido';
@@ -4771,7 +4773,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
               </div>
               <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:400}}><thead><tr style={{background:"#4a7fa5"}}>{["Tecido","Metragem/Rolo","Valor/Metro","Custo/Rolo",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",color:"#fff",fontSize:10,fontWeight:600}}>{h}</th>)}</tr></thead>
-                  <tbody>{(tecidosCAD||[]).length===0&&<tr><td colSpan={5} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum tecido cadastrado</td></tr>}{(tecidosCAD||[]).map(t=>(<tr key={t.id} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50",background:t.cor||corTecido(t.descricao,tecidosCAD)}}>{t.descricao}</td><td style={{padding:"8px 12px",color:"#6b7c8a"}}>{t.metragemRolo}m</td><td style={{padding:"8px 12px",fontFamily:_FN,fontWeight:700,color:"#2c3e50"}}>{fmt(t.valorMetro)}</td><td style={{padding:"8px 12px",fontFamily:_FN,fontWeight:700,color:"#4a7fa5"}}>{fmt(t.valorMetro*t.metragemRolo)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{setFormTec({descricao:t.descricao,metragemRolo:String(t.metragemRolo),valorMetro:String(t.valorMetro),cor:t.cor||corTecido(t.descricao,tecidosCAD)});setEditTecId(t.id);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>{if(setTecidosCAD)setTecidosCAD(prev=>prev.filter(x=>x.id!==t.id));}} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
+                  <tbody>{(tecidosCAD||[]).length===0&&<tr><td colSpan={5} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum tecido cadastrado</td></tr>}{(tecidosCAD||[]).map(t=>(<tr key={t.id} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50",background:t.cor||corTecido(t.descricao,tecidosCAD)}}>{t.descricao}</td><td style={{padding:"8px 12px",color:"#6b7c8a"}}>{t.metragemRolo}m</td><td style={{padding:"8px 12px",fontFamily:_FN,fontWeight:700,color:"#2c3e50"}}>{fmt(t.valorMetro)}</td><td style={{padding:"8px 12px",fontFamily:_FN,fontWeight:700,color:"#4a7fa5"}}>{fmt(t.valorMetro*t.metragemRolo)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{setFormTec({descricao:t.descricao,metragemRolo:String(t.metragemRolo),valorMetro:String(t.valorMetro),cor:t.cor||corTecido(t.descricao,tecidosCAD)});setEditTecId(t.id);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>{if(setTecidosCAD)setTecidosCAD(prev=>prev.filter(x=>x.id!==t.id));marcarExcluido(supabase,'tecidos',t.id);/* 18/09: lapide no espelho */}} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
                 </table>
               </div>
             </div>
@@ -4787,7 +4789,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
               </div>
               <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:"#f7f4f0"}}>{["Código","Descrição","Cortes em aberto",""].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:10,color:"#a89f94",fontWeight:600}}>{h}</th>)}</tr></thead>
-                  <tbody>{oficinasCAD.length===0&&<tr><td colSpan={4} style={{padding:24,textAlign:"center",color:"#c0b8b0"}}>Nenhuma oficina cadastrada</td></tr>}{oficinasCAD.map(o=>{const aberto=cortes.filter(c=>!c.arquivado&&c.oficina===o.descricao&&!c.entregue&&!c.pago).length;return(<tr key={o.codigo} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{o.codigo}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{o.descricao}</td><td style={{padding:"8px 12px"}}>{aberto>0?<span style={{background:"#fffbea",color:"#b7791f",borderRadius:4,padding:"2px 8px",fontSize:11}}>{aberto} em aberto</span>:<span style={{color:"#a0a0a0",fontSize:11}}>—</span>}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{setFormOf({codigo:o.codigo,descricao:o.descricao});setEditOfCod(o.codigo);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>setOficinasCAD(prev=>prev.filter(x=>x.codigo!==o.codigo))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>);})}</tbody>
+                  <tbody>{oficinasCAD.length===0&&<tr><td colSpan={4} style={{padding:24,textAlign:"center",color:"#c0b8b0"}}>Nenhuma oficina cadastrada</td></tr>}{oficinasCAD.map(o=>{const aberto=cortes.filter(c=>!c.arquivado&&c.oficina===o.descricao&&!c.entregue&&!c.pago).length;return(<tr key={o.codigo} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{o.codigo}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{o.descricao}</td><td style={{padding:"8px 12px"}}>{aberto>0?<span style={{background:"#fffbea",color:"#b7791f",borderRadius:4,padding:"2px 8px",fontSize:11}}>{aberto} em aberto</span>:<span style={{color:"#a0a0a0",fontSize:11}}>—</span>}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{setFormOf({codigo:o.codigo,descricao:o.descricao});setEditOfCod(o.codigo);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>{setOficinasCAD(prev=>prev.filter(x=>x.codigo!==o.codigo));marcarExcluido(supabase,'oficinas',String(o.codigo).trim());/* 18/09: lapide no espelho */}} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>);})}</tbody>
                 </table>
               </div>
             </div>
@@ -8938,7 +8940,15 @@ const CalculadoraContent=()=>{
     supabase.from('amicia_data').select('payload').eq('user_id','calc-meluni').single()
       .then(({data})=>{
         if(data?.payload){
-          if(data.payload.prods){setProds(data.payload.prods);prodsRef.current=data.payload.prods;}
+          if(data.payload.prods){
+            setProds(data.payload.prods);prodsRef.current=data.payload.prods;
+            // 18/09 (Ailson): ESPELHO dos cards — card que sumiu do payload volta,
+            // campo vazio aqui e preenchido no espelho volta tambem. Depois semeia.
+            restaurarCardsCalc(supabase,data.payload.prods).then(r=>{
+              if(r.restaurados.length){setProds(r.prods);prodsRef.current=r.prods;console.log('espelho calculadora: restaurado '+r.restaurados.length+' card(s)');}
+              gravarCardsCalc(supabase,r.prods);
+            });
+          }
           if(data.payload.prs){setPrs(data.payload.prs);prsRef.current=data.payload.prs;}
           // Análise Meluni v2: carregar ROAS global, manuais e estado
           if(typeof data.payload.roasMeluniGlobal==='number'){
@@ -9016,6 +9026,7 @@ const CalculadoraContent=()=>{
       // saber QUANDO a calculadora foi gravada (ficou parada em marco/2026)
       await supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:novoPayload,updated_at:new Date().toISOString()},{onConflict:'user_id'});
       baseRef.current=fotoCalc(prodsMerged,prsMerged);
+      gravarCardsCalc(supabase,prodsMerged);   // 18/09: espelho dos cards acompanha o save
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
     }catch(e){setSyncStatus('error');}
   };
@@ -10867,6 +10878,57 @@ export default function App(){
 
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
   const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,oficinasCAD,logTroca,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
+
+  // ── ESPELHO DOS CADASTROS (Ailson 18/09) ───────────────────────────────────
+  // O payload amicia_data e salvo INTEIRO por cada aparelho: quem esta com a tela
+  // aberta ha mais tempo salva por cima e leva junto o que foi cadastrado em outro
+  // lugar (foi assim que as cores dos tecidos escolhidas no celular sumiram em
+  // 17/09). Estes cadastros passam a ter espelho relacional, fora do payload, com
+  // RESTAURACAO AUTOMATICA: registro que sumiu volta; campo vazio na tela e
+  // preenchido no espelho volta tambem. Exclusao de verdade grava lapide no
+  // espelho (marcarExcluido) e nunca e desfeita.
+  const espelhoCadInicializado=useRef(false);
+  useEffect(()=>{
+    if(espelhoCadInicializado.current)return;
+    if(!produtos?.length&&!tecidosCAD?.length&&!oficinasCAD?.length)return;   // espera a carga
+    espelhoCadInicializado.current=true;
+    (async()=>{
+      try{
+        const [rp,rt,ro]=await Promise.all([
+          restaurarCadastro(supabase,'produtos',produtos),
+          restaurarCadastro(supabase,'tecidos',tecidosCAD),
+          restaurarCadastro(supabase,'oficinas',oficinasCAD),
+        ]);
+        const volta=[];
+        if(rp.restaurados.length||rp.campos.length){setProdutos(rp.lista);volta.push(`${rp.restaurados.length+rp.campos.length} produto(s)`);}
+        if(rt.restaurados.length||rt.campos.length){setTecidosCAD(rt.lista);volta.push(`${rt.restaurados.length+rt.campos.length} tecido(s)`);}
+        if(ro.restaurados.length||ro.campos.length){setOficinasCAD(ro.lista);volta.push(`${ro.restaurados.length+ro.campos.length} oficina(s)`);}
+        if(volta.length)console.log('espelho cadastros: restaurado '+volta.join(' · '));
+        // semeia o espelho com o que esta valendo agora
+        await Promise.all([
+          gravarCadastro(supabase,'produtos',rp.lista),
+          gravarCadastro(supabase,'tecidos',rt.lista),
+          gravarCadastro(supabase,'oficinas',ro.lista),
+        ]);
+      }catch(e){console.error('espelho cadastros:',e?.message||e);}
+    })();
+  },[produtos,tecidosCAD,oficinasCAD]);
+  // grava o espelho a cada alteracao dos cadastros (debounce curto)
+  useEffect(()=>{
+    if(!espelhoCadInicializado.current)return;
+    const t=setTimeout(()=>{gravarCadastro(supabase,'produtos',produtos);},1500);
+    return()=>clearTimeout(t);
+  },[produtos]);
+  useEffect(()=>{
+    if(!espelhoCadInicializado.current)return;
+    const t=setTimeout(()=>{gravarCadastro(supabase,'tecidos',tecidosCAD);},1500);
+    return()=>clearTimeout(t);
+  },[tecidosCAD]);
+  useEffect(()=>{
+    if(!espelhoCadInicializado.current)return;
+    const t=setTimeout(()=>{gravarCadastro(supabase,'oficinas',oficinasCAD);},1500);
+    return()=>clearTimeout(t);
+  },[oficinasCAD]);
   const debounceUsuarios=useRef(null);
   const realtimeUsuarios=useRef(false);
   const lastUsuariosSaveTs=useRef(0);
@@ -12774,7 +12836,7 @@ export default function App(){
              alteracao (inclusive a EXCLUSAO) morria em memoria: no proximo load
              o payload antigo trazia a ref de volta. Ailson 08/08/2026. */
           setProdutos={(v)=>{lastUserEditTs.current=Date.now();setProdutos(v);}}
-          onExcluirProduto={(ref)=>{const ts=Date.now();lastUserEditTs.current=ts;setProdutosExcluidos(prev=>{const n={...prev,[ref]:ts};produtosExcluidosRef.current=n;return n;});setProdutos(prev=>prev.filter(x=>x.ref!==ref));}} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
+          onExcluirProduto={(ref)=>{const ts=Date.now();lastUserEditTs.current=ts;setProdutosExcluidos(prev=>{const n={...prev,[ref]:ts};produtosExcluidosRef.current=n;return n;});setProdutos(prev=>prev.filter(x=>x.ref!==ref));marcarExcluido(supabase,'produtos',String(ref).trim());/* 18/09: lapide no espelho, senao ele restaura de volta */}} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
