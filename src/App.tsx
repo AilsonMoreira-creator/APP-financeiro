@@ -9,6 +9,7 @@ import MLPerguntas from './MLPerguntas';
 import OrdemDeCorte, { ModalGerarOficina } from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
 import { corTecido } from './corTecido.js';   // 17/09: realce por tecido
+import { lerEspelhoMes, gravarEspelho, compararComEspelho } from './espelhoDespesas.js';   // 17/09: espelho das celulas de Despesas
 // 17/09 (Ailson): oficina temporária — cadastra o corte sem travar; fora de ranking
 export const OFICINA_A_DEFINIR="A definir";
 import EstoqueTecido from './EstoqueTecido';
@@ -2134,6 +2135,12 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
   // Sem este aviso, non-admin edita "no vazio" e perde tudo silenciosamente.
   const sessaoUsuario=(()=>{try{const s=localStorage.getItem("amica_session");return s?JSON.parse(s):null;}catch{return null;}})();
   const ehAdmin=sessaoUsuario?(sessaoUsuario.id===1||sessaoUsuario.usuario==='admin'||sessaoUsuario.admin===true):true;
+  // 17/09 (Ailson): ESPELHO das células de Despesas — mesma linha do espelho de
+  // cortes. Guarda só o total de cada célula (ano+mês+categoria) numa tabela
+  // fora do payload; se um save de tela antiga levar lançamentos embora, a célula
+  // mostra ⚠ com a diferença. NUNCA apaga o espelho por o valor sumir da tela.
+  const [espelhoMes,setEspelhoMes]=useState(null);
+  const [divergencias,setDivergencias]=useState({});
   const [recLocal,setRecLocal]=useState(RECEITAS_EXEMPLO);
   const [auxLocal,setAuxLocal]=useState(AUX_INICIAL);
   const [catsLocal,setCatsLocal]=useState([...CATS]);
@@ -2219,6 +2226,29 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
   const totalGeral=totRec.st+totRec.br+totRec.mkt;
   const recTotais={geral:totalGeral,mkt:totRec.mkt};
   const totalDesp=categorias.reduce((s,c)=>s+calcTotalAux(c,auxData,recTotais),0);
+  // ── ESPELHO das células (17/09) ────────────────────────────────────────────
+  // totais de agora, por categoria — é o que o espelho guarda e compara
+  const anoEspelho=new Date().getFullYear();
+  const totaisCelulas=useMemo(()=>{const o={};(categorias||[]).forEach(c=>{o[c]=calcTotalAux(c,auxData,recTotais);});return o;},[categorias,auxData,recTotais.geral,recTotais.mkt]);
+  // 1) ao abrir/trocar de mês: lê o espelho e compara
+  useEffect(()=>{let vivo=true;(async()=>{
+    const esp=await lerEspelhoMes(supabase,anoEspelho,mes);
+    if(!vivo)return;
+    setEspelhoMes(esp);
+    setDivergencias(compararComEspelho(esp,totaisCelulas));
+  })();return()=>{vivo=false};},[mes,anoEspelho]);
+  // 2) a cada alteração das células (com o mês já carregado), grava o espelho e
+  //    recompara. Debounce curto pra não gravar a cada tecla.
+  useEffect(()=>{
+    if(espelhoMes===null)return;             // ainda não leu: não grava por cima
+    if(!ehAdmin)return;                      // só quem pode salvar alimenta o espelho
+    const t=setTimeout(async()=>{
+      await gravarEspelho(supabase,anoEspelho,mes,totaisCelulas);
+      const esp=await lerEspelhoMes(supabase,anoEspelho,mes);
+      if(esp){setEspelhoMes(esp);setDivergencias(compararComEspelho(esp,totaisCelulas));}
+    },1500);
+    return()=>clearTimeout(t);
+  },[totaisCelulas,espelhoMes===null,mes,anoEspelho,ehAdmin]);
   // 26/08 (pedido dele: jan-mar vieram errados do Bling e nao dava pra
   // corrigir): Marketplaces virou EDITAVEL. O preenchimento automatico do
   // Bling continua igual — o que for digitado a mao sobrescreve o dia.
@@ -2483,6 +2513,13 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
                       </td>
                       <td style={{padding:"7px 12px",textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:valWeight,color:valColor,whiteSpace:"nowrap",borderLeft:"1px solid #ede8e0"}}>
                         {total>0?total.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
+                        {/* 17/09: espelho — valor menor que o guardado = possivel perda */}
+                        {divergencias[cat]&&(
+                          <span title={`Espelho: ${divergencias[cat].espelho.toLocaleString("pt-BR",{minimumFractionDigits:2})} · agora: ${divergencias[cat].atual.toLocaleString("pt-BR",{minimumFractionDigits:2})}${divergencias[cat].quando?` · guardado em ${new Date(divergencias[cat].quando).toLocaleString("pt-BR")}`:""}${divergencias[cat].quem?` por ${divergencias[cat].quem}`:""}`}
+                            style={{marginLeft:6,fontSize:11,fontWeight:800,color:"#c0392b",background:"#fdecea",border:"1px solid #f4c7c3",borderRadius:4,padding:"1px 5px",cursor:"help",whiteSpace:"nowrap"}}>
+                            ⚠ −{divergencias[cat].diff.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                          </span>
+                        )}
                       </td>
                       <td style={{textAlign:"center",color:"#c8d0d8",fontSize:12,paddingRight:6}}>{!isAuto?"›":""}</td>
                     </tr>
