@@ -92,20 +92,13 @@
       expires_at:new Date(Date.now()+(data.expires_in||21600)*1000).toISOString()
     };
 
-    // Salva no Supabase
-    const SUPABASE_URL=localStorage.getItem('sb_url');
-    const SUPABASE_KEY=localStorage.getItem('sb_key');
-
-    if(SUPABASE_URL&&SUPABASE_KEY){
-      const sbResp=await fetch(SUPABASE_URL+'/rest/v1/bling_tokens',{
+    // 19/09 (auditoria): grava pelo SERVIDOR (/api/bling-contas) — a pagina nao
+    // escreve mais direto em bling_tokens com a chave anonima.
+    {
+      const sbResp=await fetch('/api/bling-contas',{
         method:'POST',
-        headers:{
-          'apikey':SUPABASE_KEY,
-          'Authorization':'Bearer '+SUPABASE_KEY,
-          'Content-Type':'application/json',
-          'Prefer':'resolution=merge-duplicates'
-        },
-        body:JSON.stringify({conta:state,...tokenData})
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({acao:'salvar_token',conta:state,...tokenData})
       });
       if(!sbResp.ok){
         const sbErr=await sbResp.text();
@@ -113,7 +106,7 @@
       }
     }
 
-    localStorage.setItem('bling_token_'+state,JSON.stringify(tokenData));
+    // 19/09: token NAO fica mais no localStorage — vive so no servidor.
 
     st.className='status ok';
     st.textContent='✓ '+state.charAt(0).toUpperCase()+state.slice(1)+' conectada com sucesso! Pode fechar esta aba.';

@@ -5145,15 +5145,23 @@ const UsuariosContent=({usuarios,setUsuarios,onDeletarUsuario,saveStatus})=>{
 
 // ── Módulo Bling ─────────────────────────────────────────────────────────────
 const blingDb={
+  // 19/09 (auditoria): a tela NAO le mais bling_tokens pelo navegador. O token e
+  // o refresh ficam so no servidor; aqui chega apenas o STATUS de cada conta
+  // (conectada / expirado / quando expira). Mesmo formato de antes pra nao mexer
+  // no resto da tela: [{conta, access_token:'***', expires_at}].
   async getTokens(){
     try{
-      const {data}=await supabase.from('bling_tokens').select('*');
-      return data||[];
+      const r=await fetch('/api/bling-contas?acao=status');
+      const d=await r.json();
+      if(!d?.ok)return[];
+      return Object.entries(d.contas).filter(([,c])=>c.conectada)
+        .map(([conta,c])=>({conta,access_token:'***',expires_at:c.expira_em,_status:c}));
     }catch{return[];}
   },
   async saveToken(conta,data){
     try{
-      await supabase.from('bling_tokens').upsert({conta,...data},{onConflict:'conta'});
+      await fetch('/api/bling-contas',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({acao:'salvar_token',conta,...data})});
     }catch(e){console.error(e)}
   },
   async getResultado(data){
@@ -6973,37 +6981,28 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
     },3000);
   };
 
-  const renovarToken=async(conta,token)=>{
+  // 19/09: renovacao NO SERVIDOR — o navegador nao ve refresh_token nem secret.
+  const renovarToken=async(conta)=>{
     try{
-      const c=creds[conta];
-      if(!c||!c.id||!c.secret)return null;
-      const r=await fetch("/api/bling-token",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({client_id:c.id,client_secret:c.secret,grant_type:"refresh_token",refresh_token:token.refresh_token})
-      });
-      if(!r.ok)return null;
+      const r=await fetch("/api/bling-contas",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({acao:'renovar',conta})});
       const d=await r.json();
-      if(!d.access_token)return null;
-      const nd={access_token:d.access_token,refresh_token:d.refresh_token,expires_at:new Date(Date.now()+(d.expires_in||21600)*1000).toISOString()};
-      await blingDb.saveToken(conta,nd);
-      setTokens(prev=>({...prev,[conta]:{...prev[conta],...nd}}));
-      return nd.access_token;
+      if(!d?.ok){setSyncMsg(`⚠ ${conta}: ${d?.erro||'falha ao renovar'}`);setTimeout(()=>setSyncMsg(""),4000);return null;}
+      setTokens(prev=>({...prev,[conta]:{conta,access_token:'***',expires_at:d.expira_em}}));
+      return '***';
     }catch{return null;}
   };
 
   const buscarTotalConta=async(conta,token,dataInicial,dataFinal)=>{
     // Retorna total bruto da conta no período
+    // 19/09 (auditoria): manda a CONTA, nao o token — o servidor resolve (e
+    // renova sozinho se estiver vencido). O navegador nao ve mais o token.
     try{
-      let accessToken=token.access_token;
-      if(tokenExpirado(token)){
-        accessToken=await renovarToken(conta,token);
-        if(!accessToken)return 0;
-      }
       let total=0,pagina=1,continuar=true;
       while(continuar){
         const r=await fetch("/api/bling-pedidos",{
           method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({access_token:accessToken,data_inicial:dataInicial,data_final:dataFinal,pagina,limite:100})
+          body:JSON.stringify({conta,data_inicial:dataInicial,data_final:dataFinal,pagina,limite:100})
         });
         if(!r.ok)break;
         const d=await r.json();
