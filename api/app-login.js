@@ -56,5 +56,10 @@ export default async function handler(req, res) {
   if (u && u.ativo) { try { ok = await bcrypt.compare(senha, u.senha_hash); } catch { ok = false; } }
   const concorda = typeof body.local_ok === 'boolean' ? (body.local_ok === ok) : null;
   await supabase.from('app_login_tentativas').insert({ usuario, ip, ok, modo, concorda_com_local: concorda });
-  return res.status(200).json({ ok, modo, concorda, cadastrado: !!u });
+  // 18/09 — PASSO 2: no modo 'servidor' a resposta DECIDE o login. Duas saidas
+  // de seguranca, pra ninguem ficar de fora por causa de cadastro:
+  //   · usuario sem hash em app_usuarios -> o servidor nao nega, devolve
+  //     `sem_cadastro` e o app cai no local (e sincroniza o hash depois).
+  //   · o app tambem cai no local se a chamada falhar ou demorar (lado do front).
+  return res.status(200).json({ ok, modo, concorda, cadastrado: !!u, sem_cadastro: !u });
 }

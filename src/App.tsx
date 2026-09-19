@@ -4866,16 +4866,39 @@ const LoginScreen=({usuarios,onLogin})=>{
   const [bloqueio,setBloqueio]=useState("");
   const [erro,setErro]=useState(false);
   const [mostraSenha,setMostraSenha]=useState(false);
-  const tentar=()=>{
+  const tentar=async()=>{
     const u=user.replace(/\s/g,"").toLowerCase();
     const s=senha.replace(/\s/g,"");
     if(!u||!s){setErro(true);return;}
     const found=(usuarios||[]).find(x=>x.usuario.toLowerCase()===u&&x.senha===s);
-    // 12/09 (passo 1 do login no servidor, modo SOMBRA): informa o servidor DEPOIS
-    // que o local decidiu — nao espera resposta, nao muda o resultado. So registra
-    // se o servidor (hash) concorda com o local. Uma semana batendo -> passo 2.
-    try{fetch("/api/app-login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({usuario:u,senha:s,local_ok:!!found,device_id:localStorage.getItem("amica_device_id")||null})}).catch(()=>{});}catch{}
-    if(!found){setErro(true);return;}
+    // 12/09 passo 1 (SOMBRA) → 18/09 PASSO 2 (SERVIDOR DECIDE).
+    // A chave saude_config.login_modo manda: 'sombra' = como antes (o servidor so
+    // registra); 'servidor' = a resposta decide. REDE DE SEGURANCA, decidida com
+    // ele: se a chamada falhar, demorar mais de 5s, ou o usuario ainda nao tiver
+    // hash gravado, CAI NO LOCAL — o pior caso vira "funciona como hoje", ninguem
+    // fica sem entrar por causa de rede ou cadastro.
+    let respServidor=null;
+    setBloqueio("Entrando…");
+    try{
+      const ctrl=new AbortController();
+      const t=setTimeout(()=>ctrl.abort(),5000);
+      const r=await fetch("/api/app-login",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({usuario:u,senha:s,local_ok:!!found,device_id:localStorage.getItem("amica_device_id")||null}),
+        signal:ctrl.signal});
+      clearTimeout(t);
+      respServidor=await r.json();
+    }catch{ respServidor=null; }   // rede fora / demorou: segue no local
+    const decideServidor=respServidor&&respServidor.modo==='servidor'&&!respServidor.sem_cadastro;
+    setBloqueio("");
+    if(decideServidor){
+      if(!respServidor.ok){setErro(true);return;}
+      if(!found){
+        // servidor aprovou mas a lista local nao tem esse usuario (payload velho):
+        // nao da pra montar a sessao sem os modulos. Avisa em vez de travar calado.
+        setBloqueio("⚠ Senha conferida, mas este aparelho está com a lista de usuários desatualizada. Recarregue a página (F5) e tente de novo.");
+        return;
+      }
+    } else if(!found){ setErro(true); return; }
     // 01/09 (pedido dele): pedro (ou usuario com "sessao unica") so entra se
     // nao houver OUTRO aparelho ativo — o servidor decide.
     const unica=found.usuario==='pedro'||found.sessaoUnica===true;
@@ -4992,6 +5015,13 @@ const UsuariosContent=({usuarios,setUsuarios,onDeletarUsuario,saveStatus})=>{
       return updated;
     }));}
     else{setUsuarios(prev=>[...prev,{id:Date.now(),...form,usuario:form.usuario.trim().toLowerCase(),_mod:Date.now()}]);}
+    // 18/09 (passo 2 do login): o hash no servidor tem que acompanhar a tela,
+    // senao usuario novo ou senha trocada aqui nao entra depois que o servidor
+    // passar a decidir. Silencioso: falha aqui nao atrapalha o cadastro local.
+    try{
+      fetch("/api/app-login",{method:"POST",headers:{"Content-Type":"application/json","X-User":"ailson"},
+        body:JSON.stringify({sincronizar:[{usuario:form.usuario.trim().toLowerCase(),senha:form.senha,ativo:true}]})}).catch(()=>{});
+    }catch{}
     setForm({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});setEditId(null);setErro("");
   };
   const editar=(u)=>{setForm({usuario:u.usuario,senha:u.senha,modulos:[...u.modulos],admin:u.admin,moduloPadrao:u.moduloPadrao||"home"});setEditId(u.id);};
