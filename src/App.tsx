@@ -4855,9 +4855,9 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
 
 const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac","osamicia","lojas","sofia","reativar","meluni","wms"];
 const USUARIOS_INICIAL=[
-  {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true,moduloPadrao:"home"},
-  {id:2,usuario:"corte",senha:"1234",modulos:["oficinas","salascorte"],admin:false,moduloPadrao:"oficinas"},
-  {id:3,usuario:"financeiro",senha:"1234",modulos:["boletos"],admin:false,moduloPadrao:"boletos"},
+  {id:1,usuario:"admin",senha:"",modulos:[...TODOS_MODULOS,"usuarios"],admin:true,moduloPadrao:"home"},   // 19/09: sem senha no codigo — quem decide e o servidor (hash)
+  {id:2,usuario:"corte",senha:"",modulos:["oficinas","salascorte"],admin:false,moduloPadrao:"oficinas"},
+  {id:3,usuario:"financeiro",senha:"",modulos:["boletos"],admin:false,moduloPadrao:"boletos"},
 ];
 
 const LoginScreen=({usuarios,onLogin})=>{
@@ -4870,7 +4870,12 @@ const LoginScreen=({usuarios,onLogin})=>{
     const u=user.replace(/\s/g,"").toLowerCase();
     const s=senha.replace(/\s/g,"");
     if(!u||!s){setErro(true);return;}
-    const found=(usuarios||[]).find(x=>x.usuario.toLowerCase()===u&&x.senha===s);
+    // 19/09 (senhas fora do payload): a sessao e montada pelo USUARIO (modulos,
+    // admin). A comparacao de senha local so vale como fallback, e so quando o
+    // registro ainda tiver senha (depois da limpeza ele nao tem — quem decide e
+    // o servidor).
+    const foundUser=(usuarios||[]).find(x=>x.usuario.toLowerCase()===u);
+    const found=(foundUser&&foundUser.senha&&foundUser.senha===s)?foundUser:null;
     // 12/09 passo 1 (SOMBRA) → 18/09 PASSO 2 (SERVIDOR DECIDE).
     // A chave saude_config.login_modo manda: 'sombra' = como antes (o servidor so
     // registra); 'servidor' = a resposta decide. REDE DE SEGURANCA, decidida com
@@ -4890,31 +4895,33 @@ const LoginScreen=({usuarios,onLogin})=>{
     }catch{ respServidor=null; }   // rede fora / demorou: segue no local
     const decideServidor=respServidor&&respServidor.modo==='servidor'&&!respServidor.sem_cadastro;
     setBloqueio("");
+    let sessao=found;
     if(decideServidor){
       if(!respServidor.ok){setErro(true);return;}
-      if(!found){
+      if(!foundUser){
         // servidor aprovou mas a lista local nao tem esse usuario (payload velho):
         // nao da pra montar a sessao sem os modulos. Avisa em vez de travar calado.
         setBloqueio("⚠ Senha conferida, mas este aparelho está com a lista de usuários desatualizada. Recarregue a página (F5) e tente de novo.");
         return;
       }
+      sessao=foundUser;
     } else if(!found){ setErro(true); return; }
     // 01/09 (pedido dele): pedro (ou usuario com "sessao unica") so entra se
     // nao houver OUTRO aparelho ativo — o servidor decide.
-    const unica=found.usuario==='pedro'||found.sessaoUnica===true;
+    const unica=sessao.usuario==='pedro'||sessao.sessaoUnica===true;
     if(unica){
       setBloqueio("Verificando…");
-      amicaRegistrarSessao(found.usuario,'login',{sessao_unica:true}).then(d=>{
+      amicaRegistrarSessao(sessao.usuario,'login',{sessao_unica:true}).then(d=>{
         if(d?.bloqueado){
           const h=d.ultimo_em?new Date(d.ultimo_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
           setBloqueio(`⚠ Este usuário já está conectado em outro aparelho${d.aparelho?` (${d.aparelho}`:''}${h?` · ativo às ${h}`:''}${d.aparelho?')':''}. Só um aparelho por vez — saia do outro ou aguarde.`);
           return;
         }
-        setBloqueio("");onLogin(found);setErro(false);
+        setBloqueio("");onLogin(sessao);setErro(false);
       });
       return;
     }
-    amicaRegistrarSessao(found.usuario,'login');onLogin(found);setErro(false);
+    amicaRegistrarSessao(sessao.usuario,'login');onLogin(sessao);setErro(false);
   };
   return(
     <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f7f4f0",fontFamily:"Georgia,serif"}}>
@@ -5004,27 +5011,32 @@ const UsuariosContent=({usuarios,setUsuarios,onDeletarUsuario,saveStatus})=>{
   const toggleMod=(mod)=>setForm(p=>({...p,modulos:p.modulos.includes(mod)?p.modulos.filter(m=>m!==mod):[...p.modulos,mod]}));
   const toggleAdmin=()=>setForm(p=>{const na=!p.admin;return{...p,admin:na,modulos:na?[...TODOS_MODULOS,"usuarios"]:p.modulos};});
   const salvar=()=>{
-    if(!form.usuario.trim()||!form.senha.trim()){setErro("Preencha usuário e senha.");return;}
+    // 19/09 (senhas fora do payload): a senha so e obrigatoria em usuario NOVO.
+    // Na edicao, campo vazio = "manter a atual" (que vive so como hash no servidor).
+    if(!form.usuario.trim()){setErro("Preencha o usuário.");return;}
+    if(!editId&&!form.senha.trim()){setErro("Defina uma senha para o usuário novo.");return;}
     if(!editId&&usuarios.find(u=>u.usuario===form.usuario.trim().toLowerCase())){setErro("Usuário já existe.");return;}
     if(form.modulos.length===0){setErro("Selecione ao menos um módulo.");return;}
     if(editId){setUsuarios(prev=>prev.map(u=>{
       if(u.id!==editId)return u;
-      const updated={...u,...form,usuario:form.usuario.trim().toLowerCase(),_mod:Date.now()};
+      const updated={...u,...form,senha:"",usuario:form.usuario.trim().toLowerCase(),_mod:Date.now()};   // 19/09: senha NAO vai pro payload
       // PROTEÇÃO: user id=1 (admin) NUNCA pode perder admin:true
       if(u.id===1||u.usuario==='admin')updated.admin=true;
       return updated;
     }));}
-    else{setUsuarios(prev=>[...prev,{id:Date.now(),...form,usuario:form.usuario.trim().toLowerCase(),_mod:Date.now()}]);}
+    else{setUsuarios(prev=>[...prev,{id:Date.now(),...form,senha:"",usuario:form.usuario.trim().toLowerCase(),_mod:Date.now()}]);}   // 19/09: senha so no hash
     // 18/09 (passo 2 do login): o hash no servidor tem que acompanhar a tela,
     // senao usuario novo ou senha trocada aqui nao entra depois que o servidor
     // passar a decidir. Silencioso: falha aqui nao atrapalha o cadastro local.
-    try{
-      fetch("/api/app-login",{method:"POST",headers:{"Content-Type":"application/json","X-User":"ailson"},
-        body:JSON.stringify({sincronizar:[{usuario:form.usuario.trim().toLowerCase(),senha:form.senha,ativo:true}]})}).catch(()=>{});
-    }catch{}
+    if(form.senha.trim()){
+      try{
+        fetch("/api/app-login",{method:"POST",headers:{"Content-Type":"application/json","X-User":"ailson"},
+          body:JSON.stringify({sincronizar:[{usuario:form.usuario.trim().toLowerCase(),senha:form.senha,ativo:true}]})}).catch(()=>{});
+      }catch{}
+    }
     setForm({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});setEditId(null);setErro("");
   };
-  const editar=(u)=>{setForm({usuario:u.usuario,senha:u.senha,modulos:[...u.modulos],admin:u.admin,moduloPadrao:u.moduloPadrao||"home"});setEditId(u.id);};
+  const editar=(u)=>{setForm({usuario:u.usuario,senha:"",modulos:[...u.modulos],admin:u.admin,moduloPadrao:u.moduloPadrao||"home"});setEditId(u.id);};   // 19/09: senha nunca e exibida
   const deletar=(id)=>{
     const alvo=usuarios.find(u=>u.id===id);
     if(alvo?.admin){setErro("Não é possível excluir o admin.");return;}
@@ -5057,7 +5069,7 @@ const UsuariosContent=({usuarios,setUsuarios,onDeletarUsuario,saveStatus})=>{
         <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>{editId?"Editar usuário":"Novo usuário"}</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
           <div><div style={{fontSize:11,color:"#a89f94",marginBottom:4}}>Usuário</div><input value={form.usuario} onChange={e=>setForm(p=>({...p,usuario:e.target.value}))} placeholder="nome_usuario" style={{...iStyle,width:"100%",boxSizing:"border-box"}}/></div>
-          <div><div style={{fontSize:11,color:"#a89f94",marginBottom:4}}>Senha</div><input value={form.senha} onChange={e=>setForm(p=>({...p,senha:e.target.value}))} placeholder="senha" style={{...iStyle,width:"100%",boxSizing:"border-box"}}/></div>
+          <div><div style={{fontSize:11,color:"#a89f94",marginBottom:4}}>{editId?"Nova senha (deixe vazio pra manter)":"Senha"}</div><input type="password" autoComplete="new-password" value={form.senha} onChange={e=>setForm(p=>({...p,senha:e.target.value}))} placeholder="senha" style={{...iStyle,width:"100%",boxSizing:"border-box"}}/></div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
           <div onClick={toggleAdmin} style={{width:40,height:22,borderRadius:11,background:form.admin?"#2c3e50":"#e0d8d0",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
