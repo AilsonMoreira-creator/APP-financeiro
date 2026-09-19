@@ -31,10 +31,11 @@ const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const GA4_API = 'https://analyticsdata.googleapis.com/v1beta';
 
 async function getAccessToken() {
+  // 19/09 (fase de protecao): tokens vivem em ga4_tokens (tabela fechada)
   const { data, error } = await supabase
-    .from('amicia_data')
+    .from('ga4_tokens')
     .select('payload')
-    .eq('user_id', 'ga4-oauth-tokens')
+    .eq('chave', 'ga4')
     .single();
 
   if (error || !data?.payload?.refresh_token) {
@@ -74,9 +75,9 @@ async function getAccessToken() {
   };
 
   await supabase
-    .from('amicia_data')
-    .update({ payload: updated })
-    .eq('user_id', 'ga4-oauth-tokens');
+    .from('ga4_tokens')
+    .update({ payload: updated, atualizado_em: new Date().toISOString() })
+    .eq('chave', 'ga4');
 
   return newTokens.access_token;
 }

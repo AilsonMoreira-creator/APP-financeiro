@@ -93,11 +93,12 @@ export default async function handler(req, res) {
       saved_at: new Date().toISOString(),
     };
 
+    // 19/09 (fase de protecao): grava na tabela fechada ga4_tokens
     const { error: dbError } = await supabase
-      .from('amicia_data')
+      .from('ga4_tokens')
       .upsert(
-        { user_id: 'ga4-oauth-tokens', payload },
-        { onConflict: 'user_id' },
+        { chave: 'ga4', payload, atualizado_em: new Date().toISOString() },
+        { onConflict: 'chave' },
       );
 
     if (dbError) {
