@@ -4896,6 +4896,7 @@ const LoginScreen=({usuarios,onLogin})=>{
     const decideServidor=respServidor&&respServidor.modo==='servidor'&&!respServidor.sem_cadastro;
     setBloqueio("");
     let sessao=found;
+    if(respServidor&&respServidor.bloqueado){ setBloqueio("⏳ "+(respServidor.erro||"Muitas tentativas. Aguarde um pouco e tente de novo.")); return; }
     if(decideServidor){
       if(!respServidor.ok){setErro(true);return;}
       if(!foundUser){

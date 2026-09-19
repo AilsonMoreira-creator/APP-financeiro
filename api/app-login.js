@@ -44,12 +44,48 @@ export default async function handler(req, res) {
   }
 
   // ── validar ──
+  // 19/09: desbloqueio manual — grava um "ok" sintetico que zera a sequencia de erros
+  if (body.desbloquear && String(req.headers['x-user'] || '').toLowerCase() === 'ailson') {
+    const alvo = String(body.desbloquear).replace(/\s/g, '').toLowerCase();
+    await supabase.from('app_login_tentativas').insert({ usuario: alvo, ip: 'desbloqueio-manual', ok: true, modo: 'desbloqueio', concorda_com_local: null });
+    return res.status(200).json({ ok: true, desbloqueado: alvo });
+  }
   const usuario = String(body.usuario || '').replace(/\s/g, '').toLowerCase();
   const senha = String(body.senha || '').replace(/\s/g, '');
   const { data: cfg } = await supabase.from('saude_config').select('valor').eq('chave', 'login_modo').maybeSingle();
   const modo = cfg?.valor || 'sombra';
   const ip = ipDe(req);
   if (!usuario || !senha) return res.status(200).json({ ok: false, modo, motivo: 'vazio' });
+
+  // ── PASSO 3 (19/09, aprovado por ele): RATE LIMIT de verdade ─────────────────
+  // So faz sentido agora que TODA tentativa passa por aqui (passo 2). Regra:
+  //   5 erros seguidos (por usuario OU por IP) nos ultimos 10 min -> espera 1 min
+  //  10 erros seguidos                                          -> espera 15 min
+  // "Seguidos" = desde o ultimo login ok. Admin nunca fica mais de 15 min preso.
+  // Desbloqueio manual: ?desbloquear=USUARIO (X-User ailson) zera o contador.
+  // Falha ao consultar o contador NUNCA bloqueia (fail-open) — pior caso vira
+  // "como hoje", nao "ninguem entra".
+  let bloqueadoAte = null;
+  try {
+    const desde10 = new Date(Date.now() - 10 * 60000).toISOString();
+    const [{ data: porUsr }, { data: porIp }] = await Promise.all([
+      supabase.from('app_login_tentativas').select('ok, criado_em, modo').eq('usuario', usuario).gte('criado_em', desde10).order('criado_em', { ascending: false }).limit(20),
+      supabase.from('app_login_tentativas').select('ok, criado_em').eq('ip', ip).gte('criado_em', desde10).order('criado_em', { ascending: false }).limit(20),
+    ]);
+    const seguidos = (lista) => { let n = 0; for (const t of (lista || [])) { if (t.ok) break; n++; } return n; };
+    // desbloqueio manual recente pro usuario vale pros dois contadores
+    const desbloqueado = (porUsr || []).some(t => t.ok && t.modo === 'desbloqueio');
+    const erros = desbloqueado ? 0 : Math.max(seguidos(porUsr), seguidos(porIp));
+    const ultimoErro = [...(porUsr || []), ...(porIp || [])].filter(t => !t.ok).map(t => new Date(t.criado_em).getTime()).sort((a, b) => b - a)[0] || 0;
+    const esperaMin = erros >= 10 ? 15 : erros >= 5 ? 1 : 0;
+    if (esperaMin && ultimoErro + esperaMin * 60000 > Date.now()) bloqueadoAte = new Date(ultimoErro + esperaMin * 60000).toISOString();
+  } catch (e) { bloqueadoAte = null; console.error('[app-login] rate limit indisponivel (fail-open):', e?.message || e); }
+  if (bloqueadoAte) {
+    const segundos = Math.max(1, Math.round((new Date(bloqueadoAte).getTime() - Date.now()) / 1000));
+    await supabase.from('app_login_tentativas').insert({ usuario, ip, ok: false, modo, concorda_com_local: null }).then?.(() => {}, () => {});
+    return res.status(200).json({ ok: false, modo, bloqueado: true, segundos, ate: bloqueadoAte,
+      erro: `Muitas tentativas. Aguarde ${segundos >= 60 ? Math.ceil(segundos / 60) + ' min' : segundos + ' s'} e tente de novo.` });
+  }
 
   const { data: u } = await supabase.from('app_usuarios').select('usuario, senha_hash, ativo').eq('usuario', usuario).maybeSingle();
   let ok = false;
