@@ -58,3 +58,39 @@ senão ele restaura dado velho ou deixa de proteger o campo novo.
 
 Siga `src/espelhoCadastros.js`. Decida antes: **restaurar** (cadastro pequeno,
 muda pouco) ou **só avisar** (dado financeiro, onde o usuário quer decidir).
+
+
+---
+
+## SOMBRAS POR DOMÍNIO (19/09/2026) — migração do `amicia_data`
+
+Diferente dos espelhos acima (que protegem contra PERDA), as sombras existem pra
+**tirar os dados do monólito aberto `amicia_data`** sem "dia D". Enquanto o app
+ainda grava em `amicia_data`, um gatilho no banco (`trg_amicia_data_sombra`)
+copia cada gravação pra tabela do domínio certo, já com metadados de
+sincronização. Todas FECHADAS (RLS sem policy): só a chave de serviço lê.
+
+| Domínio | Tabela | Vem de (amicia_data.user_id → chave) |
+|---|---|---|
+| Financeiro | `financeiro_sombra` | amicia-admin → receitasPorMes, auxDataPorMes, categoriasPorMes, boletosShared, fixosConfig, fixosNomesFunc, prestadores; despesas-config.* |
+| Oficinas | `oficinas_sombra` | amicia-admin → produtos, produtosExcluidos, oficinasCAD, tecidosCAD, logTroca; ailson_cortes.*; passadoria-config.*; caseado-config.*; cortes-cores-manuais.* |
+| Sala de corte | `salas_corte_sombra` | salas-corte.* |
+| Calculadora | `calculadora_sombra` | calc-meluni.* |
+| Folha | `folha_sombra` | folha-pagamento.* |
+| Ficha técnica | `ficha_tecnica_sombra` | ficha-tecnica.* |
+| Config pequena | `app_config_sombra` | agenda.*, wms-config.*, ml-perguntas-config.*, bling-estoque-config.*, bling-estoque-arquivadas.* |
+
+Esquema igual em todas: `chave` (pk), `valor` jsonb, `origem_user_id`,
+`origem_atualizado` (payload._updated), `hash` (md5), `versao`, `atualizado_em`.
+Rota `*` prefixa a chave com a origem (`passadoria-config.nomes`) pra não colidir.
+Cada mudança de hash gera linha em `sombra_historico` (histórico completo).
+Rotas em `sombra_rotas` — pra roteirar chave nova, é só inserir uma linha.
+
+**Plano de virada (uma área por vez, com flag e reversão):**
+1. leitura pela API do domínio (`/api/financeiro`, `/api/sala-corte`…) lendo a sombra,
+   conferida contra `amicia_data` pelo hash;
+2. escrita pelo servidor (dual-write), sombra vira a fonte;
+3. só depois: fechar `amicia_data` pra chave anônima e apagar a chave migrada.
+
+Já migrados pra tabela própria e fechada: `bling_credenciais`, `ga4_tokens`,
+`app_usuarios` (hash das senhas). `qz-sign-key` fica em amicia_data por decisão dele.
