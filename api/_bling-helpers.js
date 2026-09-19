@@ -17,13 +17,9 @@ export const supabase = createClient(
 //
 // Como as chamadas ao Bling estao espalhadas em ~50 arquivos (todos importam
 // este helper), o header e injetado num unico ponto: um embrulho do fetch
-// global que so age em api.bling.com.br / www.bling.com.br/Api. Ligado por
-// CONTA via saude_config.bling_jwt_contas (ex.: "muniam" -> so ela; "*" -> todas).
-// Como o wrapper nao sabe a conta de cada chamada, a ativacao e global no
-// processo: quando a lista NAO estiver vazia, o header vai em todas as chamadas.
-// Isso e seguro porque o Bling ignora o header pra token opaco; a diferenca
-// real acontece so no /oauth/token, onde o header decide o formato do token —
-// e ali a gente checa a conta.
+// global que so age em api.bling.com.br, e SO quando o Bearer ja e JWT.
+// O que decide o formato do token e o /oauth/token: la o header vai pra conta
+// ligada em saude_config.bling_jwt_contas ("muniam" -> so ela; "*" -> todas).
 let _jwtContas = null; let _jwtLidoEm = 0;
 async function jwtContas() {
   if (_jwtContas && Date.now() - _jwtLidoEm < 60000) return _jwtContas;
@@ -45,13 +41,14 @@ if (typeof globalThis.fetch === 'function' && !globalThis.__blingJwtWrap) {
     try {
       const url = typeof input === 'string' ? input : (input?.url || '');
       if (/^https:\/\/api\.bling\.com\.br/i.test(url)) {   // so a API; o /oauth/token decide por conta
-        const lista = await jwtContas();
-        if (lista.length) {
-          init = init ? { ...init } : {};
-          const h = new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined) || {});
-          if (!h.has('enable-jwt')) h.set('enable-jwt', '1');
-          init.headers = h;
-        }
+        // PROVADO no diag de 19/09: mandar enable-jwt com token OPACO da 401
+        // invalid_token. Entao o header segue o TOKEN, nao uma lista: vai se (e
+        // so se) o Bearer for JWT ("eyJ…"). Assim cada conta migra no seu tempo
+        // e as que ainda estao opacas nao sao afetadas.
+        const h = new Headers((init && init.headers) || (typeof input !== 'string' ? input.headers : undefined) || {});
+        const auth = h.get('authorization') || '';
+        const ehJwt = /^Bearer\s+eyJ/i.test(auth);
+        if (ehJwt && !h.has('enable-jwt')) { init = init ? { ...init } : {}; h.set('enable-jwt', '1'); init.headers = h; }
       }
     } catch { /* nunca atrapalha a chamada */ }
     return fetchOriginal(input, init);
