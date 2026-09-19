@@ -187,14 +187,22 @@ export default function MLPosVenda({ supabase, currentUser }) {
           if (e.validations.internal_error?.length) erros.push('Erro interno ML');
           alert('ML rejeitou anexo:\n' + erros.join('\n'));
         } else {
-          // Mostra detalhes completos do erro ML pra facilitar diagnóstico
-          const detalhe = e.detail?.message
+          // 19/09 (Ailson): a API ja traduz os erros de REGRA do ML (mediacao,
+          // reclamacao, conversa fechada...) no campo `error`. A tela mostrava o
+          // codigo cru (`blocked_by_mediation`) porque lia o detalhe primeiro.
+          // Agora vem a frase em portugues, e o codigo fica so como rodape.
+          const tecnico = e.detail?.message
             || e.detail?.error
             || (typeof e.detail === 'string' ? e.detail : null)
+            || e.codigo_ml
             || (e.detail ? JSON.stringify(e.detail).slice(0, 200) : null)
-            || e.error
             || `HTTP ${r.status}`;
-          alert(`Erro ao enviar pro ML:\n\n${detalhe}\n\nSe o erro persistir, fala com o Ailson.`);
+          const amigavel = (e.error && e.error !== 'Erro do Mercado Livre') ? e.error : null;
+          if (amigavel) {
+            alert(`${amigavel}\n\n(codigo do ML: ${tecnico})`);
+          } else {
+            alert(`Erro ao enviar pro ML:\n\n${tecnico}\n\nSe o erro persistir, fala com o Ailson.`);
+          }
         }
       }
     } catch (e) { alert('Erro de rede: ' + e.message); }
