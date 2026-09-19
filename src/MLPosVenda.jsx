@@ -198,6 +198,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
             || (e.detail ? JSON.stringify(e.detail).slice(0, 200) : null)
             || `HTTP ${r.status}`;
           const amigavel = (e.error && e.error !== 'Erro do Mercado Livre') ? e.error : null;
+          if (e.bloqueio && selected) setSelected(prev => prev ? { ...prev, bloqueio: e.bloqueio } : prev);
           if (amigavel) {
             alert(`${amigavel}\n\n(codigo do ML: ${tecnico})`);
           } else {
@@ -433,6 +434,18 @@ export default function MLPosVenda({ supabase, currentUser }) {
                 >
                   🔗 Ver anúncio
                 </a>
+              )}
+              {/* 19/09 (Ailson): selo quando o ML bloqueou a conversa (devolução/mediação,
+                  reclamação, encerrada) — a equipe vê antes de digitar. Só leitura. */}
+              {conv.bloqueio && (
+                <span title={conv.bloqueio === 'mediacao' ? 'O ML bloqueou as mensagens por aqui: responda dentro do chamado, no painel do Mercado Livre (Vendas → esta venda → Reclamação / Devolução)'
+                  : conv.bloqueio === 'reclamacao' ? 'O ML bloqueou as mensagens por aqui: responda dentro da reclamação, no painel do Mercado Livre'
+                  : 'Conversa encerrada pelo Mercado Livre — não dá mais pra responder por aqui'}
+                  style={{ ...S, fontSize: 11, fontWeight: 800, color: '#fff', background: conv.bloqueio === 'fechada' ? '#7f8c8d' : '#c0392b', borderRadius: 4, padding: '2px 8px', cursor: 'help' }}>
+                  {conv.bloqueio === 'mediacao' ? '↩ DEVOLUÇÃO / MEDIAÇÃO — responder pelo painel do ML'
+                    : conv.bloqueio === 'reclamacao' ? '⚠ RECLAMAÇÃO ABERTA — responder pelo painel do ML'
+                    : '⏹ CONVERSA ENCERRADA PELO ML'}
+                </span>
               )}
             </div>
             <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}><SacIcon name="estoque" size={12}/>#{conv.order_id || conv.pack_id} · <SacIcon name="usuario" size={12}/>{conv.buyer_nickname || conv.buyer_id || '—'}</div>

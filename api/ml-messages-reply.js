@@ -229,13 +229,19 @@ export default async function handler(req, res) {
       // em vez do codigo cru. Esses NAO sao bugs do app - sao regras do ML.
       const errMsg = String(err.message || err.error || '').toLowerCase();
       let mensagemAmigavel = null;
+      // 19/09 (Ailson): textos mais claros pra equipe + guarda o motivo na
+      // conversa (coluna bloqueio) pra tela mostrar o selo antes de digitar.
+      let bloqueio = null;
 
       if (errMsg.includes('blocked_by_claim') || errMsg.includes('claim')) {
-        mensagemAmigavel = '⚠️ Pedido com Reclamacao aberta no ML - mensagens diretas estao bloqueadas. Responda pela aba "Reclamacoes" no painel do Mercado Livre ate a reclamacao ser encerrada.';
+        bloqueio = 'reclamacao';
+        mensagemAmigavel = 'Esta compra tem uma RECLAMAÇÃO aberta no Mercado Livre. O ML bloqueou as mensagens por aqui — responda dentro da reclamação, no painel do ML (Vendas → esta venda → Reclamação).';
       } else if (errMsg.includes('blocked_by_mediation') || errMsg.includes('mediation')) {
-        mensagemAmigavel = 'Conversa em Mediacao no ML - mensagens diretas estao bloqueadas. Responda pelo painel de Mediacoes do Mercado Livre.';
+        bloqueio = 'mediacao';
+        mensagemAmigavel = 'Esta compra está em DEVOLUÇÃO / MEDIAÇÃO no Mercado Livre. O ML bloqueou as mensagens por aqui — responda dentro do chamado, no painel do ML (Vendas → esta venda → Reclamação / Devolução).';
       } else if (errMsg.includes('conversation_closed') || errMsg.includes('closed')) {
-        mensagemAmigavel = 'Conversa ja foi fechada pelo ML (passou do prazo de resposta ou foi encerrada).';
+        bloqueio = 'fechada';
+        mensagemAmigavel = 'Esta conversa já foi encerrada pelo Mercado Livre (passou do prazo ou foi fechada). Não dá mais pra enviar mensagem por aqui.';
       } else if (errMsg.includes('blocked') && errMsg.includes('user')) {
         mensagemAmigavel = 'Comprador bloqueou ou foi bloqueado - nao da pra enviar mensagem.';
       } else if (mlRes.status === 403) {
@@ -244,8 +250,12 @@ export default async function handler(req, res) {
         mensagemAmigavel = 'Limite de mensagens ML estourado - aguarde alguns minutos.';
       }
 
+      if (bloqueio && conv?.id) {
+        try { await supabase.from('ml_conversations').update({ bloqueio, bloqueio_em: new Date().toISOString() }).eq('id', conv.id); } catch {}
+      }
       return res.status(mlRes.status).json({
         error: mensagemAmigavel || 'Erro do Mercado Livre',
+        bloqueio,
         codigo_ml: errMsg || `HTTP ${mlRes.status}`,
         status: mlRes.status,
         detail: err,
