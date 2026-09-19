@@ -6889,7 +6889,13 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   const fmtRV=(v)=>"R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2});
   const dotColor=(cor)=>{const m={Preto:"#222",Natural:"#d4c8a8",Branco:"#f5f0e8",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0","Verde Militar":"#5a6b4a","Verde Salvia":"#a3b899","Verde Pistache":"#a9c47f","Verde Menta":"#b8e0cc","Verde Escuro":"#2d5a2d",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Marrom Escuro":"#4a2a12",Azul:"#3a6aa5","Azul Marinho":"#1a3a6a","Azul Claro":"#7ab0d4","Azul Serenity":"#5b9bd5",Amarelo:"#f0c040","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0","Bege Claro":"#e8d8c0",Caramelo:"#b87a3a",Figo:"#6a3a5a","Off White":"#f0e8d8",Creme:"#e8d8c0",Cappuccino:"#8a6a4a",Vermelho:"#c0392b",Roxo:"#6a2d8a",Laranja:"#e67e22",Bordo:"#6a1a2a",Rosa:"#d48aa0",Nude:"#c8a890","Vinho":"#5a1a2a"};const nk=String(cor||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");for(const k in m){if(k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")===nk)return m[k];}return "#a89f94";};
   // Credenciais separadas por conta — localStorage + Supabase
-  const [creds,setCreds]=useState(()=>{try{return JSON.parse(localStorage.getItem("bling_creds"))||{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}catch{return{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}});
+  // 19/09 (fase de protecao): as credenciais NAO ficam mais no navegador. O estado
+  // guarda so o que a tela precisa: se tem credencial e o client_id mascarado.
+  // Os campos id/secret servem so pra CADASTRAR/trocar (vao direto pro servidor).
+  const [creds,setCreds]=useState({exitus:{id:"",secret:"",cadastrada:false,mascara:""},lumia:{id:"",secret:"",cadastrada:false,mascara:""},muniam:{id:"",secret:"",cadastrada:false,mascara:""}});
+  const carregarCreds=async()=>{try{const r=await fetch('/api/bling-contas?acao=status');const d=await r.json();if(!d?.ok)return;
+    setCreds(prev=>{const n={...prev};for(const c of ['exitus','lumia','muniam']){const st=d.contas?.[c]||{};n[c]={...n[c],cadastrada:!!st.tem_credencial,mascara:st.client_id_mascarado||""};}return n;});}catch{}};
+  try{localStorage.removeItem("bling_creds");localStorage.removeItem("bling_auth_secret");localStorage.removeItem("bling_auth_id");}catch{}
   const [tokens,setTokens]=useState({exitus:null,lumia:null,muniam:null});
   const [resultado,setResultado]=useState(null);
   const [historico,setHistorico]=useState([]);
@@ -6936,23 +6942,8 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
       const m={exitus:null,lumia:null,muniam:null};
       ts.forEach(t=>{if(m[t.conta]!==undefined)m[t.conta]=t;});
       setTokens(m);
-      // Carregar credenciais — sync bidirecional localStorage ↔ Supabase
-      try{
-        const {data:sbCreds}=await supabase.from('amicia_data').select('payload').eq('user_id','bling-creds').maybeSingle();
-        const local=JSON.parse(localStorage.getItem("bling_creds")||"{}");
-        const hasLocal=local.exitus?.id||local.lumia?.id||local.muniam?.id;
-        const hasSb=sbCreds?.payload?.exitus?.id||sbCreds?.payload?.lumia?.id||sbCreds?.payload?.muniam?.id;
-
-        if(hasLocal&&!hasSb){
-          // localStorage tem creds mas Supabase não → salva no Supabase (pra cron usar)
-          console.log("BLING: sincronizando creds localStorage → Supabase");
-          await supabase.from('amicia_data').upsert({user_id:'bling-creds',payload:local},{onConflict:'user_id'});
-        }else if(hasSb&&!hasLocal){
-          // Supabase tem mas localStorage não → carrega
-          setCreds(sbCreds.payload);
-          localStorage.setItem("bling_creds",JSON.stringify(sbCreds.payload));
-        }
-      }catch(e){console.error("BLING creds sync:",e)}
+      // 19/09: credenciais so pelo servidor (tabela fechada); nada no navegador
+      await carregarCreds();
       const r=await blingDb.getResultado(hoje);
       if(r)setResultado(r);
       try{
@@ -6962,23 +6953,29 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
     })();
   },[]);
 
-  const salvarCreds=(conta,campo,valor)=>{
-    const novo={...creds,[conta]:{...creds[conta],[campo]:valor}};
-    setCreds(novo);
-    localStorage.setItem("bling_creds",JSON.stringify(novo));
-    // Salva no Supabase também
-    try{supabase.from('amicia_data').upsert({user_id:'bling-creds',payload:novo},{onConflict:'user_id'});}catch(e){console.error(e)}
+  const salvarCreds=(conta,campo,valor)=>{ setCreds(prev=>({...prev,[conta]:{...prev[conta],[campo]:valor}})); };
+  const usuarioAtualNome=()=>{try{return JSON.parse(localStorage.getItem('amica_session')||'{}').usuario||'';}catch{return '';}};
+  // 19/09: grava no servidor (bling_credenciais). Secret vazio = mantem o atual.
+  const enviarCreds=async(conta)=>{
+    const c=creds[conta];
+    if(!c.id.trim()){setSyncMsg("⚠ Informe o Client ID da "+conta);setTimeout(()=>setSyncMsg(""),3000);return;}
+    try{
+      const r=await fetch('/api/bling-contas',{method:'POST',headers:{'Content-Type':'application/json','X-User':usuarioAtualNome()},
+        body:JSON.stringify({acao:'salvar_credencial',conta,client_id:c.id.trim(),client_secret:c.secret.trim()})});
+      const d=await r.json();
+      if(!d?.ok){setSyncMsg(`⚠ ${conta}: ${d?.erro||'falha ao salvar'}`);setTimeout(()=>setSyncMsg(""),4000);return;}
+      setCreds(prev=>({...prev,[conta]:{id:"",secret:"",cadastrada:true,mascara:d.client_id_mascarado||""}}));
+      setSyncMsg(`✓ credencial da ${conta} salva`);setTimeout(()=>setSyncMsg(""),3000);
+    }catch(e){setSyncMsg("⚠ erro de rede");setTimeout(()=>setSyncMsg(""),3000);}
   };
 
-  const conectarConta=(conta)=>{
-    const c=creds[conta];
-    if(!c.id||!c.secret){setSyncMsg("⚠ Preencha Client ID e Secret da "+conta+" primeiro");setTimeout(()=>setSyncMsg(""),3000);return;}
-    // Salva as creds da conta em chaves temporárias para o callback ler
-    localStorage.setItem("bling_auth_id",c.id);
-    localStorage.setItem("bling_auth_secret",c.secret);
-    const state=conta;
-    const callback=encodeURIComponent(window.location.origin+"/bling-callback.html");
-    const url=`https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=${c.id}&redirect_uri=${callback}&state=${state}`;
+  const conectarConta=async(conta)=>{
+    if(!creds[conta]?.cadastrada){setSyncMsg("⚠ Salve a credencial da "+conta+" primeiro");setTimeout(()=>setSyncMsg(""),3000);return;}
+    // 19/09: a URL de autorizacao e montada no servidor; o navegador nao ve id nem secret
+    let url=null;
+    try{const r=await fetch('/api/bling-contas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'url_autorizacao',conta,origem:window.location.origin})});
+      const d=await r.json(); if(d?.ok)url=d.url; else {setSyncMsg(`⚠ ${d?.erro||'falha ao montar autorizacao'}`);setTimeout(()=>setSyncMsg(""),4000);return;}
+    }catch{setSyncMsg("⚠ erro de rede");setTimeout(()=>setSyncMsg(""),3000);return;}
     window.open(url,"_blank");
     let tentativas=0;
     const poll=setInterval(async()=>{
@@ -7149,7 +7146,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
             {/* Alertas de token expirado ou desconectado */}
             {CONTAS.map(c=>{
               const tk=tokens[c];
-              const semCred=!creds[c]?.id;
+              const semCred=!creds[c]?.cadastrada;
               const desconectada=!tk;
               const expirado=tk&&tokenExpirado(tk);
               if(!desconectada&&!expirado)return null;
@@ -7260,14 +7257,15 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                     <div>
                       <div style={{fontSize:9,color:"#a89f94",marginBottom:3,textTransform:"uppercase",letterSpacing:1}}>Client ID</div>
-                      <input value={c.id} onChange={e=>salvarCreds(conta,"id",e.target.value)} placeholder="Client ID" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 8px",fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
+                      <input value={c.id} onChange={e=>salvarCreds(conta,"id",e.target.value)} placeholder={c.cadastrada?("cadastrado "+c.mascara):"Client ID"} style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 8px",fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
                     </div>
                     <div>
                       <div style={{fontSize:9,color:"#a89f94",marginBottom:3,textTransform:"uppercase",letterSpacing:1}}>Client Secret</div>
-                      <input value={c.secret} onChange={e=>salvarCreds(conta,"secret",e.target.value)} placeholder="Client Secret" type="password" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 8px",fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
+                      <input value={c.secret} onChange={e=>salvarCreds(conta,"secret",e.target.value)} placeholder={c.cadastrada?"•••••• (vazio = manter)":"Client Secret"} type="password" autoComplete="new-password" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 8px",fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
                     </div>
                   </div>
-                  <button onClick={()=>conectarConta(conta)} disabled={!c.id||!c.secret} style={{width:"100%",background:ok?"#fdeaea":(!c.id||!c.secret)?"#e8e2da":"#4a7fa5",color:ok?"#c0392b":(!c.id||!c.secret)?"#a89f94":"#fff",border:ok?"1px solid #f4b8b8":"none",borderRadius:8,padding:"7px",fontSize:12,cursor:(!c.id||!c.secret)?"not-allowed":"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
+                  {(c.id.trim()||c.secret.trim())&&<button onClick={()=>enviarCreds(conta)} style={{width:"100%",marginBottom:6,background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"7px",fontSize:11,cursor:"pointer",fontWeight:700}}>💾 Salvar credencial</button>}
+                  <button onClick={()=>{ /* token so vencido: renova no servidor; sem token: OAuth */ if(tk&&!ok){renovarToken(conta).then(()=>blingDb.getTokens().then(ts=>{const m={exitus:null,lumia:null,muniam:null};ts.forEach(t=>{if(m[t.conta]!==undefined)m[t.conta]=t;});setTokens(m);}));} else {conectarConta(conta);} }} disabled={!c.cadastrada} style={{width:"100%",background:ok?"#fdeaea":(!c.cadastrada)?"#e8e2da":"#4a7fa5",color:ok?"#c0392b":(!c.cadastrada)?"#a89f94":"#fff",border:ok?"1px solid #f4b8b8":"none",borderRadius:8,padding:"7px",fontSize:12,cursor:(!c.id||!c.secret)?"not-allowed":"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
                     {ok?"Reconectar":tk?"🔄 Renovar token":"🔗 Conectar "+conta}
                   </button>
                 </div>

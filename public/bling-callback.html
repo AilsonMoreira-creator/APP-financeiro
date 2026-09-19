@@ -41,72 +41,23 @@
 
   if(!code||!state){showError('Parâmetros inválidos. Feche e tente novamente.');return;}
 
-  // Lê credenciais da conta específica (salvas pelo App antes de abrir o auth URL)
-  let clientId=localStorage.getItem('bling_auth_id');
-  let clientSecret=localStorage.getItem('bling_auth_secret');
-
-  // Fallback: se a autorização foi iniciada FORA do módulo (localStorage vazio),
-  // busca as credenciais da conta no Supabase por state (exitus/lumia/muniam).
-  if(!clientId||!clientSecret){
-    try{
-      const SB_URL=localStorage.getItem('sb_url');
-      const SB_KEY=localStorage.getItem('sb_key');
-      if(SB_URL&&SB_KEY){
-        st.textContent='⏳ Buscando credenciais da conta...';
-        const cr=await fetch(SB_URL+'/rest/v1/amicia_data?user_id=eq.bling-creds&select=payload',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
-        const arr=await cr.json();
-        const conta=(arr&&arr[0]&&arr[0].payload&&arr[0].payload[state])||null;
-        if(conta&&conta.id&&conta.secret){clientId=conta.id;clientSecret=conta.secret;}
-      }
-    }catch(e){/* cai no erro abaixo */}
-  }
-
-  if(!clientId||!clientSecret){showError('Credenciais não encontradas. Abra o módulo Bling do app (pra carregar as credenciais) e clique em Conectar por lá.');return;}
-
+  // 19/09 (fase de protecao): a troca do codigo e feita NO SERVIDOR, com o
+  // client_secret da tabela fechada bling_credenciais. Esta pagina manda so o
+  // code + a conta (state) e nunca ve id, secret nem token.
   try{
-    const callback=window.location.origin+'/bling-callback.html';
     st.textContent='⏳ Trocando código por token...';
-
-    const resp=await fetch('/api/bling-token',{
+    const callback=window.location.origin+'/bling-callback.html';
+    const resp=await fetch('/api/bling-contas',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        client_id:clientId,
-        client_secret:clientSecret,
-        grant_type:'authorization_code',
-        code:code,
-        redirect_uri:callback
-      })
+      body:JSON.stringify({acao:'trocar_codigo',conta:state,code:code,redirect_uri:callback})
     });
-
-    const text=await resp.text();
-    let data;
-    try{data=JSON.parse(text);}catch{data=text;}
-
-    if(!resp.ok){showError('Erro ao trocar o código: '+resp.status, data);return;}
-    if(!data.access_token){showError('Resposta sem access_token', data);return;}
-
-    const tokenData={
-      access_token:data.access_token,
-      refresh_token:data.refresh_token,
-      expires_at:new Date(Date.now()+(data.expires_in||21600)*1000).toISOString()
-    };
-
-    // 19/09 (auditoria): grava pelo SERVIDOR (/api/bling-contas) — a pagina nao
-    // escreve mais direto em bling_tokens com a chave anonima.
-    {
-      const sbResp=await fetch('/api/bling-contas',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({acao:'salvar_token',conta:state,...tokenData})
-      });
-      if(!sbResp.ok){
-        const sbErr=await sbResp.text();
-        showError('Token obtido mas erro ao salvar no Supabase: '+sbResp.status, sbErr);
-      }
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok||!data.ok){
+      showError('Erro ao obter token: '+(data.erro||resp.status), data.detalhe||JSON.stringify(data));
+      return;
     }
-
-    // 19/09: token NAO fica mais no localStorage — vive so no servidor.
+    // token ja foi gravado pelo servidor na propria troca — nada a guardar aqui
 
     st.className='status ok';
     st.textContent='✓ '+state.charAt(0).toUpperCase()+state.slice(1)+' conectada com sucesso! Pode fechar esta aba.';

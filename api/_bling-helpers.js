@@ -170,14 +170,18 @@ export async function refreshBlingToken(conta) {
     throw new Error(`bling_tokens.${conta} token expirado e sem refresh_token`);
   }
 
-  const { data: credsData, error: credsErr } = await supabase
-    .from('amicia_data')
-    .select('payload')
-    .eq('user_id', 'bling-creds')
-    .maybeSingle();
+  // 19/09 (fase de protecao): credenciais vivem em bling_credenciais (tabela
+  // fechada). O payload bling-creds fica so como fallback ate ser apagado.
+  let credsData = null, credsErr = null;
+  const { data: credRow } = await supabase.from('bling_credenciais').select('client_id, client_secret').eq('conta', conta).maybeSingle();
+  if (credRow?.client_id && credRow?.client_secret) {
+    credsData = { payload: { [conta]: { id: credRow.client_id, secret: credRow.client_secret } } };
+  } else {
+    ({ data: credsData, error: credsErr } = await supabase.from('amicia_data').select('payload').eq('user_id', 'bling-creds').maybeSingle());
+  }
 
   if (credsErr || !credsData?.payload) {
-    throw new Error(`token ${conta} expirado e sem creds no Supabase pra renovar. Abra Config no app pra salvar as creds.`);
+    throw new Error(`token ${conta} expirado e sem credenciais cadastradas pra renovar. Cadastre no modulo Bling.`);
   }
 
   if (!credsData.payload[conta]?.id || !credsData.payload[conta]?.secret) {
