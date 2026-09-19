@@ -838,6 +838,39 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: false, erro: String(e?.message || e) });
       }
     }
+    // 19/09 (Ailson): RECLAMAÇÕES / DEVOLUÇÕES / MEDIAÇÕES — o aviso do ML chega
+    // aqui (tópico post_purchase / claims) e a gente CARIMBA a conversa de
+    // pós-venda daquela venda com o motivo, pra tela mostrar o selo antes de a
+    // equipe tentar responder. Só grava em ml_conversations.bloqueio; não toca
+    // em mensagem nem em envio. Se a app não estiver inscrita nesse tópico no
+    // painel do ML, este bloco simplesmente nunca roda.
+    if ((topic === 'post_purchase' || topic === 'claims' || String(topic || '').includes('claim')) && resource) {
+      try {
+        const { data: tokenRecs } = await supabase.from('ml_tokens').select('brand').eq('seller_id', String(user_id)).order('updated_at', { ascending: false }).limit(1);
+        const brand = tokenRecs?.[0]?.brand;
+        if (!brand) return res.status(200).json({ ignored: true, reason: 'unknown_seller' });
+        const token = await getValidToken(brand);
+        const claimId = String(resource).split('/').filter(Boolean).pop();
+        const r = await fetch(`https://api.mercadolibre.com/post-purchase/v1/claims/${claimId}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!r.ok) return res.status(200).json({ ok: false, topic, http: r.status });
+        const claim = await r.json();
+        const orderId = String(claim.resource_id || claim.resource?.id || '');
+        if (!orderId) return res.status(200).json({ ok: false, topic, motivo: 'sem resource_id' });
+        const encerrada = ['closed', 'resolved', 'cancelled'].includes(String(claim.status || '').toLowerCase());
+        const tipo = String(claim.type || '').toLowerCase();       // mediations | returns | claim…
+        const estagio = String(claim.stage || '').toLowerCase();   // claim | dispute | none
+        let bloqueio = null;
+        if (!encerrada) bloqueio = (tipo.includes('return') || tipo.includes('mediation') || estagio === 'dispute') ? 'mediacao' : 'reclamacao';
+        const { data: convs } = await supabase.from('ml_conversations').select('id').eq('order_id', orderId);
+        if (convs?.length) {
+          await supabase.from('ml_conversations').update({ bloqueio, bloqueio_em: bloqueio ? new Date().toISOString() : null }).in('id', convs.map(c => c.id));
+        }
+        return res.status(200).json({ ok: true, topic, claim: claimId, order: orderId, tipo, estagio, status: claim.status, bloqueio, conversas: convs?.length || 0 });
+      } catch (e) {
+        console.error('[ml-webhook claims]', e?.message || e);
+        return res.status(200).json({ ok: false, topic, erro: String(e?.message || e) });
+      }
+    }
     if (topic !== 'questions' || !resource) return res.status(200).json({ ignored: true });
 
     const { data: tokenRec } = await supabase.from('ml_tokens').select('brand').eq('seller_id', String(user_id)).single();
