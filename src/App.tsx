@@ -10671,7 +10671,7 @@ function LogCortesOficinas({onClose,oficinas}){
 }
 
 export default function App(){
-  const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");if(!s)return null;const u=JSON.parse(s);const ehAdmin=(u.id===1||u.usuario==='admin');if(ehAdmin){u.admin=true;/* Admin sempre recebe TODOS os modulos atualizados (inclui modulos novos como osamicia) */u.modulos=[...TODOS_MODULOS,"usuarios"];try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}return u;}catch{return null;}});
+  const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");if(!s)return null;const u=JSON.parse(s);const ehAdmin=(u.id===1||u.usuario==='admin');if(ehAdmin){u.admin=true;/* Admin sempre recebe TODOS os modulos atualizados (inclui modulos novos como osamicia) */u.modulos=[...TODOS_MODULOS,"usuarios"];try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}else if(u.admin&&!(u.modulos||[]).includes("usuarios")){u.modulos=[...(u.modulos||[]),"usuarios"];/* 19/09: admin sempre ve Usuarios */}return u;}catch{return null;}});
   const [active,setActive]=useState(()=>{
     // Deep-linking: ?sac=1 ou ?modulo=X (vem do click em push notification).
     // 01/09 (blindagem do link do Pedro): o deep link so vale se o usuario
@@ -12687,7 +12687,7 @@ export default function App(){
 
   if(!usuarioLogado){
     if(!dbCarregado)return <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f7f4f0",fontFamily:"Georgia,serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:26,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Amícia</div><div style={{fontSize:13,color:"#a89f94"}}>Carregando...</div></div></div>;
-    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{const ehAdmin=(u.id===1||u.usuario==='admin');const safeUser=ehAdmin?{...u,admin:true,modulos:[...TODOS_MODULOS,"usuarios"]}:u;setUsuarioLogado(safeUser);const defaultMod=safeUser.moduloPadrao||"home";const canAccess=safeUser.admin||defaultMod==="home"||safeUser.modulos.includes(defaultMod);setActive(canAccess?defaultMod:(safeUser.modulos[0]||"home"));try{localStorage.setItem("amica_session",JSON.stringify(safeUser));}catch{}}}/>;
+    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{const ehAdmin=(u.id===1||u.usuario==='admin');/* 19/09: qualquer ADMIN enxerga o modulo Usuarios (a tela de cadastro ja da todos os modulos a quem marca admin; o registro do ailson estava sem "usuarios" na lista) */const safeUser=ehAdmin?{...u,admin:true,modulos:[...TODOS_MODULOS,"usuarios"]}:(u.admin?{...u,modulos:[...new Set([...(u.modulos||[]),"usuarios"])]}:u);setUsuarioLogado(safeUser);const defaultMod=safeUser.moduloPadrao||"home";const canAccess=safeUser.admin||defaultMod==="home"||safeUser.modulos.includes(defaultMod);setActive(canAccess?defaultMod:(safeUser.modulos[0]||"home"));try{localStorage.setItem("amica_session",JSON.stringify(safeUser));}catch{}}}/>;
   }
 
   const modulosVisiveis=modules.filter(m=>usuarioLogado.modulos.includes(m.id) && !m.hideFromMenu);
