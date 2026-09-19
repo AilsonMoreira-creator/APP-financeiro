@@ -16,7 +16,7 @@
  * O token NUNCA sai daqui. As credenciais (client id/secret) ficam no servidor
  * pra renovacao; a tela segue podendo cadastra-las.
  */
-import { supabase } from './_bling-helpers.js';
+import { supabase, jwtLigadoPara } from './_bling-helpers.js';
 export const config = { maxDuration: 20 };
 
 const CONTAS = ['exitus', 'lumia', 'muniam'];
@@ -95,7 +95,7 @@ export default async function handler(req, res) {
       if (!code || !redirect_uri) return res.status(400).json({ ok: false, erro: 'faltam code/redirect_uri' });
       const r = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
         method: 'POST',
-        headers: { Authorization: 'Basic ' + Buffer.from(`${c.id}:${c.secret}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        headers: { Authorization: 'Basic ' + Buffer.from(`${c.id}:${c.secret}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', ...((await jwtLigadoPara(conta)) ? { 'enable-jwt': '1' } : {}) },
         body: `grant_type=authorization_code&code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(redirect_uri)}`,
       });
       const d = await r.json().catch(() => ({}));
@@ -124,10 +124,7 @@ export default async function handler(req, res) {
       if (!c) return res.status(400).json({ ok: false, erro: 'credenciais da conta não cadastradas' });
       const r = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
         method: 'POST',
-        headers: {
-          Authorization: 'Basic ' + Buffer.from(`${c.id}:${c.secret}`).toString('base64'),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { Authorization: 'Basic ' + Buffer.from(`${c.id}:${c.secret}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded', ...((await jwtLigadoPara(conta)) ? { 'enable-jwt': '1' } : {}) },
         body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(t.refresh_token)}`,
       });
       const d = await r.json().catch(() => ({}));

@@ -9,6 +9,55 @@ export const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
+// ── JWT do Bling (migracao obrigatoria ate 15/10/2026) ──────────────────────
+// Doc oficial (developer.bling.com.br/migracao-jwt): mandar o header
+// `enable-jwt: 1` no POST /oauth/token (inclusive no refresh) faz o Bling
+// devolver token JWT em vez de opaco; e o MESMO header tem que ir em TODA
+// requisicao autenticada dali em diante. Sem o header, continua opaco.
+//
+// Como as chamadas ao Bling estao espalhadas em ~50 arquivos (todos importam
+// este helper), o header e injetado num unico ponto: um embrulho do fetch
+// global que so age em api.bling.com.br / www.bling.com.br/Api. Ligado por
+// CONTA via saude_config.bling_jwt_contas (ex.: "muniam" -> so ela; "*" -> todas).
+// Como o wrapper nao sabe a conta de cada chamada, a ativacao e global no
+// processo: quando a lista NAO estiver vazia, o header vai em todas as chamadas.
+// Isso e seguro porque o Bling ignora o header pra token opaco; a diferenca
+// real acontece so no /oauth/token, onde o header decide o formato do token —
+// e ali a gente checa a conta.
+let _jwtContas = null; let _jwtLidoEm = 0;
+async function jwtContas() {
+  if (_jwtContas && Date.now() - _jwtLidoEm < 60000) return _jwtContas;
+  try {
+    const { data } = await supabase.from('saude_config').select('valor').eq('chave', 'bling_jwt_contas').maybeSingle();
+    _jwtContas = String(data?.valor || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  } catch { _jwtContas = _jwtContas || []; }
+  _jwtLidoEm = Date.now();
+  return _jwtContas;
+}
+export async function jwtLigadoPara(conta) {
+  const l = await jwtContas();
+  return l.includes('*') || l.includes(String(conta || '').toLowerCase());
+}
+if (typeof globalThis.fetch === 'function' && !globalThis.__blingJwtWrap) {
+  const fetchOriginal = globalThis.fetch.bind(globalThis);
+  globalThis.__blingJwtWrap = true;
+  globalThis.fetch = async (input, init) => {
+    try {
+      const url = typeof input === 'string' ? input : (input?.url || '');
+      if (/^https:\/\/api\.bling\.com\.br/i.test(url)) {   // so a API; o /oauth/token decide por conta
+        const lista = await jwtContas();
+        if (lista.length) {
+          init = init ? { ...init } : {};
+          const h = new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined) || {});
+          if (!h.has('enable-jwt')) h.set('enable-jwt', '1');
+          init.headers = h;
+        }
+      }
+    } catch { /* nunca atrapalha a chamada */ }
+    return fetchOriginal(input, init);
+  };
+}
+
 // ── Parse descrição do item → ref, tamanho, cor, estoque ──
 export function parseDescricao(descricao) {
   const r = { ref: "", tamanho: "", cor: "", estoque: "", descLimpa: "" };
@@ -195,15 +244,10 @@ export async function refreshBlingToken(conta) {
   const basic = Buffer.from(creds.id + ":" + creds.secret).toString("base64");
   const body = "grant_type=refresh_token&refresh_token=" + encodeURIComponent(tokenData.refresh_token);
 
-  const resp = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
-    method: "POST",
-    headers: {
-      "Authorization": "Basic " + basic,
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Accept": "application/json"
-    },
-    body
-  });
+  // JWT (ate 15/10): so pra conta ligada em saude_config.bling_jwt_contas
+  const hdrRefresh = { "Authorization": "Basic " + basic, "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" };
+  if (await jwtLigadoPara(conta)) hdrRefresh['enable-jwt'] = '1';
+  const resp = await fetch("https://www.bling.com.br/Api/v3/oauth/token", { method: "POST", headers: hdrRefresh, body });
 
   if (!resp.ok) {
     const errBody = await resp.text().catch(() => '');
