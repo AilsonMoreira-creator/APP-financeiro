@@ -94,11 +94,29 @@ export async function carregarAnuncios(conta, token, ids) {
     const r = await mlGet(token, `/items?ids=${lote.join(',')}&attributes=${ATTRS}`);
     if (!r.ok || !Array.isArray(r.body)) continue;
     const corpos = r.body.filter(x => x?.code === 200 && x.body?.id).map(x => x.body);
+    // o multiget nem sempre traz as variacoes (anuncios grandes): busca uma a uma o que veio sem SKU
+    for (const b of corpos) {
+      if (!b.seller_custom_field && !(b.variations || []).some(v => v.seller_custom_field)) {
+        const one = await mlGet(token, `/items/${b.id}?attributes=variations,seller_custom_field`);
+        if (one.ok) { b.variations = one.body?.variations || b.variations; b.seller_custom_field = b.seller_custom_field || one.body?.seller_custom_field; }
+      }
+    }
     const todosSkus = corpos.flatMap(b => [b.seller_custom_field, ...(b.variations || []).map(v => v.seller_custom_field)]).filter(Boolean);
     const mapaRef = await refsDosSkus(todosSkus);
     for (const b of corpos) out.push(montarAnuncio(conta, b, mapaRef));
   }
-  if (out.length) await supabase.from('ml_sale_anuncios').upsert(out, { onConflict: 'conta,item_id' });
+  if (out.length) {
+    // NUNCA apagar uma REF ja conhecida com null (aconteceu 20/09: a varredura das 02:20
+    // sobrescreveu a REF dos anuncios do Full 2277/2601). Fontes de REF, em ordem:
+    // SKU->ml_sku_ref_map, cache do Full (full_estoque_cache.anuncio->ref), valor que ja estava.
+    const ids = out.map(a => a.item_id);
+    const { data: exist } = await supabase.from('ml_sale_anuncios').select('item_id, ref').eq('conta', String(conta).toLowerCase()).in('item_id', ids);
+    const { data: full } = await supabase.from('full_estoque_cache').select('anuncio, ref').in('anuncio', ids);
+    const refExist = Object.fromEntries((exist || []).map(x => [x.item_id, x.ref]));
+    const refFull = Object.fromEntries((full || []).filter(x => x.ref).map(x => [x.anuncio, normRef(x.ref)]));
+    for (const a of out) a.ref = a.ref || refFull[a.item_id] || refExist[a.item_id] || null;
+    await supabase.from('ml_sale_anuncios').upsert(out, { onConflict: 'conta,item_id' });
+  }
   return out;
 }
 
