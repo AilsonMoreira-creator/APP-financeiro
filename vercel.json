@@ -207,6 +207,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron-despachante",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/ml-sale?sync=promocoes&conta=todas",
       "schedule": "*/30 * * * *"
     },
