@@ -113,7 +113,7 @@ export async function carregarAnuncios(conta, token, ids) {
     const { data: exist } = await supabase.from('ml_sale_anuncios').select('item_id, ref').eq('conta', String(conta).toLowerCase()).in('item_id', ids);
     const { data: full } = await supabase.from('full_estoque_cache').select('anuncio, ref').in('anuncio', ids);
     const refExist = Object.fromEntries((exist || []).map(x => [x.item_id, x.ref]));
-    const refFull = Object.fromEntries((full || []).filter(x => x.ref).map(x => [x.anuncio, normRef(x.ref)]));
+    const refFull = Object.fromEntries((full || []).filter(x => /^\d{3,6}$/.test(String(x.ref || '').trim())).map(x => [x.anuncio, normRef(x.ref)]));  // so REF numerica (o cache do Full tem linhas '?I81f…' que nao sao REF)
     for (const a of out) a.ref = a.ref || refFull[a.item_id] || refExist[a.item_id] || null;
     await supabase.from('ml_sale_anuncios').upsert(out, { onConflict: 'conta,item_id' });
   }
