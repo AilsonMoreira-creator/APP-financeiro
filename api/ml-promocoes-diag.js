@@ -22,7 +22,18 @@ export default async function handler(req, res) {
     const get = async (url) => { const r = await fetch(url, { headers: h }); const t = await r.text(); let j; try { j = JSON.parse(t); } catch { j = t.slice(0, 400); } return { http: r.status, body: j }; };
     const out = { conta, seller_id: sid };
     out.promocoes_do_vendedor = await get(`${BASE}/seller-promotions/users/${sid}?app_version=v2`);
-    if (item) out.promocoes_do_item = await get(`${BASE}/seller-promotions/items/${item}?app_version=v2`);
+    if (item) {
+      out.promocoes_do_item = await get(`${BASE}/seller-promotions/items/${item}?app_version=v2`);
+      // anuncio: formato (family/user-products), foto de capa, variacoes e preco por variacao
+      const it = await get(`${BASE}/items/${item}?attributes=id,title,price,pictures,thumbnail,family_name,family_id,catalog_listing,user_product_id,variations,status,available_quantity,sold_quantity,listing_type_id`);
+      const b = it.body || {};
+      out.anuncio = { http: it.http, id: b.id, title: b.title, price: b.price, status: b.status, family_name: b.family_name, family_id: b.family_id,
+        catalog_listing: b.catalog_listing, user_product_id: b.user_product_id, listing_type_id: b.listing_type_id,
+        thumbnail: b.thumbnail, n_pictures: (b.pictures || []).length, capa: b.pictures?.[0]?.secure_url || b.pictures?.[0]?.url || null,
+        n_variacoes: (b.variations || []).length,
+        variacoes: (b.variations || []).slice(0, 12).map(v => ({ id: v.id, price: v.price, qty: v.available_quantity, user_product_id: v.user_product_id,
+          attrs: (v.attribute_combinations || []).map(a => `${a.name}: ${a.value_name}`).join(' / '), picture_ids: (v.picture_ids || []).length })) };
+    }
     if (promo && tipo) out.itens_da_promocao = await get(`${BASE}/seller-promotions/promotions/${promo}/items?promotion_type=${tipo}&app_version=v2&limit=20`);
     return res.status(200).json(out);
   } catch (e) { return res.status(500).json({ erro: String(e?.message || e) }); }
