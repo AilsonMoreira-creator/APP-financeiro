@@ -7,6 +7,12 @@ export default async function handler(req, res) {
   const conta = String(req.query?.conta || 'exitus').toLowerCase(); const ref = normRef(req.query?.ref);
   try {
     const token = await tokenDe(conta); const sid = await sellerIdDe(conta);
+    if (req.query?.total) {
+      const a = await mlGet(token, `/users/${sid}/items/search?status=active&limit=1`);
+      const b = await mlGet(token, `/users/${sid}/items/search?status=active&search_type=scan&limit=100`);
+      const c = await mlGet(token, `/users/${sid}/items/search?limit=1`);
+      return res.status(200).json({ conta, ativos_total: a.body?.paging?.total, scan_primeira_pagina: (b.body?.results || []).length, scan_scroll: !!b.body?.scroll_id, todos_total: c.body?.paging?.total });
+    }
     const skus = await skusDaRef(ref); const achados = {};
     const t0 = Date.now();
     for (const sku of skus) {
