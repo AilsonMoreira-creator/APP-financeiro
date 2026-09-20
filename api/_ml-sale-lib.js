@@ -103,25 +103,30 @@ export async function carregarAnuncios(conta, token, ids) {
 }
 
 // Anúncios de uma REF: cache; se vazio, descobre pelo SKU no ML e grava.
+// A varredura de ativos do ML (search_type=scan) NAO e completa: o MLB5283859330 (Full
+// da 2601, ativo, 568 pecas) nao vinha nela. Por isso, alem do cache, a REF e
+// descoberta pelo SKU do vendedor: na primeira abertura, quando o cache da REF tem
+// mais de 12h, e sempre no botao "atualizar".
 export async function anunciosDaRef(conta, ref, { forcar = false } = {}) {
   const c = String(conta).toLowerCase();
   const r = normRef(ref);
-  if (!forcar) {
-    const { data } = await supabase.from('ml_sale_anuncios').select('*').eq('conta', c).eq('ref', r);
-    if (data?.length) return data;
-  }
+  const { data: cache } = await supabase.from('ml_sale_anuncios').select('*').eq('conta', c).eq('ref', r);
+  const maisNovo = Math.max(0, ...(cache || []).map(a => new Date(a.atualizado_em || 0).getTime()));
+  if (!forcar && cache?.length && Date.now() - maisNovo < 12 * 3600000) return cache;
   const skus = await skusDaRef(r);
-  if (!skus.length) return [];
+  if (!skus.length) return cache || [];
   const token = await tokenDe(c);
   const sid = await sellerIdDe(c);
-  const ids = new Set();
-  // busca por SKU do vendedor (cobre filho do formato novo e variação do antigo)
-  for (const sku of skus.slice(0, 60)) {
+  const ids = new Set((cache || []).map(a => a.item_id));
+  // busca por SKU do vendedor (cobre filho do formato novo e variacao do antigo); orcamento de tempo
+  const t0 = Date.now();
+  for (const sku of skus) {
+    if (Date.now() - t0 > 20000) break;
     const s = await mlGet(token, `/users/${sid}/items/search?seller_sku=${encodeURIComponent(sku)}&limit=50`);
     for (const id of s.body?.results || []) ids.add(id);
-    if (ids.size >= 80) break;
+    if (ids.size >= 120) break;
   }
-  if (!ids.size) return [];
+  if (!ids.size) return cache || [];
   const carregados = await carregarAnuncios(c, token, [...ids]);
   // garante a REF mesmo quando o mapa não tinha o SKU (veio da busca por SKU dela)
   const semRef = carregados.filter(a => !a.ref).map(a => ({ ...a, ref: r }));
