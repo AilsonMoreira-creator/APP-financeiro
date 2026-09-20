@@ -10,7 +10,7 @@ export const config = { maxDuration: 25 };
 const BASE = 'https://api.mercadolibre.com';
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const conta = String(req.query?.conta || 'exitus').toLowerCase();
+  const c0 = String(req.query?.conta || 'exitus'); const conta = c0.charAt(0).toUpperCase() + c0.slice(1).toLowerCase();   // ml_tokens.brand e Capitalizado
   const item = String(req.query?.item || '').toUpperCase();
   const promo = String(req.query?.promo || '');
   const tipo = String(req.query?.tipo || '');
