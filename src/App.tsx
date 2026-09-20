@@ -21,6 +21,8 @@ export const OFICINA_A_DEFINIR="A definir";
 import EstoqueTecido from './EstoqueTecido';
 import MapeamentoSkus from './MapeamentoSkus';
 import MLSale from './MLSale'; // 19/09: botao Sale (promocoes ML por REF)
+import { guardarToken, limparToken, iniciarSessaoToken } from './sessaoToken'; // 20/09: token de sessao (passo 4, fase 1)
+iniciarSessaoToken();
 import RaioXProduto from './RaioXProduto';
 import FullEnvio from './FullEnvio';
 import { useCaseado, CaseadoBtnIcone, TelaCaseado, CaseadoTabIcon } from './caseado.jsx';
@@ -4889,12 +4891,13 @@ const LoginScreen=({usuarios,onLogin})=>{
       const ctrl=new AbortController();
       const t=setTimeout(()=>ctrl.abort(),5000);
       const r=await fetch("/api/app-login",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({usuario:u,senha:s,local_ok:!!found,device_id:localStorage.getItem("amica_device_id")||null}),
+        body:JSON.stringify({usuario:u,senha:s,local_ok:!!found,device_id:localStorage.getItem("amica_device_id")||null,modulos:foundUser?.modulos||null,admin:!!(foundUser&&(foundUser.admin||foundUser.id===1||foundUser.usuario==='admin'))}),
         signal:ctrl.signal});
       clearTimeout(t);
       respServidor=await r.json();
     }catch{ respServidor=null; }   // rede fora / demorou: segue no local
     const decideServidor=respServidor&&respServidor.modo==='servidor'&&!respServidor.sem_cadastro;
+    if(respServidor&&respServidor.ok&&respServidor.token)guardarToken(respServidor.token);else limparToken();   // 20/09: token de sessao
     setBloqueio("");
     let sessao=found;
     if(respServidor&&respServidor.bloqueado){ setBloqueio("⏳ "+(respServidor.erro||"Muitas tentativas. Aguarde um pouco e tente de novo.")); return; }
@@ -5030,12 +5033,12 @@ const UsuariosContent=({usuarios,setUsuarios,onDeletarUsuario,saveStatus})=>{
     // 18/09 (passo 2 do login): o hash no servidor tem que acompanhar a tela,
     // senao usuario novo ou senha trocada aqui nao entra depois que o servidor
     // passar a decidir. Silencioso: falha aqui nao atrapalha o cadastro local.
-    if(form.senha.trim()){
-      try{
-        fetch("/api/app-login",{method:"POST",headers:{"Content-Type":"application/json","X-User":"ailson"},
-          body:JSON.stringify({sincronizar:[{usuario:form.usuario.trim().toLowerCase(),senha:form.senha,ativo:true}]})}).catch(()=>{});
-      }catch{}
-    }
+    // 20/09 (passo 4): modulos e admin tambem vao pro servidor (viram as permissoes do token);
+    // a senha so vai quando digitada. Trocar senha sobe a "versao" -> sessoes antigas caem.
+    try{
+      fetch("/api/app-login",{method:"POST",headers:{"Content-Type":"application/json","X-User":"ailson"},
+        body:JSON.stringify({sincronizar:[{usuario:form.usuario.trim().toLowerCase(),senha:form.senha.trim()||undefined,ativo:true,modulos:form.modulos||[],admin:!!form.admin}]})}).catch(()=>{});
+    }catch{}
     setForm({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});setEditId(null);setErro("");
   };
   const editar=(u)=>{setForm({usuario:u.usuario,senha:"",modulos:[...u.modulos],admin:u.admin,moduloPadrao:u.moduloPadrao||"home"});setEditId(u.id);};   // 19/09: senha nunca e exibida
@@ -12407,7 +12410,7 @@ export default function App(){
       const saved=parseInt(localStorage.getItem("amica_last_activity")||"0",10);
       if(saved>0&&Date.now()-saved>TIMEOUT_MS){
         console.log("Sessão expirada por inatividade no mount:",Math.round((Date.now()-saved)/3600000),"h");
-        try{localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");}catch{}
+        try{localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");limparToken();}catch{}
         setSessaoExpirada(true);
         return;
       }
@@ -12447,7 +12450,7 @@ export default function App(){
       const elapsed=Date.now()-ultimaAtividadeRef.current;
       if(elapsed>TIMEOUT_MS){
         console.log("Sessão expirada por inatividade após",Math.round(elapsed/3600000),"h");
-        try{localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");}catch{}
+        try{localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");limparToken();}catch{}
         setSessaoExpirada(true);
         return;
       }
@@ -12461,7 +12464,7 @@ export default function App(){
             if(d?.revogado||d?.encerrado){
               try{
                 localStorage.setItem("amica_expira_motivo",d?.revogado?"Este aparelho foi desconectado pelo administrador.":"Sua conta entrou em outro aparelho. Só um aparelho por vez.");
-                localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");
+                localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");limparToken();
               }catch{}
               setSessaoExpirada(true);
             }

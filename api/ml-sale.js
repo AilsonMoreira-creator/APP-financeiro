@@ -13,6 +13,7 @@
  * Usuário vem no header X-User (mesma convenção do app).
  */
 import { supabase } from './_ml-helpers.js';
+import { sombraSessao } from './_sessao.js';
 import {
   brandDe, sellerIdDe, tokenDe, mlGet, mlPost, normRef, anunciosDaRef, carregarAnuncios,
   carregarPromocoesDoItem, normalizarPromo, agrupar, configDaRef, registrarLog, SUBMETE_PERMITIDO, promocoesDaConta, faixaEfetiva, CONTAS, TETO, tetoDe,
@@ -212,6 +213,7 @@ function corpoEntrada(tipo, promoId, it) {
 
 export default async function handler(req, res) {
   cors(res);
+  sombraSessao(req, '/api/ml-sale');   // fase 1: so conta com/sem token
   if (req.method === 'OPTIONS') return res.status(200).end();
   const usuario = String(req.headers['x-user'] || '').trim() || null;
   try {

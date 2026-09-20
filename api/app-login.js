@@ -16,6 +16,7 @@
 // Sem senha em texto no banco: so o hash. Sem senha no log: so usuario/ip/ok.
 
 import bcrypt from 'bcryptjs';
+import { emitirToken, sessaoDe, sombraSessao } from './_sessao.js';   // 20/09: PASSO 4 fase 1 (token de sessao, ainda sem exigir)
 import { supabase, setCors } from './_lojas-helpers.js';
 
 export const config = { maxDuration: 15 };
@@ -35,12 +36,31 @@ export default async function handler(req, res) {
     for (const u of body.sincronizar) {
       const usuario = String(u.usuario || '').trim().toLowerCase();
       const senha = String(u.senha || '');
-      if (!usuario || !senha) continue;
-      const senha_hash = await bcrypt.hash(senha, 10);
-      await supabase.from('app_usuarios').upsert({ usuario, senha_hash, ativo: u.ativo !== false, atualizado_em: new Date().toISOString() }, { onConflict: 'usuario' });
+      if (!usuario) continue;
+      const { data: atual } = await supabase.from('app_usuarios').select('usuario, ativo, versao').eq('usuario', usuario).maybeSingle();
+      const linha = { usuario, ativo: u.ativo !== false, atualizado_em: new Date().toISOString() };
+      if (Array.isArray(u.modulos)) linha.modulos = u.modulos;      // 20/09: modulos/admin vivem no servidor (viram claims do token)
+      if (typeof u.admin === 'boolean') linha.admin = u.admin;
+      // versao sobe quando a senha muda ou o usuario e desativado -> tokens antigos deixam de valer
+      let sobe = false;
+      if (senha) { linha.senha_hash = await bcrypt.hash(senha, 10); sobe = true; }
+      if (atual && atual.ativo && u.ativo === false) sobe = true;
+      if (!atual && !senha) continue;                                 // usuario novo sem senha nao entra
+      if (sobe) linha.versao = Number(atual?.versao || 1) + 1;
+      await supabase.from('app_usuarios').upsert(linha, { onConflict: 'usuario' });
       n++;
     }
     return res.status(200).json({ ok: true, sincronizados: n });
+  }
+
+  // ── renovar token (app faz em silencio depois de 6h) ──
+  if (body.renovar === true) {
+    const s = await sessaoDe(req);
+    if (!s.ok) return res.status(200).json({ ok: false, motivo: s.motivo });
+    const { data: u } = await supabase.from('app_usuarios').select('usuario, ativo, versao, modulos, admin').eq('usuario', s.claims.sub).maybeSingle();
+    if (!u || !u.ativo || Number(u.versao || 1) !== Number(s.claims.ver || 1)) return res.status(200).json({ ok: false, motivo: 'sessao encerrada' });
+    const token = await emitirToken({ usuario: u.usuario, modulos: u.modulos || s.claims.mod, admin: u.admin ?? s.claims.adm, versao: u.versao });
+    return res.status(200).json({ ok: true, token });
   }
 
   // ── validar ──
@@ -87,9 +107,18 @@ export default async function handler(req, res) {
       erro: `Muitas tentativas. Aguarde ${segundos >= 60 ? Math.ceil(segundos / 60) + ' min' : segundos + ' s'} e tente de novo.` });
   }
 
-  const { data: u } = await supabase.from('app_usuarios').select('usuario, senha_hash, ativo').eq('usuario', usuario).maybeSingle();
+  const { data: u } = await supabase.from('app_usuarios').select('usuario, senha_hash, ativo, modulos, admin, versao').eq('usuario', usuario).maybeSingle();
   let ok = false;
   if (u && u.ativo) { try { ok = await bcrypt.compare(senha, u.senha_hash); } catch { ok = false; } }
+  // 20/09 — PASSO 4 fase 1: login aprovado devolve o token de sessao (12h). Os modulos/admin
+  // vem do que a tela Usuarios sincronizou; se ainda nao tiver, o app manda os dele no login
+  // (body.modulos/admin) so pra preencher — o servidor grava e passa a ser a fonte.
+  let token = null;
+  if (ok) {
+    let modulos = Array.isArray(u.modulos) ? u.modulos : null, admin = u.admin;
+    if (!modulos && Array.isArray(body.modulos)) { modulos = body.modulos; admin = !!body.admin; try { await supabase.from('app_usuarios').update({ modulos, admin }).eq('usuario', usuario); } catch {} }
+    try { token = await emitirToken({ usuario, modulos: modulos || [], admin: !!admin, versao: u.versao }); } catch (e) { token = null; }
+  }
   const concorda = typeof body.local_ok === 'boolean' ? (body.local_ok === ok) : null;
   await supabase.from('app_login_tentativas').insert({ usuario, ip, ok, modo, concorda_com_local: concorda });
   // 18/09 — PASSO 2: no modo 'servidor' a resposta DECIDE o login. Duas saidas
@@ -97,5 +126,5 @@ export default async function handler(req, res) {
   //   · usuario sem hash em app_usuarios -> o servidor nao nega, devolve
   //     `sem_cadastro` e o app cai no local (e sincroniza o hash depois).
   //   · o app tambem cai no local se a chamada falhar ou demorar (lado do front).
-  return res.status(200).json({ ok, modo, concorda, cadastrado: !!u, sem_cadastro: !u });
+  return res.status(200).json({ ok, modo, concorda, cadastrado: !!u, sem_cadastro: !u, token });
 }
