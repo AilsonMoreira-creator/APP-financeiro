@@ -211,6 +211,12 @@ function media(xs) { const v = xs.filter(x => x != null); return v.length ? Math
 /** Monta os grupos (1 por anúncio antigo ou por família) com as promoções agregadas. */
 // Faixa padrao (decisao dele 20/09): 6% campanhas / 10% relampago. Excecoes por REF em ml_sale_config.
 export const FAIXA_PADRAO = { campanha_pct: 6, relampago_pct: 10 };
+// TETO ABSOLUTO (decisao dele 20/09, vale pra todo mundo, admin inclusive):
+// ninguem entra em campanha com mais de 7% do bolso do vendedor, nem relampago com mais de 12%.
+// Conferido NO SERVIDOR na hora de submeter; a faixa por REF nao pode passar disso;
+// e promocao ATIVA acima do teto acende VERMELHO no card ate ser marcada como vista.
+export const TETO = { campanha_pct: 7, relampago_pct: 12 };
+export function tetoDe(tipo) { return TIPOS_RELAMPAGO.has(String(tipo || '').toUpperCase()) ? TETO.relampago_pct : TETO.campanha_pct; }
 export function faixaEfetiva(config) {
   return { campanha_pct: config?.campanha_pct ?? FAIXA_PADRAO.campanha_pct, relampago_pct: config?.relampago_pct ?? FAIXA_PADRAO.relampago_pct, padrao: !config };
 }
@@ -252,15 +258,20 @@ export function agrupar(anuncios, promocoes, config) {
       const preco = media(a.filhos.map(f => f.price));
       const original = media(a.filhos.map(f => f.original_price));
       const vistoTodos = a.filhos.every(f => !!f.visto_em);
+      const teto = a.relampago ? TETO.relampago_pct : TETO.campanha_pct;
+      const acimaTeto = seller != null && seller > teto;
       const faixa = a.relampago ? config?.relampago_pct : config?.campanha_pct;
       // PRICE_DISCOUNT ("desconto por preco", sem campanha) esta sempre disponivel e
       // acenderia tudo -> aparece na lista mas nunca pinta de verde
       const elegivel = a.tipo !== 'PRICE_DISCOUNT';
       const dentro = elegivel && faixa != null && seller != null && seller <= Number(faixa);
       return { ...a, ativa, enviada, candidata, seller_pct: seller, meli_pct: meli, price: preco, original_price: original, visto: vistoTodos, dentro_faixa: dentro,
-        verde: dentro && candidata && !ativa && !vistoTodos, n_filhos: a.filhos.length, sem_campanha: a.tipo === 'PRICE_DISCOUNT' };
+        verde: dentro && candidata && !ativa && !vistoTodos, n_filhos: a.filhos.length, sem_campanha: a.tipo === 'PRICE_DISCOUNT',
+        acima_teto: acimaTeto, teto,
+        vermelho: acimaTeto && ativa && !vistoTodos };   // ATIVA acima do teto e ninguem marcou visto
     }).sort((x, y) => (Number(y.ativa) - Number(x.ativa)) || (Number(x.sem_campanha) - Number(y.sem_campanha)) || ((x.seller_pct ?? 999) - (y.seller_pct ?? 999)));   // ativas, depois campanhas por menor % dele, desconto por preco por ultimo
     g.n_ativas = g.promocoes.filter(p => p.ativa).length;
+    g.vermelho = g.promocoes.some(p => p.vermelho);
     g.verde_campanha = g.promocoes.some(p => p.verde && !p.relampago);
     g.verde_relampago = g.promocoes.some(p => p.verde && p.relampago);
     out.push(g);

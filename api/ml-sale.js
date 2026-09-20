@@ -15,10 +15,11 @@
 import { supabase } from './_ml-helpers.js';
 import {
   brandDe, sellerIdDe, tokenDe, mlGet, mlPost, normRef, anunciosDaRef, carregarAnuncios,
-  carregarPromocoesDoItem, normalizarPromo, agrupar, configDaRef, registrarLog, SUBMETE_PERMITIDO, promocoesDaConta, faixaEfetiva, CONTAS,
+  carregarPromocoesDoItem, normalizarPromo, agrupar, configDaRef, registrarLog, SUBMETE_PERMITIDO, promocoesDaConta, faixaEfetiva, CONTAS, TETO, tetoDe,
 } from './_ml-sale-lib.js';
 
 export const config = { maxDuration: 60 };
+const TIPOS_TXT = (t) => (String(t || '').toUpperCase() === 'LIGHTNING' ? 'teto da relâmpago 12%' : 'teto das campanhas 7%');
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -106,7 +107,7 @@ async function badges(conta) {
   const c = String(conta).toLowerCase();
   if (c === 'todas') {
     const out = {};
-    for (const k of Object.keys(CONTAS)) { const b = await badges(k); for (const [ref, v] of Object.entries(b)) { out[ref] = out[ref] || { campanha: false, relampago: false, contas: [] }; out[ref].campanha ||= v.campanha; out[ref].relampago ||= v.relampago; out[ref].contas.push(k); } }
+    for (const k of Object.keys(CONTAS)) { const b = await badges(k); for (const [ref, v] of Object.entries(b)) { out[ref] = out[ref] || { campanha: false, relampago: false, vermelho: false, contas: [] }; out[ref].campanha ||= v.campanha; out[ref].relampago ||= v.relampago; out[ref].vermelho ||= !!v.vermelho; out[ref].contas.push(k); } }
     return out;
   }
   const { data: cfgsDb } = await supabase.from('ml_sale_config').select('*');
@@ -127,8 +128,8 @@ async function badges(conta) {
     const an = porRef[cfg.ref]; if (!an?.length) continue;
     const idset = new Set(an.map(a => a.item_id));
     const gs = agrupar(an, promos.filter(p => idset.has(p.item_id)), cfg);
-    const camp = gs.some(g => g.verde_campanha), rel = gs.some(g => g.verde_relampago);
-    if (camp || rel) out[cfg.ref] = { campanha: camp, relampago: rel };
+    const camp = gs.some(g => g.verde_campanha), rel = gs.some(g => g.verde_relampago), verm = gs.some(g => g.vermelho);
+    if (camp || rel || verm) out[cfg.ref] = { campanha: camp, relampago: rel, vermelho: verm };
   }
   return out;
 }
@@ -237,6 +238,9 @@ export default async function handler(req, res) {
       const ref = normRef(b.ref);
       if (acao === 'config') {
         const linha = { ref, campanha_pct: b.campanha_pct === '' || b.campanha_pct == null ? null : Number(b.campanha_pct), relampago_pct: b.relampago_pct === '' || b.relampago_pct == null ? null : Number(b.relampago_pct), atualizado_por: usuario, atualizado_em: new Date().toISOString() };
+        if ((linha.campanha_pct != null && linha.campanha_pct > TETO.campanha_pct) || (linha.relampago_pct != null && linha.relampago_pct > TETO.relampago_pct)) {
+          return res.status(400).json({ ok: false, erro: `A faixa não pode passar do teto: campanhas ${TETO.campanha_pct}% · relâmpago ${TETO.relampago_pct}%.` });
+        }
         const { error } = await supabase.from('ml_sale_config').upsert(linha, { onConflict: 'ref' });
         if (error) throw error;
         await registrarLog({ conta, ref, acao: 'config', usuario, detalhe: { campanha_pct: linha.campanha_pct, relampago_pct: linha.relampago_pct } });
@@ -254,6 +258,25 @@ export default async function handler(req, res) {
         if (!SUBMETE_PERMITIDO.includes(conta)) return res.status(403).json({ ok: false, erro: `submeter ainda não liberado pra ${conta}` });
         const itens = Array.isArray(b.itens) ? b.itens : [];
         if (!itens.length || !b.tipo) return res.status(400).json({ ok: false, erro: 'itens e tipo' });
+        // ── TETO ABSOLUTO (vale pra admin): campanha > 7% ou relampago > 12% do vendedor -> recusa TUDO ──
+        const teto = tetoDe(b.tipo);
+        const { data: cachePromos } = await supabase.from('ml_sale_promocoes').select('item_id, seller_pct, meli_pct, original_price').eq('conta', conta).eq('promo_key', b.promo_key || '').in('item_id', itens.map(i => i.item_id));
+        const cp = Object.fromEntries((cachePromos || []).map(x => [x.item_id, x]));
+        const acima = [];
+        for (const it of itens) {
+          const c0 = cp[it.item_id] || {};
+          const orig = Number(it.original_price ?? c0.original_price) || null;
+          const meli = Number(c0.meli_pct) || 0;
+          // % do vendedor no preco que vai ser enviado (desconto total menos a parte do ML); sem preco, usa o % do cache
+          let pctVend = (orig && it.deal_price != null) ? Math.round((((orig - Number(it.deal_price)) / orig) * 100 - meli) * 100) / 100 : null;
+          if (pctVend == null) pctVend = c0.seller_pct != null ? Number(c0.seller_pct) : Number(it.pct);
+          it._pct_vendedor = pctVend;
+          if (pctVend == null || pctVend > teto) acima.push({ item_id: it.item_id, pct: pctVend });
+        }
+        if (acima.length) {
+          await registrarLog({ conta, ref, family_id: b.family_id || null, promo_key: b.promo_key || null, promo_nome: b.promo_nome || null, tipo: b.tipo, acao: 'bloqueado', usuario, pct: acima[0].pct, detalhe: { motivo: `acima do teto de ${teto}%`, itens: acima } });
+          return res.status(403).json({ ok: false, bloqueado: true, erro: `Bloqueado: ${acima.length} anúncio(s) com mais de ${teto}% por sua conta (${TIPOS_TXT(b.tipo)}). Esse teto vale pra todos, inclusive admin.`, itens: acima });
+        }
         const token = await tokenDe(conta);
         const resultados = [];
         for (const it of itens) {
