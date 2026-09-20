@@ -207,6 +207,14 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/ml-sale?sync=promocoes&conta=exitus",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/ml-sale?sync=anuncios&conta=exitus",
+      "schedule": "20 5,17 * * *"
+    },
+    {
       "path": "/api/ml-estoque-cron",
       "schedule": "0 11,13,15,17,19,21,23,1 * * *"
     },

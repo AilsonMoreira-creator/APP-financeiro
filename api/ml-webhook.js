@@ -816,6 +816,30 @@ export default async function handler(req, res) {
       const { default: messagesHandler } = await import('./ml-messages-webhook.js');
       return messagesHandler(req, res);
     }
+    // 19/09 (Sale): convites e mudancas de oferta da Central de Promocoes.
+    // resource: /seller-promotions/candidates/CANDIDATE-MLB123-456  ou
+    //           /seller-promotions/offers/OFFER-MLB123-456
+    // O id carrega o MLB no meio -> reler as promocoes so daquele anuncio.
+    if ((String(topic || '').includes('candidate') || String(topic || '').includes('offer') || String(resource || '').includes('/seller-promotions/')) && resource) {
+      try {
+        const m = String(resource).match(/(?:CANDIDATE|OFFER)-(MLB\d+)-/i);
+        const itemId = m ? m[1].toUpperCase() : null;
+        if (!itemId) return res.status(200).json({ ok: true, topic, ignorado: 'sem MLB no resource' });
+        const { data: tokenRec } = await supabase.from('ml_tokens').select('brand').eq('seller_id', String(user_id)).maybeSingle();
+        const conta = String(tokenRec?.brand || '').toLowerCase();
+        if (!conta) return res.status(200).json({ ok: true, topic, ignorado: 'conta nao encontrada' });
+        const lib = await import('./_ml-sale-lib.js');
+        const token = await getValidToken(tokenRec.brand);
+        // garante o anuncio no cache (com REF) e atualiza as promocoes dele
+        const { data: cache } = await supabase.from('ml_sale_anuncios').select('item_id, price').eq('conta', conta).eq('item_id', itemId).maybeSingle();
+        let preco = cache?.price;
+        if (!cache) { const g = await lib.carregarAnuncios(conta, token, [itemId]); preco = g[0]?.price; }
+        const r = await lib.carregarPromocoesDoItem(conta, token, itemId, preco);
+        return res.status(200).json({ ok: true, topic, item: itemId, conta, promocoes: r.n });
+      } catch (e) {
+        return res.status(200).json({ ok: false, topic, erro: String(e?.message || e) });
+      }
+    }
     // 04/09 (Envios Agora): pedidos e envios chegam aqui em segundos. So os
     // que forem "proximity"/"Instant" viram linha em wms_agora; o resto e
     // ignorado (o espelho do Bling cuida deles como sempre).
