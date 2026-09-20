@@ -85,7 +85,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
     const j = await api('', { method: 'POST', body: JSON.stringify({ acao: 'entrar', conta, ref: refProd, promo_key: p.promo_key, promo_id: p.promo_id, promo_nome: p.nome, tipo: p.tipo, family_id: g.family_id, itens }) });
     setConfirma(null);
     const okN = (j.resultados || []).filter(x => x.ok).length, errN = (j.resultados || []).length - okN;
-    setAviso(j.ok ? `Entrou em ${okN} anúncio(s) ✓` : `${okN} ok · ${errN} recusado(s) pelo ML — veja o log`);
+    setAviso(j.bloqueado ? `⛔ ${j.erro}` : j.ok ? `Entrou em ${okN} anúncio(s) ✓` : `${okN} ok · ${errN} recusado(s) pelo ML — veja o log`);
     await carregar(true); onMudou && onMudou();
     setEnviando(false);
   };
@@ -126,6 +126,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
             </label>
             <button onClick={salvarCfg} disabled={salvandoCfg} style={btn(true)}>{salvandoCfg ? 'salvando…' : 'salvar faixa'}</button>
             {dados?.faixa?.padrao && <span style={{ fontSize: 10.5, color: C.cinza }}>padrão 6% / 10% (vazio = padrão)</span>}
+            <span style={{ fontSize: 10.5, color: C.erro }}>teto: campanhas 7% · relâmpago 12% (ninguém passa)</span>
             {!dados?.submete && dados && <span style={{ fontSize: 10.5, color: C.alerta }}>só consulta nesta conta (submeter: Exitus)</span>}
             {temVerde && <span style={{ fontSize: 11, color: C.ok, background: C.okBg, padding: '3px 8px', borderRadius: 999, fontWeight: 700 }}>● tem promoção dentro da faixa</span>}
           </div>
@@ -140,8 +141,9 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
           {grupos.map(g => {
             const open = !!aberto[g.chave];
             const verde = g.verde_campanha || g.verde_relampago;
+            const vermelho = g.vermelho;
             return (
-              <div key={g.chave} style={{ border: `1px solid ${verde ? '#9fd3b4' : C.borda}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden', background: verde ? '#f6fbf8' : '#fff' }}>
+              <div key={g.chave} style={{ border: `1px solid ${vermelho ? '#e3a3a3' : verde ? '#9fd3b4' : C.borda}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden', background: vermelho ? '#fdf5f5' : verde ? '#f6fbf8' : '#fff' }}>
                 {/* card do anúncio */}
                 <div onClick={() => setAberto(a => ({ ...a, [g.chave]: !open }))} style={{ display: 'flex', gap: 12, padding: 12, cursor: 'pointer', alignItems: 'center' }}>
                   <div style={{ width: mobile ? 56 : 72, height: mobile ? 72 : 92, borderRadius: 8, background: C.cinzaBg, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -158,6 +160,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
                       <span style={chip(g.full ? C.okBg : C.cinzaBg, g.full ? C.ok : C.navy)}>{g.full ? `▣ Full · ${g.full_qtd || g.estoque} un.` : `⌂ Depósito · ${g.estoque} un.`}</span>
                       <span style={chip()}>7 dias: <b>{g.vendas_7d}</b> venda{g.vendas_7d === 1 ? '' : 's'}</span>
                       <span style={chip(g.n_ativas ? '#eef3f8' : C.cinzaBg, g.n_ativas ? C.azul : C.suave)}>{g.n_ativas} ativa{g.n_ativas === 1 ? '' : 's'}</span>
+                      {vermelho && <span style={chip(C.erroBg, C.erro)}>⛔ ativa acima do teto</span>}
                       {g.verde_campanha && <span style={chip(C.okBg, C.ok)}>● campanha na faixa</span>}
                       {g.verde_relampago && <span style={chip(C.okBg, C.ok)}>⚡ relâmpago na faixa</span>}
                     </div>
@@ -185,7 +188,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
                               const enviados = p.filhos.filter(f => f.status === 'enviado').length;
                               const linhaVerde = p.verde;
                               return (
-                                <tr key={p.promo_key} style={{ borderTop: `1px solid ${C.borda}`, background: linhaVerde ? '#eef8f1' : p.ativa ? '#fbfaf7' : 'transparent' }}>
+                                <tr key={p.promo_key} style={{ borderTop: `1px solid ${C.borda}`, background: p.vermelho ? '#fbeaea' : linhaVerde ? '#eef8f1' : p.ativa ? '#fbfaf7' : 'transparent' }}>
                                   <td style={td()}>
                                     <div style={{ fontWeight: 700, color: C.navy }}>{p.nome || TIPO[p.tipo] || p.tipo}</div>
                                     <div style={{ fontSize: 10.5, color: C.suave }}>{TIPO[p.tipo] || p.tipo}{ativos ? <span style={{ color: C.ok, fontWeight: 700 }}> · ATIVA</span> : ''}{enviados && !ativos ? <span style={{ color: C.azul, fontWeight: 700 }}> · ENVIADO ✓ (aguardando o ML)</span> : ''}{p.visto && !p.ativa ? <span style={{ color: C.cinza }}> · visto</span> : ''}{p.sem_campanha ? <span style={{ color: C.alerta }}> · sem campanha</span> : ''}</div>
@@ -194,14 +197,15 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
                                   <td style={td()}>{pct(total)}</td>
                                   <td style={td()}>{R$(p.price)}</td>
                                   <td style={td()}>{p.meli_pct ? pct(p.meli_pct) : '—'}</td>
-                                  <td style={{ ...td(), fontWeight: 700, color: linhaVerde ? C.ok : C.navy }}>{pct(p.seller_pct)}{p.n_filhos > 1 ? <div style={{ fontSize: 10, color: C.suave, fontWeight: 400 }}>média de {p.n_filhos}</div> : null}</td>
+                                  <td style={{ ...td(), fontWeight: 700, color: p.acima_teto ? C.erro : linhaVerde ? C.ok : C.navy }}>{pct(p.seller_pct)}{p.acima_teto ? <div style={{ fontSize: 10, color: C.erro, fontWeight: 400 }}>acima do teto {p.teto}%</div> : null}{p.n_filhos > 1 ? <div style={{ fontSize: 10, color: C.suave, fontWeight: 400 }}>média de {p.n_filhos}</div> : null}</td>
                                   <td style={td()}>{ativos ? <span style={{ color: C.ok }}>{ativos} ativo{ativos > 1 ? 's' : ''}</span> : null}{enviados ? <span style={{ color: C.azul }}>{ativos ? ' · ' : ''}{enviados} enviado{enviados > 1 ? 's' : ''}</span> : null}{(ativos || enviados) && cand ? ' · ' : ''}{cand ? <span>{cand} convidado{cand > 1 ? 's' : ''}</span> : null}{!ativos && !cand && !enviados ? '—' : ''}</td>
                                   <td style={td()}>
                                     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                                      {cand > 0 && dados?.submete && (
+                                      {cand > 0 && dados?.submete && !p.acima_teto && (
                                         <button disabled={enviando} onClick={() => setConfirma({ grupo: g, promo: p, qtd: p.filhos.find(f => f.status === 'candidate')?.stock_min || 5 })} style={{ ...btn(true), opacity: enviando ? .5 : 1 }}>{p.relampago ? '⚡ ' : ''}Participar</button>
                                       )}
-                                      {cand > 0 && !p.visto && !p.ativa && <button onClick={() => marcarVisto(g, p)} title="Já vi, não quero entrar — apaga o verde desta promoção" style={btn()}>Visto</button>}
+                                      {cand > 0 && p.acima_teto && <span style={{ fontSize: 10.5, color: C.erro, alignSelf: 'center' }}>⛔ acima do teto</span>}
+                                      {((cand > 0 && !p.visto && !p.ativa) || p.vermelho) && <button onClick={() => marcarVisto(g, p)} title={p.vermelho ? 'Já vi que está ativa acima do teto — apaga o vermelho' : 'Já vi, não quero entrar — apaga o verde desta promoção'} style={btn()}>Visto</button>}
                                       {p.relampago && cand > 0 && <span style={{ fontSize: 10.5, color: C.suave, alignSelf: 'center' }}>qtd mín {p.filhos.find(f => f.status === 'candidate')?.stock_min ?? '—'}</span>}
                                     </div>
                                   </td>
@@ -266,7 +270,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
               {log && log.map(l => (
                 <div key={l.id} style={{ borderTop: `1px solid ${C.borda}`, padding: '8px 0', fontSize: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontWeight: 700, color: l.acao === 'entrou' ? C.ok : l.acao === 'erro' ? C.erro : C.navy }}>{{ entrou: 'Entrou', visto: 'Visto', erro: 'Recusado pelo ML', config: 'Faixa alterada' }[l.acao] || l.acao}</span>
+                    <span style={{ fontWeight: 700, color: l.acao === 'entrou' ? C.ok : (l.acao === 'erro' || l.acao === 'bloqueado') ? C.erro : C.navy }}>{{ entrou: 'Entrou', visto: 'Visto', erro: 'Recusado pelo ML', bloqueado: 'Bloqueado pelo teto', config: 'Faixa alterada' }[l.acao] || l.acao}</span>
                     <span style={{ color: C.suave }}>{new Date(l.criado_em).toLocaleString('pt-BR')} · {l.usuario || '—'}</span>
                   </div>
                   <div style={{ color: C.navy }}>{l.promo_nome || TIPO[l.tipo] || l.promo_key || ''}{l.item_id ? ` · ${l.item_id}` : ''}{l.pct != null ? ` · ${pct(l.pct)}` : ''}{l.preco != null ? ` · ${R$(l.preco)}` : ''}{l.qtd != null ? ` · ${l.qtd} un.` : ''}</div>
