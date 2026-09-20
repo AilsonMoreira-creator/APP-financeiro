@@ -188,9 +188,11 @@ export async function carregarPromocoesDoItem(conta, token, itemId, origFallback
   if (!r.ok || !Array.isArray(r.body)) return { ok: false, http: r.http, n: 0 };
   const linhas = r.body.map(p => normalizarPromo(c, itemId, p, origFallback));
   // preserva visto: upsert não pode sobrescrever visto_em -> lê os existentes
-  const { data: exist } = await supabase.from('ml_sale_promocoes').select('promo_key, visto_em, visto_por, start_date, finish_date').eq('conta', c).eq('item_id', itemId);
+  const { data: exist } = await supabase.from('ml_sale_promocoes').select('promo_key, visto_em, visto_por, start_date, finish_date, entrou_em, entrou_por').eq('conta', c).eq('item_id', itemId);
   const vistos = Object.fromEntries((exist || []).map(x => [x.promo_key, x]));
-  for (const l of linhas) { const v = vistos[l.promo_key]; if (v) { l.visto_em = v.visto_em; l.visto_por = v.visto_por; if (!l.start_date && v.start_date) l.start_date = v.start_date; if (!l.finish_date && v.finish_date) l.finish_date = v.finish_date; } }
+  for (const l of linhas) { const v = vistos[l.promo_key]; if (v) { l.visto_em = v.visto_em; l.visto_por = v.visto_por; if (!l.start_date && v.start_date) l.start_date = v.start_date; if (!l.finish_date && v.finish_date) l.finish_date = v.finish_date;
+    // "entrou" local: vale enquanto o ML ainda mostrar candidate (ele demora a virar); some quando o status muda
+    if (v.entrou_em && l.status === 'candidate') { l.entrou_em = v.entrou_em; l.entrou_por = v.entrou_por; } } }
   // promoções que sumiram no ML somem do cache
   const chaves = new Set(linhas.map(l => l.promo_key));
   const sumiram = (exist || []).map(x => x.promo_key).filter(k => !chaves.has(k));
@@ -237,12 +239,13 @@ export function agrupar(anuncios, promocoes, config) {
     const agg = {};
     for (const f of g.filhos) for (const p of f.promocoes) {
       const a = agg[p.promo_key] = agg[p.promo_key] || { promo_key: p.promo_key, promo_id: p.promo_id, tipo: p.tipo, nome: p.nome, relampago: TIPOS_RELAMPAGO.has(p.tipo), filhos: [], status: {}, };
-      a.filhos.push({ item_id: f.item_id, title: f.title, sku: f.sku, status: p.status, original_price: p.original_price, price: p.price, seller_pct: p.seller_pct, meli_pct: p.meli_pct, min_price: p.min_price, max_price: p.max_price, suggested_price: p.suggested_price, stock_min: p.stock_min, stock_max: p.stock_max, stock_remaining: p.stock_remaining, visto_em: p.visto_em, available_quantity: f.available_quantity });
+      a.filhos.push({ item_id: f.item_id, title: f.title, sku: f.sku, status: p.entrou_em && p.status === 'candidate' ? 'enviado' : p.status, original_price: p.original_price, price: p.price, seller_pct: p.seller_pct, meli_pct: p.meli_pct, min_price: p.min_price, max_price: p.max_price, suggested_price: p.suggested_price, stock_min: p.stock_min, stock_max: p.stock_max, stock_remaining: p.stock_remaining, visto_em: p.visto_em, entrou_em: p.entrou_em, available_quantity: f.available_quantity });
       a.status[p.status || '?'] = (a.status[p.status || '?'] || 0) + 1;
       a.start_date = a.start_date || p.start_date; a.finish_date = a.finish_date || p.finish_date; a.deadline_date = a.deadline_date || p.deadline_date;
     }
     g.promocoes = Object.values(agg).map(a => {
-      const ativa = a.filhos.some(f => STATUS_ATIVO.has(f.status));
+      const enviada = a.filhos.some(f => f.status === 'enviado');
+      const ativa = a.filhos.some(f => STATUS_ATIVO.has(f.status)) || enviada;
       const candidata = a.filhos.some(f => STATUS_CANDIDATO.has(f.status));
       const seller = media(a.filhos.map(f => f.seller_pct));
       const meli = media(a.filhos.map(f => f.meli_pct));
@@ -254,9 +257,9 @@ export function agrupar(anuncios, promocoes, config) {
       // acenderia tudo -> aparece na lista mas nunca pinta de verde
       const elegivel = a.tipo !== 'PRICE_DISCOUNT';
       const dentro = elegivel && faixa != null && seller != null && seller <= Number(faixa);
-      return { ...a, ativa, candidata, seller_pct: seller, meli_pct: meli, price: preco, original_price: original, visto: vistoTodos, dentro_faixa: dentro,
-        verde: dentro && candidata && !ativa && !vistoTodos, n_filhos: a.filhos.length };
-    }).sort((x, y) => (Number(y.ativa) - Number(x.ativa)) || ((x.seller_pct ?? 999) - (y.seller_pct ?? 999)));
+      return { ...a, ativa, enviada, candidata, seller_pct: seller, meli_pct: meli, price: preco, original_price: original, visto: vistoTodos, dentro_faixa: dentro,
+        verde: dentro && candidata && !ativa && !vistoTodos, n_filhos: a.filhos.length, sem_campanha: a.tipo === 'PRICE_DISCOUNT' };
+    }).sort((x, y) => (Number(y.ativa) - Number(x.ativa)) || (Number(x.sem_campanha) - Number(y.sem_campanha)) || ((x.seller_pct ?? 999) - (y.seller_pct ?? 999)));   // ativas, depois campanhas por menor % dele, desconto por preco por ultimo
     g.n_ativas = g.promocoes.filter(p => p.ativa).length;
     g.verde_campanha = g.promocoes.some(p => p.verde && !p.relampago);
     g.verde_relampago = g.promocoes.some(p => p.verde && p.relampago);

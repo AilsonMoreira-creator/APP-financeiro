@@ -6251,14 +6251,18 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           </div>
           <div style={{padding:"16px 20px"}}>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
-              <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{flex:mobile?"1 1 calc(50% - 4px)":"1 1 60%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 10px",fontSize:mobile?11.5:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
+              <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{flex:mobile?"1 1 calc(50% - 4px)":"1 1 44%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 10px",fontSize:mobile?11.5:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
                 <span style={{fontSize:16,lineHeight:1,color:"#4a7fa5"}}>+</span> acrescentar corte
               </button>
-              <button onClick={()=>setRaioxOpen({ref:modalRef,desc,foto:null})} title="Vendas, cores, canais, Full e devoluções desta referência" style={{flex:mobile?"1 1 calc(50% - 4px)":"1 1 38%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 10px",fontSize:mobile?11.5:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
+              <button onClick={()=>setRaioxOpen({ref:modalRef,desc,foto:null})} title="Vendas, cores, canais, Full e devoluções desta referência" style={{flex:mobile?"1 1 calc(50% - 4px)":"1 1 30%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 10px",fontSize:mobile?11.5:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
                 🔎 raio-x
               </button>
+              {(()=>{const b=saleBadges[String(refNorm)]||saleBadges[String(modalRef)]||saleBadges[String(modalRef).replace(/^0+(?=\d)/,'')];const verde=!!(b&&(b.campanha||b.relampago));return(
+              <button onClick={()=>setSaleOpen({ref:modalRef,desc})} title={verde?`Tem promoção do Mercado Livre dentro da faixa da REF ${modalRef}`:`Promoções do Mercado Livre pra REF ${modalRef}`} style={{flex:mobile?"1 1 calc(50% - 4px)":"1 1 22%",minWidth:0,whiteSpace:"nowrap",background:verde?"#e9f5ee":"#fff",color:verde?"#1f7a48":"#2c3e50",border:`1px solid ${verde?"#7fc79b":"#c8d8e4"}`,borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,boxShadow:verde?"0 0 0 2px rgba(31,122,72,.15)":"none"}}>
+                <span style={{fontSize:12,lineHeight:1,color:verde?"#1f7a48":"#4a7fa5"}}>{verde?"●":"%"}</span> sale
+              </button>);})()}
             </div>
-            <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:mobile?"wrap":"nowrap"}}>
+            <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
               <button onClick={()=>{setGtinProg(null);setGtinOpen({ref:modalRef,refNorm,desc});}} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <span style={{fontSize:12,lineHeight:1,color:"#4a7fa5",letterSpacing:-1,fontFamily:"monospace"}}>▌║▌</span> código de barras
               </button>
@@ -6271,10 +6275,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <button onClick={()=>setMapOpen({ref:modalRef,refNorm,desc,cores:[...new Set((vars||[]).map(v=>v.cor).filter(Boolean))]})} title={`Conferir se os SKUs da REF ${modalRef} estão vinculados nos canais das 3 empresas`} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>⇄</span> mapeamento
               </button>
-              {(()=>{const b=saleBadges[String(refNorm)]||saleBadges[String(modalRef)]||saleBadges[String(modalRef).replace(/^0+(?=\d)/,'')];const verde=!!(b&&(b.campanha||b.relampago));return(
-              <button onClick={()=>setSaleOpen({ref:modalRef,desc})} title={verde?`Tem promoção do Mercado Livre dentro da faixa da REF ${modalRef}`:`Promoções do Mercado Livre pra REF ${modalRef}`} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:verde?"#e9f5ee":"#fff",color:verde?"#1f7a48":"#2c3e50",border:`1px solid ${verde?"#7fc79b":"#c8d8e4"}`,borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,boxShadow:verde?"0 0 0 2px rgba(31,122,72,.15)":"none"}}>
-                <span style={{fontSize:12,lineHeight:1,color:verde?"#1f7a48":"#4a7fa5"}}>{verde?"●":"%"}</span> sale
-              </button>);})()}
+
               <button onClick={()=>abrirLocalizacao(modalRef,refNorm,desc)} title={`Definir a localização de estoque da REF ${modalRef} nas 3 contas Bling`} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>◎</span> localização
               </button>

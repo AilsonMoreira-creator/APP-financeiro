@@ -83,10 +83,11 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
       return it;
     });
     const j = await api('', { method: 'POST', body: JSON.stringify({ acao: 'entrar', conta, ref: refProd, promo_key: p.promo_key, promo_id: p.promo_id, promo_nome: p.nome, tipo: p.tipo, family_id: g.family_id, itens }) });
-    setEnviando(false); setConfirma(null);
+    setConfirma(null);
     const okN = (j.resultados || []).filter(x => x.ok).length, errN = (j.resultados || []).length - okN;
     setAviso(j.ok ? `Entrou em ${okN} anúncio(s) ✓` : `${okN} ok · ${errN} recusado(s) pelo ML — veja o log`);
     await carregar(true); onMudou && onMudou();
+    setEnviando(false);
   };
 
   const abrirLog = async () => { setLogOpen(true); const j = await api(`?log=1&ref=${encodeURIComponent(refProd)}`); setLog(j.log || []); };
@@ -181,23 +182,24 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
                               const total = (p.seller_pct || 0) + (p.meli_pct || 0);
                               const cand = p.filhos.filter(f => f.status === 'candidate').length;
                               const ativos = p.filhos.filter(f => ['started', 'active', 'pending', 'programmed'].includes(f.status)).length;
+                              const enviados = p.filhos.filter(f => f.status === 'enviado').length;
                               const linhaVerde = p.verde;
                               return (
                                 <tr key={p.promo_key} style={{ borderTop: `1px solid ${C.borda}`, background: linhaVerde ? '#eef8f1' : p.ativa ? '#fbfaf7' : 'transparent' }}>
                                   <td style={td()}>
                                     <div style={{ fontWeight: 700, color: C.navy }}>{p.nome || TIPO[p.tipo] || p.tipo}</div>
-                                    <div style={{ fontSize: 10.5, color: C.suave }}>{TIPO[p.tipo] || p.tipo}{p.ativa ? <span style={{ color: C.ok, fontWeight: 700 }}> · ATIVA</span> : ''}{p.visto && !p.ativa ? <span style={{ color: C.cinza }}> · visto</span> : ''}</div>
+                                    <div style={{ fontSize: 10.5, color: C.suave }}>{TIPO[p.tipo] || p.tipo}{ativos ? <span style={{ color: C.ok, fontWeight: 700 }}> · ATIVA</span> : ''}{enviados && !ativos ? <span style={{ color: C.azul, fontWeight: 700 }}> · ENVIADO ✓ (aguardando o ML)</span> : ''}{p.visto && !p.ativa ? <span style={{ color: C.cinza }}> · visto</span> : ''}{p.sem_campanha ? <span style={{ color: C.alerta }}> · sem campanha</span> : ''}</div>
                                   </td>
                                   <td style={td()}>{p.relampago && p.start_date && !p.ativa ? <div>publica <b>{dia(p.start_date)} {hora(p.start_date)}</b>{p.finish_date ? <span style={{ color: C.suave }}> até {hora(p.finish_date)}</span> : null}</div> : periodo(p)}{p.relampago && !p.start_date ? <div style={{ fontSize: 10.5, color: C.suave }}>data: o ML define ao aceitar</div> : null}{p.deadline_date && !p.ativa ? <div style={{ fontSize: 10.5, color: C.alerta }}>aceite até {dia(p.deadline_date)}</div> : null}</td>
                                   <td style={td()}>{pct(total)}</td>
                                   <td style={td()}>{R$(p.price)}</td>
                                   <td style={td()}>{p.meli_pct ? pct(p.meli_pct) : '—'}</td>
                                   <td style={{ ...td(), fontWeight: 700, color: linhaVerde ? C.ok : C.navy }}>{pct(p.seller_pct)}{p.n_filhos > 1 ? <div style={{ fontSize: 10, color: C.suave, fontWeight: 400 }}>média de {p.n_filhos}</div> : null}</td>
-                                  <td style={td()}>{ativos ? <span style={{ color: C.ok }}>{ativos} ativo{ativos > 1 ? 's' : ''}</span> : null}{ativos && cand ? ' · ' : ''}{cand ? <span>{cand} convidado{cand > 1 ? 's' : ''}</span> : null}{!ativos && !cand ? '—' : ''}</td>
+                                  <td style={td()}>{ativos ? <span style={{ color: C.ok }}>{ativos} ativo{ativos > 1 ? 's' : ''}</span> : null}{enviados ? <span style={{ color: C.azul }}>{ativos ? ' · ' : ''}{enviados} enviado{enviados > 1 ? 's' : ''}</span> : null}{(ativos || enviados) && cand ? ' · ' : ''}{cand ? <span>{cand} convidado{cand > 1 ? 's' : ''}</span> : null}{!ativos && !cand && !enviados ? '—' : ''}</td>
                                   <td style={td()}>
                                     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                                       {cand > 0 && dados?.submete && (
-                                        <button onClick={() => setConfirma({ grupo: g, promo: p, qtd: p.filhos.find(f => f.status === 'candidate')?.stock_min || 5 })} style={btn(true)}>{p.relampago ? '⚡ ' : ''}Participar</button>
+                                        <button disabled={enviando} onClick={() => setConfirma({ grupo: g, promo: p, qtd: p.filhos.find(f => f.status === 'candidate')?.stock_min || 5 })} style={{ ...btn(true), opacity: enviando ? .5 : 1 }}>{p.relampago ? '⚡ ' : ''}Participar</button>
                                       )}
                                       {cand > 0 && !p.visto && !p.ativa && <button onClick={() => marcarVisto(g, p)} title="Já vi, não quero entrar — apaga o verde desta promoção" style={btn()}>Visto</button>}
                                       {p.relampago && cand > 0 && <span style={{ fontSize: 10.5, color: C.suave, alignSelf: 'center' }}>qtd mín {p.filhos.find(f => f.status === 'candidate')?.stock_min ?? '—'}</span>}
@@ -232,6 +234,11 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
             <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, maxWidth: 440, width: '100%', fontFamily: F }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: C.navy }}>{confirma.promo.relampago ? '⚡ Oferta relâmpago' : 'Entrar na promoção'}</div>
               <div style={{ fontSize: 12.5, color: C.suave, marginTop: 4 }}>{confirma.promo.nome || TIPO[confirma.promo.tipo]} · {periodo(confirma.promo)}</div>
+              {confirma.promo.sem_campanha && (
+                <div style={{ marginTop: 10, fontSize: 12.5, color: '#7a4a00', background: C.alertaBg, border: '1px solid #efd9a0', borderRadius: 8, padding: '8px 10px', lineHeight: 1.45 }}>
+                  <b>Atenção:</b> isto é só um <b>desconto no preço</b> do anúncio. Não entra em nenhuma campanha do Mercado Livre, não ganha destaque nem selo, não tem cofinanciamento e não tem data pra acabar — fica até vc tirar.
+                </div>
+              )}
               <div style={{ fontSize: 12.5, color: C.navy, marginTop: 10, lineHeight: 1.5 }}>
                 {confirma.promo.filhos.filter(f => f.status === 'candidate').length} anúncio(s) entram com o <b>menor desconto possível</b>: meu % médio <b>{pct(confirma.promo.seller_pct)}</b>{confirma.promo.meli_pct ? <> + Meli {pct(confirma.promo.meli_pct)}</> : null} → preço médio <b>{R$(confirma.promo.price)}</b>.
               </div>

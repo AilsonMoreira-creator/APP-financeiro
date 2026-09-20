@@ -261,6 +261,7 @@ export default async function handler(req, res) {
           const r = await mlPost(token, `/seller-promotions/items/${it.item_id}?app_version=v2`, corpo);
           const okItem = r.ok;
           resultados.push({ item_id: it.item_id, ok: okItem, http: r.http, resposta: r.body });
+          if (okItem) await supabase.from('ml_sale_promocoes').update({ entrou_em: new Date().toISOString(), entrou_por: usuario }).eq('conta', conta).eq('item_id', it.item_id).eq('promo_key', b.promo_key || '');
           await registrarLog({ conta, ref, item_id: it.item_id, family_id: b.family_id || null, promo_key: b.promo_key || null, promo_nome: b.promo_nome || null, tipo: b.tipo, acao: okItem ? 'entrou' : 'erro', usuario, pct: it.pct ?? null, preco: it.deal_price ?? null, qtd: it.stock ?? null, detalhe: { enviado: corpo, http: r.http, resposta: okItem ? r.body : (r.body?.message || r.body?.cause || r.body) } });
           try { await carregarPromocoesDoItem(conta, token, it.item_id, it.original_price); } catch {}
         }
