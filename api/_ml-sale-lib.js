@@ -165,9 +165,9 @@ export async function carregarPromocoesDoItem(conta, token, itemId, origFallback
   if (!r.ok || !Array.isArray(r.body)) return { ok: false, http: r.http, n: 0 };
   const linhas = r.body.map(p => normalizarPromo(c, itemId, p, origFallback));
   // preserva visto: upsert não pode sobrescrever visto_em -> lê os existentes
-  const { data: exist } = await supabase.from('ml_sale_promocoes').select('promo_key, visto_em, visto_por').eq('conta', c).eq('item_id', itemId);
+  const { data: exist } = await supabase.from('ml_sale_promocoes').select('promo_key, visto_em, visto_por, start_date, finish_date').eq('conta', c).eq('item_id', itemId);
   const vistos = Object.fromEntries((exist || []).map(x => [x.promo_key, x]));
-  for (const l of linhas) { const v = vistos[l.promo_key]; if (v) { l.visto_em = v.visto_em; l.visto_por = v.visto_por; } }
+  for (const l of linhas) { const v = vistos[l.promo_key]; if (v) { l.visto_em = v.visto_em; l.visto_por = v.visto_por; if (!l.start_date && v.start_date) l.start_date = v.start_date; if (!l.finish_date && v.finish_date) l.finish_date = v.finish_date; } }
   // promoções que sumiram no ML somem do cache
   const chaves = new Set(linhas.map(l => l.promo_key));
   const sumiram = (exist || []).map(x => x.promo_key).filter(k => !chaves.has(k));
@@ -184,7 +184,14 @@ export const STATUS_CANDIDATO = new Set(['candidate']);
 function media(xs) { const v = xs.filter(x => x != null); return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100 : null; }
 
 /** Monta os grupos (1 por anúncio antigo ou por família) com as promoções agregadas. */
+// Faixa padrao (decisao dele 20/09): 6% campanhas / 10% relampago. Excecoes por REF em ml_sale_config.
+export const FAIXA_PADRAO = { campanha_pct: 6, relampago_pct: 10 };
+export function faixaEfetiva(config) {
+  return { campanha_pct: config?.campanha_pct ?? FAIXA_PADRAO.campanha_pct, relampago_pct: config?.relampago_pct ?? FAIXA_PADRAO.relampago_pct, padrao: !config };
+}
+
 export function agrupar(anuncios, promocoes, config) {
+  config = faixaEfetiva(config);
   const porItem = {};
   for (const p of promocoes) (porItem[p.item_id] = porItem[p.item_id] || []).push(p);
   const grupos = {};
@@ -227,6 +234,7 @@ export function agrupar(anuncios, promocoes, config) {
       return { ...a, ativa, candidata, seller_pct: seller, meli_pct: meli, price: preco, original_price: original, visto: vistoTodos, dentro_faixa: dentro,
         verde: dentro && candidata && !ativa && !vistoTodos, n_filhos: a.filhos.length };
     }).sort((x, y) => (Number(y.ativa) - Number(x.ativa)) || ((x.seller_pct ?? 999) - (y.seller_pct ?? 999)));
+    g.n_ativas = g.promocoes.filter(p => p.ativa).length;
     g.verde_campanha = g.promocoes.some(p => p.verde && !p.relampago);
     g.verde_relampago = g.promocoes.some(p => p.verde && p.relampago);
     out.push(g);

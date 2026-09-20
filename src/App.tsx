@@ -5364,7 +5364,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   // 19/09: Sale — promocoes do ML por REF. saleBadges: {ref:{campanha,relampago}} pinta o botao de verde
   const [saleOpen,setSaleOpen]=useState<any>(null);
   const [saleBadges,setSaleBadges]=useState<any>({});
-  const carregarSaleBadges=()=>{fetch('/api/ml-sale?badges=1&conta=exitus').then(r=>r.json()).then(j=>{if(j?.ok)setSaleBadges(j.badges||{});}).catch(()=>{});};
+  const carregarSaleBadges=()=>{fetch('/api/ml-sale?badges=1&conta=todas').then(r=>r.json()).then(j=>{if(j?.ok)setSaleBadges(j.badges||{});}).catch(()=>{});};
   useEffect(()=>{carregarSaleBadges();const t=setInterval(carregarSaleBadges,10*60*1000);return()=>clearInterval(t);},[]);
   const [raioxOpen,setRaioxOpen]=useState<any>(null); // Raio-X do produto (15/08)
   const [fullOpen,setFullOpen]=useState<any>(null);   // Envio pro Full (17/08)
@@ -6251,10 +6251,10 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           </div>
           <div style={{padding:"16px 20px"}}>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
-              <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{flex:"1 1 60%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 10px",fontSize:mobile?12:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
+              <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{flex:mobile?"1 1 calc(50% - 4px)":"1 1 60%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 10px",fontSize:mobile?11.5:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
                 <span style={{fontSize:16,lineHeight:1,color:"#4a7fa5"}}>+</span> acrescentar corte
               </button>
-              <button onClick={()=>setRaioxOpen({ref:modalRef,desc,foto:null})} title="Vendas, cores, canais, Full e devoluções desta referência" style={{flex:"1 1 38%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 10px",fontSize:mobile?12:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
+              <button onClick={()=>setRaioxOpen({ref:modalRef,desc,foto:null})} title="Vendas, cores, canais, Full e devoluções desta referência" style={{flex:mobile?"1 1 calc(50% - 4px)":"1 1 38%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 10px",fontSize:mobile?11.5:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
                 🔎 raio-x
               </button>
             </div>
@@ -6385,7 +6385,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       })()}
       {raioxOpen && <RaioXProduto refProduto={raioxOpen.ref} desc={raioxOpen.desc} foto={raioxOpen.foto} onClose={()=>setRaioxOpen(null)}/>}
       {mapOpen && <MapeamentoSkus refProduto={mapOpen.ref} desc={mapOpen.desc} cores={mapOpen.cores} onClose={()=>setMapOpen(null)}/>}
-      {saleOpen && <MLSale refProduto={saleOpen.ref} desc={saleOpen.desc} conta="exitus" onClose={()=>setSaleOpen(null)} onMudou={carregarSaleBadges}/>}
+      {saleOpen && <MLSale refProduto={saleOpen.ref} desc={saleOpen.desc} onClose={()=>setSaleOpen(null)} onMudou={carregarSaleBadges}/>}
       {gtinOpen && (
         <div onClick={()=>{ if(!gtinBusy)setGtinOpen(null); }} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px",zIndex:205,backdropFilter:"blur(3px)"}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:440,boxShadow:"0 20px 50px rgba(0,0,0,0.25)",overflow:"hidden",fontFamily:"Georgia,serif"}}>

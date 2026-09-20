@@ -15,7 +15,7 @@
 import { supabase } from './_ml-helpers.js';
 import {
   brandDe, sellerIdDe, tokenDe, mlGet, mlPost, normRef, anunciosDaRef, carregarAnuncios,
-  carregarPromocoesDoItem, normalizarPromo, agrupar, configDaRef, registrarLog, SUBMETE_PERMITIDO, promocoesDaConta,
+  carregarPromocoesDoItem, normalizarPromo, agrupar, configDaRef, registrarLog, SUBMETE_PERMITIDO, promocoesDaConta, faixaEfetiva, CONTAS,
 } from './_ml-sale-lib.js';
 
 export const config = { maxDuration: 60 };
@@ -26,12 +26,39 @@ function cors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-User');
 }
 
-async function vendas7dPorSku(conta) {
+// Vendas dos ultimos 7 dias POR ANUNCIO (item_id gravado em ml_pedido_taxas.itens desde 20/09;
+// pedidos antigos sem item_id sao completados pelo backfill ?backfill_itens=1)
+async function vendas7dPorItem(conta) {
   const desde = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
   const { data } = await supabase.from('ml_pedido_taxas').select('itens').eq('conta', String(conta).toLowerCase()).gte('data_pedido', desde).limit(5000);
   const m = {};
-  for (const r of data || []) for (const it of (Array.isArray(r.itens) ? r.itens : [])) { const s = String(it?.sku || ''); if (s) m[s] = (m[s] || 0) + (Number(it?.qtd) || 1); }
+  for (const r of data || []) for (const it of (Array.isArray(r.itens) ? r.itens : [])) { const id = String(it?.item_id || ''); if (id) m[id] = (m[id] || 0) + (Number(it?.qtd) || 1); }
   return m;
+}
+
+// Completa item_id nos pedidos dos ultimos 7 dias lendo /orders/search do ML (uma vez)
+async function backfillItens(conta) {
+  const c = String(conta).toLowerCase(); const t0 = Date.now();
+  const token = await tokenDe(c); const sid = await sellerIdDe(c);
+  const desde = new Date(Date.now() - 8 * 86400000).toISOString();
+  let offset = 0, lidos = 0, atualizados = 0;
+  const { data: rows } = await supabase.from('ml_pedido_taxas').select('id, ml_order_id, pedido_id, itens').eq('conta', c).gte('data_pedido', desde.slice(0, 10)).limit(5000);
+  const porOrder = {};
+  for (const r of rows || []) { if (r.ml_order_id) porOrder[String(r.ml_order_id)] = r; }
+  while (Date.now() - t0 < 45000) {
+    const r = await mlGet(token, `/orders/search?seller=${sid}&order.date_created.from=${encodeURIComponent(desde)}&limit=51&offset=${offset}&sort=date_desc`);
+    if (!r.ok) break;
+    const ords = r.body?.results || []; lidos += ords.length;
+    for (const o of ords) {
+      const row = porOrder[String(o.id)]; if (!row || !Array.isArray(row.itens)) continue;
+      if (row.itens.every(it => it.item_id)) continue;
+      const ids = (o.order_items || []).map(it => ({ item_id: it.item?.id, sku: it.item?.seller_sku || it.item?.seller_custom_field }));
+      const novos = row.itens.map(it => { if (it.item_id) return it; const m = ids.find(x => x.sku && x.sku === it.sku) || (ids.length === 1 ? ids[0] : null); return m ? { ...it, item_id: m.item_id } : it; });
+      await supabase.from('ml_pedido_taxas').update({ itens: novos }).eq('id', row.id); atualizados++;
+    }
+    offset += 51; if (!ords.length || offset >= (r.body?.paging?.total || 0)) break;
+  }
+  return { ok: true, lidos, atualizados };
 }
 
 async function respostaDaRef(conta, ref, { atualizar = false } = {}) {
@@ -58,22 +85,26 @@ async function respostaDaRef(conta, ref, { atualizar = false } = {}) {
     const mapa = await promocoesDaConta(c, await tokenDe(c));
     for (const g of grupos) for (const p of g.promocoes) { const m = p.promo_id && mapa[p.promo_id]; if (m) { p.nome = p.nome || m.nome; p.deadline_date = p.deadline_date || m.deadline_date; p.start_date = p.start_date || m.start_date; p.finish_date = p.finish_date || m.finish_date; } }
   } catch {}
-  const vendas = await vendas7dPorSku(c);
+  const vendas = await vendas7dPorItem(c);
   for (const g of grupos) {
-    const skus = new Set(g.filhos.flatMap(f => [f.sku, ...(f.skus || [])]).filter(Boolean));
-    g.vendas_7d = [...skus].reduce((s, k) => s + (vendas[k] || 0), 0);
-    for (const f of g.filhos) { const ks = new Set([f.sku, ...(f.skus || [])].filter(Boolean)); f.vendas_7d = [...ks].reduce((s, k) => s + (vendas[k] || 0), 0); delete f.promocoes; }
+    g.vendas_7d = g.filhos.reduce((s, f) => s + (vendas[f.item_id] || 0), 0);
+    for (const f of g.filhos) { f.vendas_7d = vendas[f.item_id] || 0; delete f.promocoes; }
   }
-  return { ok: true, conta: c, ref: r, config: cfg, grupos, submete: SUBMETE_PERMITIDO.includes(c), lido_em: new Date().toISOString() };
+  return { ok: true, conta: c, ref: r, config: cfg, faixa: faixaEfetiva(cfg), grupos, submete: SUBMETE_PERMITIDO.includes(c), lido_em: new Date().toISOString() };
 }
 
 async function badges(conta) {
   const c = String(conta).toLowerCase();
-  const { data: cfgs } = await supabase.from('ml_sale_config').select('*');
-  if (!cfgs?.length) return {};
-  const refs = cfgs.map(x => x.ref);
-  const { data: anuncios } = await supabase.from('ml_sale_anuncios').select('item_id, ref, family_id, family_name, title, status, price, capa, thumbnail, available_quantity, logistic_type, sku, skus').eq('conta', c).in('ref', refs).limit(5000);
+  if (c === 'todas') {
+    const out = {};
+    for (const k of Object.keys(CONTAS)) { const b = await badges(k); for (const [ref, v] of Object.entries(b)) { out[ref] = out[ref] || { campanha: false, relampago: false, contas: [] }; out[ref].campanha ||= v.campanha; out[ref].relampago ||= v.relampago; out[ref].contas.push(k); } }
+    return out;
+  }
+  const { data: cfgsDb } = await supabase.from('ml_sale_config').select('*');
+  const cfgPorRef = Object.fromEntries((cfgsDb || []).map(x => [x.ref, x]));
+  const { data: anuncios } = await supabase.from('ml_sale_anuncios').select('item_id, ref, family_id, family_name, title, status, price, capa, thumbnail, available_quantity, logistic_type, sku, skus').eq('conta', c).not('ref', 'is', null).limit(5000);
   if (!anuncios?.length) return {};
+  const cfgs = [...new Set(anuncios.map(a => a.ref))].map(ref => cfgPorRef[ref] || { ref });   // sem config = faixa padrao
   const ids = anuncios.map(a => a.item_id);
   const promos = [];
   for (let i = 0; i < ids.length; i += 300) {
@@ -169,7 +200,8 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const q = req.query || {};
       const conta = String(q.conta || 'exitus').toLowerCase();
-      if (!brandDe(conta)) return res.status(400).json({ ok: false, erro: 'conta inválida' });
+      if (!brandDe(conta) && !(q.badges && conta === 'todas')) return res.status(400).json({ ok: false, erro: 'conta inválida' });
+      if (q.backfill_itens) return res.status(200).json(await backfillItens(conta));
       if (q.sync === 'promocoes') return res.status(200).json(await syncPromocoes(conta));
       if (q.sync === 'anuncios') return res.status(200).json(await syncAnuncios(conta));
       if (q.badges) return res.status(200).json({ ok: true, conta, badges: await badges(conta) });

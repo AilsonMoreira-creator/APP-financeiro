@@ -60,6 +60,7 @@ async function pedidoDoML(numeroLoja, token) {
   p.payments = ordens.flatMap(o => o.payments || []);
 
   const itens = (p.order_items || []).map(it => ({
+    item_id: it.item?.id || null,   // 20/09 (Sale): vendas 7 dias POR ANUNCIO
     sku: it.item?.seller_sku || it.item?.seller_custom_field || null,
     titulo: it.item?.title || null,
     qtd: n(it.quantity),

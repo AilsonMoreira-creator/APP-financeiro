@@ -215,6 +215,22 @@
       "schedule": "20 5,17 * * *"
     },
     {
+      "path": "/api/ml-sale?sync=promocoes&conta=lumia",
+      "schedule": "10,40 * * * *"
+    },
+    {
+      "path": "/api/ml-sale?sync=anuncios&conta=lumia",
+      "schedule": "30 5,17 * * *"
+    },
+    {
+      "path": "/api/ml-sale?sync=promocoes&conta=muniam",
+      "schedule": "20,50 * * * *"
+    },
+    {
+      "path": "/api/ml-sale?sync=anuncios&conta=muniam",
+      "schedule": "40 5,17 * * *"
+    },
+    {
       "path": "/api/ml-estoque-cron",
       "schedule": "0 11,13,15,17,19,21,23,1 * * *"
     },

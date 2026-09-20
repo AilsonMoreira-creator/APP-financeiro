@@ -29,7 +29,10 @@ async function api(path, opts) {
   return r.json();
 }
 
-export default function MLSale({ refProduto: refProd, desc, conta = 'exitus', onClose, onMudou }) {
+const CONTAS = [['exitus', 'Exitus'], ['lumia', 'Lumia'], ['muniam', 'Muniam']];
+
+export default function MLSale({ refProduto: refProd, desc, conta: contaInicial = 'exitus', onClose, onMudou }) {
+  const [conta, setConta] = useState(contaInicial);
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
@@ -102,6 +105,9 @@ export default function MLSale({ refProduto: refProd, desc, conta = 'exitus', on
               <div style={{ fontSize: 11, color: C.azul, fontWeight: 700, letterSpacing: .4 }}>REF {refProd} · {conta.toUpperCase()}</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: C.navy, marginTop: 2 }}>Sale · promoções do Mercado Livre</div>
               <div style={{ fontSize: 11.5, color: C.suave, marginTop: 3 }}>{desc}</div>
+              <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                {CONTAS.map(([k, n]) => <button key={k} onClick={() => { setConta(k); setAberto({}); }} style={{ ...btn(conta === k), padding: '4px 10px' }}>{n}</button>)}
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={() => carregar(true)} disabled={carregando} title="Reler anúncios e promoções no Mercado Livre" style={btn()}>↻ atualizar</button>
@@ -112,12 +118,14 @@ export default function MLSale({ refProduto: refProd, desc, conta = 'exitus', on
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11.5, color: C.suave }}>Acender quando o <b>meu %</b> for até:</span>
             <label style={{ fontSize: 11.5, color: C.navy, display: 'flex', alignItems: 'center', gap: 5 }}>Campanhas
-              <input value={cfg.campanha_pct} onChange={e => setCfg(c => ({ ...c, campanha_pct: e.target.value.replace(',', '.') }))} inputMode="decimal" placeholder="—" style={inp()} />%
+              <input value={cfg.campanha_pct} onChange={e => setCfg(c => ({ ...c, campanha_pct: e.target.value.replace(',', '.') }))} inputMode="decimal" placeholder={String(dados?.faixa?.padrao ? 6 : (dados?.faixa?.campanha_pct ?? 6))} style={inp()} />%
             </label>
             <label style={{ fontSize: 11.5, color: C.navy, display: 'flex', alignItems: 'center', gap: 5 }}>⚡ Relâmpago
-              <input value={cfg.relampago_pct} onChange={e => setCfg(c => ({ ...c, relampago_pct: e.target.value.replace(',', '.') }))} inputMode="decimal" placeholder="—" style={inp()} />%
+              <input value={cfg.relampago_pct} onChange={e => setCfg(c => ({ ...c, relampago_pct: e.target.value.replace(',', '.') }))} inputMode="decimal" placeholder={String(dados?.faixa?.padrao ? 10 : (dados?.faixa?.relampago_pct ?? 10))} style={inp()} />%
             </label>
             <button onClick={salvarCfg} disabled={salvandoCfg} style={btn(true)}>{salvandoCfg ? 'salvando…' : 'salvar faixa'}</button>
+            {dados?.faixa?.padrao && <span style={{ fontSize: 10.5, color: C.cinza }}>padrão 6% / 10% (vazio = padrão)</span>}
+            {!dados?.submete && dados && <span style={{ fontSize: 10.5, color: C.alerta }}>só consulta nesta conta (submeter: Exitus)</span>}
             {temVerde && <span style={{ fontSize: 11, color: C.ok, background: C.okBg, padding: '3px 8px', borderRadius: 999, fontWeight: 700 }}>● tem promoção dentro da faixa</span>}
           </div>
           {aviso && <div style={{ marginTop: 8, fontSize: 12, color: C.navy, background: C.alertaBg, border: `1px solid #efd9a0`, borderRadius: 8, padding: '6px 10px', display: 'flex', justifyContent: 'space-between' }}><span>{aviso}</span><button onClick={() => setAviso('')} style={{ ...btn(), padding: '0 6px' }}>✕</button></div>}
@@ -148,6 +156,7 @@ export default function MLSale({ refProduto: refProd, desc, conta = 'exitus', on
                       <span style={chip()}>{R$(g.preco)}</span>
                       <span style={chip(g.full ? C.okBg : C.cinzaBg, g.full ? C.ok : C.navy)}>{g.full ? '▣ Full' : '⌂ Depósito'} · {g.estoque} un.</span>
                       <span style={chip()}>7 dias: <b>{g.vendas_7d}</b> venda{g.vendas_7d === 1 ? '' : 's'}</span>
+                      <span style={chip(g.n_ativas ? '#eef3f8' : C.cinzaBg, g.n_ativas ? C.azul : C.suave)}>{g.n_ativas} ativa{g.n_ativas === 1 ? '' : 's'}</span>
                       {g.verde_campanha && <span style={chip(C.okBg, C.ok)}>● campanha na faixa</span>}
                       {g.verde_relampago && <span style={chip(C.okBg, C.ok)}>⚡ relâmpago na faixa</span>}
                     </div>
@@ -179,7 +188,7 @@ export default function MLSale({ refProduto: refProd, desc, conta = 'exitus', on
                                     <div style={{ fontWeight: 700, color: C.navy }}>{p.nome || TIPO[p.tipo] || p.tipo}</div>
                                     <div style={{ fontSize: 10.5, color: C.suave }}>{TIPO[p.tipo] || p.tipo}{p.ativa ? <span style={{ color: C.ok, fontWeight: 700 }}> · ATIVA</span> : ''}{p.visto && !p.ativa ? <span style={{ color: C.cinza }}> · visto</span> : ''}</div>
                                   </td>
-                                  <td style={td()}>{periodo(p)}{p.deadline_date && !p.ativa ? <div style={{ fontSize: 10.5, color: C.alerta }}>aceite até {dia(p.deadline_date)}</div> : null}</td>
+                                  <td style={td()}>{p.relampago && p.start_date && !p.ativa ? <div>publica <b>{dia(p.start_date)} {hora(p.start_date)}</b>{p.finish_date ? <span style={{ color: C.suave }}> até {hora(p.finish_date)}</span> : null}</div> : periodo(p)}{p.relampago && !p.start_date ? <div style={{ fontSize: 10.5, color: C.suave }}>data: o ML define ao aceitar</div> : null}{p.deadline_date && !p.ativa ? <div style={{ fontSize: 10.5, color: C.alerta }}>aceite até {dia(p.deadline_date)}</div> : null}</td>
                                   <td style={td()}>{pct(total)}</td>
                                   <td style={td()}>{R$(p.price)}</td>
                                   <td style={td()}>{p.meli_pct ? pct(p.meli_pct) : '—'}</td>
