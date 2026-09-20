@@ -220,7 +220,10 @@ export function agrupar(anuncios, promocoes, config) {
       const original = media(a.filhos.map(f => f.original_price));
       const vistoTodos = a.filhos.every(f => !!f.visto_em);
       const faixa = a.relampago ? config?.relampago_pct : config?.campanha_pct;
-      const dentro = faixa != null && seller != null && seller <= Number(faixa);
+      // PRICE_DISCOUNT ("desconto por preco", sem campanha) esta sempre disponivel e
+      // acenderia tudo -> aparece na lista mas nunca pinta de verde
+      const elegivel = a.tipo !== 'PRICE_DISCOUNT';
+      const dentro = elegivel && faixa != null && seller != null && seller <= Number(faixa);
       return { ...a, ativa, candidata, seller_pct: seller, meli_pct: meli, price: preco, original_price: original, visto: vistoTodos, dentro_faixa: dentro,
         verde: dentro && candidata && !ativa && !vistoTodos, n_filhos: a.filhos.length };
     }).sort((x, y) => (Number(y.ativa) - Number(x.ativa)) || ((x.seller_pct ?? 999) - (y.seller_pct ?? 999)));
@@ -230,6 +233,21 @@ export function agrupar(anuncios, promocoes, config) {
   }
   out.sort((a, b) => (Number(b.status === 'active') - Number(a.status === 'active')) || String(a.titulo).localeCompare(String(b.titulo)));
   return out;
+}
+
+// Lista de promoções da conta (nome, prazo de aceite) — pra completar o que o
+// endpoint por item não traz (deadline_date). Cache de 10 min no processo.
+const _promosConta = {};
+export async function promocoesDaConta(conta, token) {
+  const c = String(conta).toLowerCase();
+  const hit = _promosConta[c];
+  if (hit && Date.now() - hit.em < 600000) return hit.mapa;
+  const sid = await sellerIdDe(c);
+  const r = await mlGet(token, `/seller-promotions/users/${sid}?app_version=v2`);
+  const mapa = {};
+  for (const p of r.body?.results || []) if (p.id) mapa[p.id] = { nome: p.name || null, deadline_date: p.deadline_date || null, start_date: p.start_date || null, finish_date: p.finish_date || null, status: p.status || null };
+  _promosConta[c] = { em: Date.now(), mapa };
+  return mapa;
 }
 
 export async function configDaRef(ref) {

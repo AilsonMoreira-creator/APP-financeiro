@@ -15,7 +15,7 @@
 import { supabase } from './_ml-helpers.js';
 import {
   brandDe, sellerIdDe, tokenDe, mlGet, mlPost, normRef, anunciosDaRef, carregarAnuncios,
-  carregarPromocoesDoItem, normalizarPromo, agrupar, configDaRef, registrarLog, SUBMETE_PERMITIDO, TIPOS_RELAMPAGO,
+  carregarPromocoesDoItem, normalizarPromo, agrupar, configDaRef, registrarLog, SUBMETE_PERMITIDO, promocoesDaConta,
 } from './_ml-sale-lib.js';
 
 export const config = { maxDuration: 60 };
@@ -53,6 +53,11 @@ async function respostaDaRef(conta, ref, { atualizar = false } = {}) {
   const { data: promos } = ids.length ? await supabase.from('ml_sale_promocoes').select('*').eq('conta', c).in('item_id', ids) : { data: [] };
   const cfg = await configDaRef(r);
   const grupos = agrupar(anuncios, promos || [], cfg);
+  // completa nome e prazo de aceite pela lista da conta
+  try {
+    const mapa = await promocoesDaConta(c, await tokenDe(c));
+    for (const g of grupos) for (const p of g.promocoes) { const m = p.promo_id && mapa[p.promo_id]; if (m) { p.nome = p.nome || m.nome; p.deadline_date = p.deadline_date || m.deadline_date; p.start_date = p.start_date || m.start_date; p.finish_date = p.finish_date || m.finish_date; } }
+  } catch {}
   const vendas = await vendas7dPorSku(c);
   for (const g of grupos) {
     const skus = new Set(g.filhos.flatMap(f => [f.sku, ...(f.skus || [])]).filter(Boolean));

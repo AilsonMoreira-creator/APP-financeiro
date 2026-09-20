@@ -20,6 +20,7 @@ import { gravarCardsCalc, restaurarCardsCalc } from './espelhoCadastros.js';   /
 export const OFICINA_A_DEFINIR="A definir";
 import EstoqueTecido from './EstoqueTecido';
 import MapeamentoSkus from './MapeamentoSkus';
+import MLSale from './MLSale'; // 19/09: botao Sale (promocoes ML por REF)
 import RaioXProduto from './RaioXProduto';
 import FullEnvio from './FullEnvio';
 import { useCaseado, CaseadoBtnIcone, TelaCaseado, CaseadoTabIcon } from './caseado.jsx';
@@ -5360,6 +5361,11 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [etqSample,setEtqSample]=useState(null);
   const [gtinOpen,setGtinOpen]=useState(null);   // {ref,refNorm,desc} | null
   const [mapOpen,setMapOpen]=useState<any>(null); // Verificar mapeamento SKU x canal (13/08)
+  // 19/09: Sale — promocoes do ML por REF. saleBadges: {ref:{campanha,relampago}} pinta o botao de verde
+  const [saleOpen,setSaleOpen]=useState<any>(null);
+  const [saleBadges,setSaleBadges]=useState<any>({});
+  const carregarSaleBadges=()=>{fetch('/api/ml-sale?badges=1&conta=exitus').then(r=>r.json()).then(j=>{if(j?.ok)setSaleBadges(j.badges||{});}).catch(()=>{});};
+  useEffect(()=>{carregarSaleBadges();const t=setInterval(carregarSaleBadges,10*60*1000);return()=>clearInterval(t);},[]);
   const [raioxOpen,setRaioxOpen]=useState<any>(null); // Raio-X do produto (15/08)
   const [fullOpen,setFullOpen]=useState<any>(null);   // Envio pro Full (17/08)
   const [gtinBusy,setGtinBusy]=useState(false);
@@ -6265,6 +6271,10 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <button onClick={()=>setMapOpen({ref:modalRef,refNorm,desc,cores:[...new Set((vars||[]).map(v=>v.cor).filter(Boolean))]})} title={`Conferir se os SKUs da REF ${modalRef} estão vinculados nos canais das 3 empresas`} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>⇄</span> mapeamento
               </button>
+              {(()=>{const b=saleBadges[String(refNorm)]||saleBadges[String(modalRef)]||saleBadges[String(modalRef).replace(/^0+(?=\d)/,'')];const verde=!!(b&&(b.campanha||b.relampago));return(
+              <button onClick={()=>setSaleOpen({ref:modalRef,desc})} title={verde?`Tem promoção do Mercado Livre dentro da faixa da REF ${modalRef}`:`Promoções do Mercado Livre pra REF ${modalRef}`} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:verde?"#e9f5ee":"#fff",color:verde?"#1f7a48":"#2c3e50",border:`1px solid ${verde?"#7fc79b":"#c8d8e4"}`,borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,boxShadow:verde?"0 0 0 2px rgba(31,122,72,.15)":"none"}}>
+                <span style={{fontSize:12,lineHeight:1,color:verde?"#1f7a48":"#4a7fa5"}}>{verde?"●":"%"}</span> sale
+              </button>);})()}
               <button onClick={()=>abrirLocalizacao(modalRef,refNorm,desc)} title={`Definir a localização de estoque da REF ${modalRef} nas 3 contas Bling`} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>◎</span> localização
               </button>
@@ -6375,6 +6385,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       })()}
       {raioxOpen && <RaioXProduto refProduto={raioxOpen.ref} desc={raioxOpen.desc} foto={raioxOpen.foto} onClose={()=>setRaioxOpen(null)}/>}
       {mapOpen && <MapeamentoSkus refProduto={mapOpen.ref} desc={mapOpen.desc} cores={mapOpen.cores} onClose={()=>setMapOpen(null)}/>}
+      {saleOpen && <MLSale refProduto={saleOpen.ref} desc={saleOpen.desc} conta="exitus" onClose={()=>setSaleOpen(null)} onMudou={carregarSaleBadges}/>}
       {gtinOpen && (
         <div onClick={()=>{ if(!gtinBusy)setGtinOpen(null); }} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px",zIndex:205,backdropFilter:"blur(3px)"}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:440,boxShadow:"0 20px 50px rgba(0,0,0,0.25)",overflow:"hidden",fontFamily:"Georgia,serif"}}>
