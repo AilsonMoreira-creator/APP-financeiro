@@ -187,8 +187,16 @@ async function syncAnuncios(conta, orcamentoMs = 45000) {
     lidos += ids.length;
     const g = await carregarAnuncios(c, token, ids); gravados += g.length;
   }
+  // garantia: os anuncios do Full (full_estoque_cache) entram sempre, mesmo que a
+  // varredura do ML os pule (aconteceu com o MLB5283859330 da 2601 em 20/09)
+  let fullExtra = 0;
+  try {
+    const { data: fc } = await supabase.from('full_estoque_cache').select('anuncio').ilike('conta', c);
+    const ids = [...new Set((fc || []).map(x => x.anuncio).filter(Boolean))];
+    if (ids.length && Date.now() - t0 < orcamentoMs + 8000) { const g = await carregarAnuncios(c, token, ids); fullExtra = g.length; }
+  } catch {}
   await supabase.from('ml_sale_sync_estado').upsert({ conta: c, proxima_promo: est?.proxima_promo || 0, ultima_lista: { ...(est?.ultima_lista || {}), scroll_id: scroll, anuncios_lidos: lidos, anuncios_em: new Date().toISOString() }, atualizado_em: new Date().toISOString() }, { onConflict: 'conta' });
-  return { ok: true, lidos, gravados, continua: !!scroll };
+  return { ok: true, lidos, gravados, full_garantidos: fullExtra, continua: !!scroll };
 }
 
 // ── entrar numa promoção ─────────────────────────────────────────────────────
