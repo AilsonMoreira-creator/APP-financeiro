@@ -154,7 +154,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6, fontSize: 11.5 }}>
                       <span style={chip()}>{R$(g.preco)}</span>
-                      <span style={chip(g.full ? C.okBg : C.cinzaBg, g.full ? C.ok : C.navy)}>{g.full ? '▣ Full' : '⌂ Depósito'} · {g.estoque} un.</span>
+                      <span style={chip(g.full ? C.okBg : C.cinzaBg, g.full ? C.ok : C.navy)}>{g.full ? `▣ Full · ${g.full_qtd || g.estoque} un.` : `⌂ Depósito · ${g.estoque} un.`}</span>
                       <span style={chip()}>7 dias: <b>{g.vendas_7d}</b> venda{g.vendas_7d === 1 ? '' : 's'}</span>
                       <span style={chip(g.n_ativas ? '#eef3f8' : C.cinzaBg, g.n_ativas ? C.azul : C.suave)}>{g.n_ativas} ativa{g.n_ativas === 1 ? '' : 's'}</span>
                       {g.verde_campanha && <span style={chip(C.okBg, C.ok)}>● campanha na faixa</span>}

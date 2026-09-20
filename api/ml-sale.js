@@ -86,9 +86,19 @@ async function respostaDaRef(conta, ref, { atualizar = false } = {}) {
     for (const g of grupos) for (const p of g.promocoes) { const m = p.promo_id && mapa[p.promo_id]; if (m) { p.nome = p.nome || m.nome; p.deadline_date = p.deadline_date || m.deadline_date; p.start_date = p.start_date || m.start_date; p.finish_date = p.finish_date || m.finish_date; } }
   } catch {}
   const vendas = await vendas7dPorItem(c);
+  // Full: o shipping.logistic_type do anuncio nem sempre diz "fulfillment" (o MLB4919060970
+  // da 2601 tem 2.361 pecas no Full e vem "cross_docking"). A fonte certa e o inventario
+  // do Full que o modulo Full ja mantem (ml_estoque_ref_atual.mlbs_encontrados).
+  const fullPorItem = {};
+  try {
+    const { data: fa } = await supabase.from('ml_estoque_ref_atual').select('mlbs_encontrados').in('ref', [r, r.padStart(4, '0'), r.padStart(5, '0')]);
+    for (const row of fa || []) for (const m of (Array.isArray(row.mlbs_encontrados) ? row.mlbs_encontrados : [])) if (m?.item_id) fullPorItem[m.item_id] = Number(m.total) || 0;
+  } catch {}
   for (const g of grupos) {
     g.vendas_7d = g.filhos.reduce((s, f) => s + (vendas[f.item_id] || 0), 0);
-    for (const f of g.filhos) { f.vendas_7d = vendas[f.item_id] || 0; delete f.promocoes; }
+    for (const f of g.filhos) { f.vendas_7d = vendas[f.item_id] || 0; if (fullPorItem[f.item_id] != null) { f.full_qtd = fullPorItem[f.item_id]; f.logistic_type = 'fulfillment'; } delete f.promocoes; }
+    g.full_qtd = g.filhos.reduce((s, f) => s + (f.full_qtd || 0), 0);
+    g.full = g.full || g.filhos.some(f => f.logistic_type === 'fulfillment');
   }
   return { ok: true, conta: c, ref: r, config: cfg, faixa: faixaEfetiva(cfg), grupos, submete: SUBMETE_PERMITIDO.includes(c), lido_em: new Date().toISOString() };
 }

@@ -6385,7 +6385,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       })()}
       {raioxOpen && <RaioXProduto refProduto={raioxOpen.ref} desc={raioxOpen.desc} foto={raioxOpen.foto} onClose={()=>setRaioxOpen(null)}/>}
       {mapOpen && <MapeamentoSkus refProduto={mapOpen.ref} desc={mapOpen.desc} cores={mapOpen.cores} onClose={()=>setMapOpen(null)}/>}
-      {saleOpen && <MLSale refProduto={saleOpen.ref} desc={saleOpen.desc} onClose={()=>setSaleOpen(null)} onMudou={carregarSaleBadges}/>}
+      {saleOpen && <MLSale refProduto={saleOpen.ref} desc={saleOpen.desc} onClose={()=>{setSaleOpen(null);carregarSaleBadges();/* 20/09: abrir a tela carrega promocoes novas -> o verde do card atualiza ao fechar */}} onMudou={carregarSaleBadges}/>}
       {gtinOpen && (
         <div onClick={()=>{ if(!gtinBusy)setGtinOpen(null); }} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px",zIndex:205,backdropFilter:"blur(3px)"}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:440,boxShadow:"0 20px 50px rgba(0,0,0,0.25)",overflow:"hidden",fontFamily:"Georgia,serif"}}>
