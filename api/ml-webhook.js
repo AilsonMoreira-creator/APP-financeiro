@@ -821,10 +821,11 @@ export default async function handler(req, res) {
     //           /seller-promotions/offers/OFFER-MLB123-456
     // O id carrega o MLB no meio -> reler as promocoes so daquele anuncio.
     if ((String(topic || '').includes('candidate') || String(topic || '').includes('offer') || String(resource || '').includes('/seller-promotions/')) && resource) {
+      const logar = async (conta, itemId, resultado) => { try { await supabase.from('ml_sale_webhook_log').insert({ topic, resource: String(resource).slice(0, 200), user_id: String(user_id || ''), conta, item_id: itemId, resultado }); } catch {} };
       try {
         const m = String(resource).match(/(?:CANDIDATE|OFFER)-(MLB\d+)-/i);
         const itemId = m ? m[1].toUpperCase() : null;
-        if (!itemId) return res.status(200).json({ ok: true, topic, ignorado: 'sem MLB no resource' });
+        if (!itemId) { await logar(null, null, 'sem MLB no resource'); return res.status(200).json({ ok: true, topic, ignorado: 'sem MLB no resource' }); }
         const { data: tokenRec } = await supabase.from('ml_tokens').select('brand').eq('seller_id', String(user_id)).maybeSingle();
         const conta = String(tokenRec?.brand || '').toLowerCase();
         if (!conta) return res.status(200).json({ ok: true, topic, ignorado: 'conta nao encontrada' });
@@ -835,8 +836,10 @@ export default async function handler(req, res) {
         let preco = cache?.price;
         if (!cache) { const g = await lib.carregarAnuncios(conta, token, [itemId]); preco = g[0]?.price; }
         const r = await lib.carregarPromocoesDoItem(conta, token, itemId, preco);
+        await logar(conta, itemId, `ok: ${r.n} promocoes relidas`);
         return res.status(200).json({ ok: true, topic, item: itemId, conta, promocoes: r.n });
       } catch (e) {
+        await logar(null, null, 'erro: ' + String(e?.message || e).slice(0, 150));
         return res.status(200).json({ ok: false, topic, erro: String(e?.message || e) });
       }
     }
