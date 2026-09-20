@@ -125,7 +125,7 @@ async function badges(conta) {
 }
 
 // ── cron: promoções em lote (uma promoção por chamada, rodízio) ──────────────
-async function syncPromocoes(conta) {
+async function syncPromocoes(conta, orcamentoMs = 45000) {
   const c = String(conta).toLowerCase(); const t0 = Date.now();
   const token = await tokenDe(c); const sid = await sellerIdDe(c);
   const lista = await mlGet(token, `/seller-promotions/users/${sid}?app_version=v2`);
@@ -137,7 +137,7 @@ async function syncPromocoes(conta) {
   let offset = 0, total = 0, gravadas = 0, paginas = 0;
   const { data: cacheIds } = await supabase.from('ml_sale_anuncios').select('item_id, price').eq('conta', c).limit(20000);
   const conhecidos = Object.fromEntries((cacheIds || []).map(x => [x.item_id, x.price]));
-  while (Date.now() - t0 < 45000) {
+  while (Date.now() - t0 < orcamentoMs) {
     const r = await mlGet(token, `/seller-promotions/promotions/${p.id}/items?promotion_type=${p.type}&app_version=v2&limit=50&offset=${offset}`);
     if (!r.ok) break;
     const itens = r.body?.results || []; total = r.body?.paging?.total || total; paginas++;
@@ -163,13 +163,13 @@ async function syncPromocoes(conta) {
 }
 
 // ── cron: varredura dos anúncios ativos (scan) ───────────────────────────────
-async function syncAnuncios(conta) {
+async function syncAnuncios(conta, orcamentoMs = 45000) {
   const c = String(conta).toLowerCase(); const t0 = Date.now();
   const token = await tokenDe(c); const sid = await sellerIdDe(c);
   const { data: est } = await supabase.from('ml_sale_sync_estado').select('*').eq('conta', c).maybeSingle();
   let scroll = est?.ultima_lista?.scroll_id || null;
   let lidos = 0, gravados = 0;
-  while (Date.now() - t0 < 45000) {
+  while (Date.now() - t0 < orcamentoMs) {
     const q = scroll ? `&scroll_id=${encodeURIComponent(scroll)}` : '';
     const r = await mlGet(token, `/users/${sid}/items/search?status=active&search_type=scan&limit=100${q}`);
     if (!r.ok) break;
@@ -200,10 +200,11 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const q = req.query || {};
       const conta = String(q.conta || 'exitus').toLowerCase();
-      if (!brandDe(conta) && !(q.badges && conta === 'todas')) return res.status(400).json({ ok: false, erro: 'conta inválida' });
+      if (!brandDe(conta) && !((q.badges || q.sync) && conta === 'todas')) return res.status(400).json({ ok: false, erro: 'conta inválida' });
       if (q.backfill_itens) return res.status(200).json(await backfillItens(conta));
-      if (q.sync === 'promocoes') return res.status(200).json(await syncPromocoes(conta));
-      if (q.sync === 'anuncios') return res.status(200).json(await syncAnuncios(conta));
+      // 'todas' = as 3 contas numa chamada so (limite de crons do Vercel): ~15s cada
+      if (q.sync === 'promocoes') { if (conta === 'todas') { const out = {}; for (const k of Object.keys(CONTAS)) { try { out[k] = await syncPromocoes(k, 15000); } catch (e) { out[k] = { ok: false, erro: String(e?.message || e) }; } } return res.status(200).json({ ok: true, contas: out }); } return res.status(200).json(await syncPromocoes(conta)); }
+      if (q.sync === 'anuncios') { if (conta === 'todas') { const out = {}; for (const k of Object.keys(CONTAS)) { try { out[k] = await syncAnuncios(k, 15000); } catch (e) { out[k] = { ok: false, erro: String(e?.message || e) }; } } return res.status(200).json({ ok: true, contas: out }); } return res.status(200).json(await syncAnuncios(conta)); }
       if (q.badges) return res.status(200).json({ ok: true, conta, badges: await badges(conta) });
       if (q.log) {
         const { data } = await supabase.from('ml_sale_log').select('*').eq('ref', normRef(q.ref)).order('criado_em', { ascending: false }).limit(200);
