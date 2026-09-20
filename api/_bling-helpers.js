@@ -216,6 +216,23 @@ export async function refreshBlingToken(conta) {
     throw new Error(`bling_tokens.${conta} token expirado e sem refresh_token`);
   }
 
+  // ── DISJUNTOR (19/09, pedido dele): nunca ficar em loop tentando renovar ──
+  // Cada falha aumenta a espera: 1 falha = 2 min, 2 = 5, 3 = 15, 4+ = 60 min.
+  // Dentro da janela, quem chamar recebe erro na hora, SEM bater no Bling.
+  // Um sucesso zera tudo. Reversao manual: zerar refresh_falhas na tabela.
+  const falhas = Number(tokenData.refresh_falhas) || 0;
+  if (falhas > 0 && tokenData.refresh_falhou_em) {
+    const esperaMin = falhas >= 4 ? 60 : falhas === 3 ? 15 : falhas === 2 ? 5 : 2;
+    const liberaEm = new Date(tokenData.refresh_falhou_em).getTime() + esperaMin * 60000;
+    if (Date.now() < liberaEm) {
+      const faltam = Math.ceil((liberaEm - Date.now()) / 60000);
+      throw new Error(`token ${conta} expirado e a renovacao falhou ${falhas}x (${String(tokenData.refresh_erro || '').slice(0, 80)}); nova tentativa em ${faltam} min`);
+    }
+  }
+  const registrarFalha = async (msg) => {
+    try { await supabase.from('bling_tokens').update({ refresh_falhas: falhas + 1, refresh_falhou_em: new Date().toISOString(), refresh_erro: String(msg).slice(0, 200) }).eq('conta', conta); } catch {}
+  };
+
   // 19/09 (fase de protecao): credenciais vivem em bling_credenciais (tabela
   // fechada). O payload bling-creds fica so como fallback ate ser apagado.
   let credsData = null, credsErr = null;
@@ -248,11 +265,13 @@ export async function refreshBlingToken(conta) {
 
   if (!resp.ok) {
     const errBody = await resp.text().catch(() => '');
+    await registrarFalha(`HTTP ${resp.status}: ${errBody.slice(0, 120)}`);
     throw new Error(`refresh HTTP ${resp.status} para ${conta}: ${errBody.slice(0, 200)}`);
   }
 
   const d = await resp.json();
   if (!d.access_token) {
+    await registrarFalha('sem access_token na resposta');
     throw new Error(`refresh ${conta} retornou sem access_token: ${JSON.stringify(d).slice(0, 200)}`);
   }
 
@@ -261,7 +280,8 @@ export async function refreshBlingToken(conta) {
     conta,
     access_token: d.access_token,
     refresh_token: d.refresh_token || tokenData.refresh_token,
-    expires_at: new Date(Date.now() + (d.expires_in || 21600) * 1000).toISOString()
+    expires_at: new Date(Date.now() + (d.expires_in || 21600) * 1000).toISOString(),
+    refresh_falhas: 0, refresh_falhou_em: null, refresh_erro: null,   // sucesso zera o disjuntor
   }, { onConflict: 'conta' });
 
   console.log(`[bling-cron] ✓ token ${conta} renovado`);

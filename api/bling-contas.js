@@ -40,7 +40,7 @@ export default async function handler(req, res) {
   try {
     // ── STATUS (o que a tela mostra) ──
     if (req.method === 'GET') {
-      const { data } = await supabase.from('bling_tokens').select('conta, expires_at, atualizado_em');
+      const { data } = await supabase.from('bling_tokens').select('conta, expires_at, atualizado_em, refresh_falhas, refresh_falhou_em, refresh_erro');
       const agora = Date.now();
       const contas = {};
       for (const c of CONTAS) {
@@ -54,6 +54,8 @@ export default async function handler(req, res) {
           atualizado_em: t?.atualizado_em || null,
           tem_credencial: !!(await credsDe(c)),
           client_id_mascarado: mascara((await credsDe(c))?.id),   // a tela mostra so isto; secret nunca sai
+          renovacao_falhas: t?.refresh_falhas || 0,               // disjuntor anti-loop (19/09)
+          renovacao_erro: t?.refresh_erro || null,
         };
       }
       return res.status(200).json({ ok: true, contas });
