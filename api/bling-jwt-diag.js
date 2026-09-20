@@ -19,6 +19,10 @@ export default async function handler(req, res) {
         const teste = async (extra) => { const x = await fetch('https://api.bling.com.br/Api/v3/situacoes/modulos', { headers: { Authorization: `Bearer ${token}`, ...extra } }); return { http: x.status, corpo: (await x.text()).slice(0, 120) }; };
         r.sem_header = await teste({});
         r.com_header = await teste({ 'enable-jwt': '1' });
+        // chamada REAL (o wrapper do fetch poe o header sozinho quando o token e JWT)
+        const real = await fetch('https://api.bling.com.br/Api/v3/pedidos/vendas?limite=1', { headers: { Authorization: `Bearer ${token}` } });
+        const rb = await real.text(); let rj = null; try { rj = JSON.parse(rb); } catch {}
+        r.chamada_real_pedidos = { http: real.status, pedidos: Array.isArray(rj?.data) ? rj.data.length : null, corpo: real.ok ? undefined : rb.slice(0, 120) };
       } catch (e) { r.erro = String(e?.message || e).slice(0, 160); }
       out.contas[conta] = r;
     }
