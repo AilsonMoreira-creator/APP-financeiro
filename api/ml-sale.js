@@ -86,13 +86,12 @@ async function respostaDaRef(conta, ref, { atualizar = false } = {}) {
     for (const g of grupos) for (const p of g.promocoes) { const m = p.promo_id && mapa[p.promo_id]; if (m) { p.nome = p.nome || m.nome; p.deadline_date = p.deadline_date || m.deadline_date; p.start_date = p.start_date || m.start_date; p.finish_date = p.finish_date || m.finish_date; } }
   } catch {}
   const vendas = await vendas7dPorItem(c);
-  // Full: o shipping.logistic_type do anuncio nem sempre diz "fulfillment" (o MLB4919060970
-  // da 2601 tem 2.361 pecas no Full e vem "cross_docking"). A fonte certa e o inventario
-  // do Full que o modulo Full ja mantem (ml_estoque_ref_atual.mlbs_encontrados).
+  // Full: a fonte certa e o cache do modulo Full (full_estoque_cache: conta, anuncio, qtd_armazem).
+  // (ml_estoque_ref_atual NAO e Full — e o espelho de estoque via Lumia usado pela calculadora.)
   const fullPorItem = {};
   try {
-    const { data: fa } = await supabase.from('ml_estoque_ref_atual').select('mlbs_encontrados').in('ref', [r, r.padStart(4, '0'), r.padStart(5, '0')]);
-    for (const row of fa || []) for (const m of (Array.isArray(row.mlbs_encontrados) ? row.mlbs_encontrados : [])) if (m?.item_id) fullPorItem[m.item_id] = Number(m.total) || 0;
+    const { data: fa } = await supabase.from('full_estoque_cache').select('anuncio, qtd_armazem').ilike('conta', c).in('anuncio', anuncios.map(a => a.item_id));
+    for (const row of fa || []) fullPorItem[row.anuncio] = (fullPorItem[row.anuncio] || 0) + (Number(row.qtd_armazem) || 0);
   } catch {}
   for (const g of grupos) {
     g.vendas_7d = g.filhos.reduce((s, f) => s + (vendas[f.item_id] || 0), 0);
