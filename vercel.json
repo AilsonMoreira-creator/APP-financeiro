@@ -471,20 +471,8 @@
       "path": "/api/wms-sync"
     },
     {
-      "path": "/api/wms-sync",
+      "path": "/api/wms-sync?encadear=1",
       "schedule": "0,10,20,30,40,50 7-10 * * *"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "2,12,22,32,42,52 7-10 * * 1-6"
-    },
-    {
-      "path": "/api/wms-classificar",
-      "schedule": "4,24,44 7-10 * * 1-6"
-    },
-    {
-      "path": "/api/wms-preparar-lote?limite=150",
-      "schedule": "6,16,26,36,46,56 8-10 * * 1-6"
     },
     {
       "schedule": "20 11,17,23 * * *",

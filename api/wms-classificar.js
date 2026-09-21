@@ -17,6 +17,7 @@
  * GET ?contas=todas
  */
 import { supabase } from './_bling-helpers.js';
+import { encadearProximo } from './_wms-esteira.js';   // 21/09: esteira encadeada da madrugada
 
 export const config = { maxDuration: 120 };
 
@@ -141,7 +142,8 @@ export default async function handler(req, res) {
         gravados += count || 0;
       }
     }
-    return res.status(200).json({ ok: true, avaliados: (peds || []).length, sem_mudanca: r_iguais, gravados, por_estado: contagem });
+    await encadearProximo(req, '/api/wms-classificar');
+  return res.status(200).json({ ok: true, avaliados: (peds || []).length, sem_mudanca: r_iguais, gravados, por_estado: contagem });
   } catch (e) {
     return res.status(500).json({ erro: e.message });
   }

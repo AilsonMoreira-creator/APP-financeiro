@@ -19,6 +19,7 @@
  * GET ?contas=lumia,muniam&limite=40[&dry=1][&sefaz=0]
  */
 import { supabase, blingFetch, refreshBlingToken } from './_bling-helpers.js';
+import { encadearProximo } from './_wms-esteira.js';   // 21/09: esteira encadeada da madrugada
 
 export const config = { maxDuration: 300 };
 
@@ -282,6 +283,7 @@ export default async function handler(req, res) {
     }));
     resumo.segundos = Math.round((Date.now() - inicio) / 1000);
     await soltarLockNfe();
+  await encadearProximo(req, '/api/wms-nfe-auto');
   return res.status(200).json(resumo);
   } catch (e) {
     resumo.erro_geral = e.message;

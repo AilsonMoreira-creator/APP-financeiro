@@ -14,6 +14,7 @@
 import { supabase, parseDescricao, parseCanal, blingFetch, refreshBlingToken } from './_bling-helpers.js';
 import { lerWmsConfig } from './wms-listas.js';
 import { classificarFlex } from './wms-ml-flex.js';
+import { encadearProximo } from './_wms-esteira.js';   // 21/09: esteira encadeada da madrugada
 
 // Normalização de situação (Ailson 05/08): minúsculo, sem acento, e matching
 // flexível — "em andamento" tem que casar com "andamento" (contains 2 lados).
@@ -365,5 +366,6 @@ export default async function handler(req, res) {
       .select('pedido_id');
     saneamento.cancelados = (c || []).length;
   } catch (e) { saneamento.erro = String(e?.message || e); }
+  await encadearProximo(req, '/api/wms-sync');
   return res.status(200).json({ ok: true, dias, resumo, flex, saneamento });
 }

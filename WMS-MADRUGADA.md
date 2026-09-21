@@ -4,12 +4,14 @@ Meta: todo pedido que chegou ate as **07:40** tem NF autorizada e etiqueta prepa
 ate as **08:00**, quando a equipe imprime o lote. Dimensionado pra segunda de dezembro
 com ~1.200 pedidos. Horarios abaixo em **Brasilia** (no vercel.json estao em UTC, +3h).
 
-| Passo | Endpoint | Cadencia | Janela |
-|---|---|---|---|
-| Varredura de pedidos novos | `/api/wms-sync` | a cada 10 min (:00, :10 …) | 04:00 → 07:50 |
-| Geracao de NF (3 contas em paralelo) | `/api/wms-nfe-auto?limite=120` | a cada 10 min (:02, :12 …) | 04:02 → 07:52, seg–sab |
-| Classificacao (regras de impressao) | `/api/wms-classificar` | :04, :24, :44 | 04:04 → 07:44 |
-| Preparo das etiquetas (DANFE + logistica em cache) | `/api/wms-preparar-lote?limite=150` | a cada 10 min (:06, :16 …) | 05:06 → 07:56, seg–sab |
+**Um so cron** dispara a varredura a cada 10 min (04:00 → 07:50) com `?encadear=1`, e cada
+passo chama o proximo **quando termina** (nunca ha dois passos batendo no Bling pela
+mesma conta ao mesmo tempo):
+
+`wms-sync` → `wms-nfe-auto?limite=120` → `wms-classificar` → `wms-preparar-lote?limite=150`
+
+Se um passo falhar, a rodada seguinte (10 min depois) recomeca do zero. As 3 contas rodam
+em paralelo dentro do nfe-auto (o limite do Bling e por conta). Codigo: `api/_wms-esteira.js`.
 
 Capacidade: o Bling permite ~3 req/s **por conta**. NF ≈ 5 chamadas/pedido -> uma rodada
 de 120 pedidos cabe em < 5 min; 6 rodadas/h = 720 pedidos/conta/h. Em 3h50 de janela a
