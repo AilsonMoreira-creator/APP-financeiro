@@ -471,6 +471,22 @@
       "path": "/api/wms-sync"
     },
     {
+      "path": "/api/wms-sync",
+      "schedule": "0,10,20,30,40,50 7-10 * * *"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "2,12,22,32,42,52 7-10 * * 1-6"
+    },
+    {
+      "path": "/api/wms-classificar",
+      "schedule": "4,24,44 7-10 * * 1-6"
+    },
+    {
+      "path": "/api/wms-preparar-lote?limite=150",
+      "schedule": "6,16,26,36,46,56 8-10 * * 1-6"
+    },
+    {
       "schedule": "20 11,17,23 * * *",
       "path": "/api/ml-taxas-sync"
     },
@@ -511,48 +527,12 @@
       "schedule": "5,35 9-23 * * *"
     },
     {
-      "path": "/api/wms-classificar",
-      "schedule": "0,20,40,50 10 * * 1-6"
-    },
-    {
-      "path": "/api/wms-preparar-lote?limite=150",
-      "schedule": "30,50 9 * * 1-5"
-    },
-    {
-      "path": "/api/wms-preparar-lote?limite=150",
-      "schedule": "5,25,40,50 10 * * 1-6"
-    },
-    {
       "path": "/api/full-chegada-cron",
       "schedule": "0 13 * * 1-6"
     },
     {
       "path": "/api/wms-sync",
-      "schedule": "*/10 9-10 * * *"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "5,15,25,35,45,55 8 * * 1-5"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "45 10 * * 1-5"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "5,15,25,35,45,55 9 * * 1-6"
-    },
-    {
-      "path": "/api/wms-sync",
       "schedule": "*/15 11-14 * * *"
-    },
-    {
-      "path": "/api/wms-preparar-lote?limite=150",
-      "schedule": "55 10 * * 1-6"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "5,15,25,30 10 * * 1-6"
     },
     {
       "path": "/api/wms-webhook-pendentes",

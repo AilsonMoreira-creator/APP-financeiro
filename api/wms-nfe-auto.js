@@ -71,6 +71,17 @@ export default async function handler(req, res) {
   const transmitir = req.query?.sefaz !== '0';
   const inicio = Date.now();
   const resumo = { contas, dry, gerados: 0, autorizados: 0, ja_tinham: 0, rejeitados: 0, erros: 0, pulados: 0, detalhe: [] };
+  // 21/09: duas rodadas ao mesmo tempo so brigam pelo limite do Bling (429). Se uma
+  // rodada comecou ha menos de 4 min, esta sai sem fazer nada (o cron volta em 10).
+  if (!dry) {
+    const { data: cfgLock } = await supabase.from('wms_config').select('valor').eq('chave', 'nfe_lock_em').maybeSingle();
+    const lockEm = Number(cfgLock?.valor) || 0;
+    if (lockEm && Date.now() - lockEm < 4 * 60000 && req.query?.force !== '1') {
+      return res.status(200).json({ ocupado: true, desde_segundos: Math.round((Date.now() - lockEm) / 1000), ...resumo });
+    }
+    await supabase.from('wms_config').upsert({ chave: 'nfe_lock_em', valor: String(Date.now()) }, { onConflict: 'chave' });
+  }
+  const soltarLockNfe = async () => { try { await supabase.from('wms_config').upsert({ chave: 'nfe_lock_em', valor: '0' }, { onConflict: 'chave' }); } catch {} };
 
   try {
     // 18/08 — as contas rodam EM PARALELO. O limite de 3 req/s do Bling é POR
@@ -270,7 +281,8 @@ export default async function handler(req, res) {
       }
     }));
     resumo.segundos = Math.round((Date.now() - inicio) / 1000);
-    return res.status(200).json(resumo);
+    await soltarLockNfe();
+  return res.status(200).json(resumo);
   } catch (e) {
     resumo.erro_geral = e.message;
     return res.status(500).json(resumo);

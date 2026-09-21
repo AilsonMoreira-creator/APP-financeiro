@@ -175,21 +175,32 @@ function detectFromText(text) {
 }
 
 // ── Fetch com retry e backoff para 429 ──
-export async function blingFetch(url, headers, { maxRetries = 3, baseDelay = 1000 } = {}) {
+// 21/09: 4 retentativas (1, 2, 4, 8 s) e cada 429 fica registrado em app_erros
+// (modulo 'bling-429') pra enxergar o historico — segunda 21/09 o preparo do lote
+// das 07:50 tropecou no limite e a Sthefany viu erro as 08:00.
+export async function blingFetch(url, headers, { maxRetries = 4, baseDelay = 1000 } = {}) {
+  let tentativas429 = 0;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const resp = await fetch(url, { headers });
 
     if (resp.status === 429) {
-      const wait = baseDelay * Math.pow(2, attempt); // 1s, 2s, 4s
+      tentativas429++;
+      const wait = baseDelay * Math.pow(2, attempt); // 1s, 2s, 4s, 8s
       console.log(`[bling] 429 rate limit, aguardando ${wait}ms (tentativa ${attempt + 1}/${maxRetries + 1})`);
       await new Promise(r => setTimeout(r, wait));
       continue;
     }
-
+    if (tentativas429) registrar429(url, tentativas429, true);
     return resp;
   }
-  // Esgotou retries
+  registrar429(url, tentativas429, false);
   return { ok: false, status: 429, json: async () => ({ error: 'Rate limit persistente' }) };
+}
+function registrar429(url, n, recuperou) {
+  try {
+    const caminho = String(url).replace(/^https:\/\/api\.bling\.com\.br\/Api\/v3/, '').replace(/[?#].*$/, '').replace(/\/\d+/g, '/{id}');
+    supabase.from('app_erros').insert({ modulo: 'bling-429', assinatura: 'bling-429:' + caminho, mensagem: `Bling 429 em ${caminho} — ${n} espera(s)${recuperou ? ', recuperou' : ', DESISTIU'}`, usuario: 'servidor' }).then(() => {}, () => {});
+  } catch { /* nunca atrapalha */ }
 }
 
 // ── Refresh token Bling ──
