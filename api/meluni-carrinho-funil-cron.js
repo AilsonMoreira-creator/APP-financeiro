@@ -113,7 +113,20 @@ export default async function handler(req, res) {
       perdidas = Number(pd) || 0;
     }
 
-    return res.status(200).json({ ok: true, funilAtivo: (await cfgMeluni('lara_funil_ativo', false)) === true, janela: janelaOk ? 'aberta' : 'fora (seg-sab 09-20)', conversoes, conversoesClientes, segundo, segundoPulado, perdidas, erros, detalhe });
+    // 4) 21/09 (Ailson): carrinho SEM telefone nao tem como receber disparo e ficava
+    //    "processando" pra sempre na aba (tinha um de 11/09 la). Depois de 7 dias sem
+    //    telefone -> 'ignorada' com o motivo, e some da aba. Roda mesmo fora da janela.
+    let semTelefone = 0;
+    try {
+      const { data: st } = await supabase.from('meluni_carrinhos').select('id, dados_extra').eq('status', 'processando')
+        .lt('data_carrinho', new Date(Date.now() - 7 * 86400000).toISOString()).or('telefone.is.null,telefone.eq.').limit(500);
+      for (const c of st || []) {
+        await supabase.from('meluni_carrinhos').update({ status: 'ignorada', movido_manual_em: new Date().toISOString(), dados_extra: { ...(c.dados_extra || {}), motivo_ignorada: 'sem telefone apos 7 dias' } }).eq('id', c.id);
+        semTelefone++;
+      }
+    } catch {}
+
+    return res.status(200).json({ ok: true, ignoradas_sem_telefone: semTelefone, funilAtivo: (await cfgMeluni('lara_funil_ativo', false)) === true, janela: janelaOk ? 'aberta' : 'fora (seg-sab 09-20)', conversoes, conversoesClientes, segundo, segundoPulado, perdidas, erros, detalhe });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: String(e?.message || e), conversoes, segundo, perdidas });
   }
