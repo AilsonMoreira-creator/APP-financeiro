@@ -280,8 +280,22 @@ export default async function handler(req, res) {
           return res.status(403).json({ ok: false, bloqueado: true, erro: `Bloqueado: ${acima.length} anúncio(s) com mais de ${teto}% por sua conta (${TIPOS_TXT(b.tipo)}). Esse teto vale pra todos, inclusive admin.`, itens: acima });
         }
         const token = await tokenDe(conta);
-        const resultados = [];
+        // 21/09: o ML recusou uma relampago da 2832 com "No candidates found" — o convite
+        // tinha expirado e o cache ainda mostrava candidato. Antes de enviar, RELE as
+        // promocoes do anuncio no ML e so segue com quem ainda esta convidado.
+        const vencidos = [];
         for (const it of itens) {
+          try { await carregarPromocoesDoItem(conta, token, it.item_id, it.original_price); } catch {}
+          const { data: agora } = await supabase.from('ml_sale_promocoes').select('status').eq('conta', conta).eq('item_id', it.item_id).eq('promo_key', b.promo_key || '').maybeSingle();
+          if (!agora || agora.status !== 'candidate') vencidos.push(it.item_id);
+        }
+        const validos = itens.filter(it => !vencidos.includes(it.item_id));
+        if (!validos.length) {
+          await registrarLog({ conta, ref, family_id: b.family_id || null, promo_key: b.promo_key || null, promo_nome: b.promo_nome || null, tipo: b.tipo, acao: 'erro', usuario, detalhe: { motivo: 'convite nao esta mais disponivel no ML (expirou ou foi retirado)', itens: vencidos } });
+          return res.status(200).json({ ok: false, expirado: true, erro: 'Esse convite não está mais disponível no Mercado Livre (expirou ou foi retirado). A lista foi atualizada.' });
+        }
+        const resultados = [];
+        for (const it of validos) {
           const corpo = corpoEntrada(b.tipo, b.promo_id, it);
           const r = await mlPost(token, `/seller-promotions/items/${it.item_id}?app_version=v2`, corpo);
           const okItem = r.ok;
@@ -291,7 +305,7 @@ export default async function handler(req, res) {
           try { await carregarPromocoesDoItem(conta, token, it.item_id, it.original_price); } catch {}
         }
         const okTodos = resultados.every(x => x.ok);
-        return res.status(200).json({ ok: okTodos, resultados });
+        return res.status(200).json({ ok: okTodos, resultados, vencidos });
       }
       return res.status(400).json({ ok: false, erro: 'ação desconhecida' });
     }

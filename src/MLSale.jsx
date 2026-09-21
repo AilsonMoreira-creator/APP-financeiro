@@ -85,7 +85,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
     const j = await api('', { method: 'POST', body: JSON.stringify({ acao: 'entrar', conta, ref: refProd, promo_key: p.promo_key, promo_id: p.promo_id, promo_nome: p.nome, tipo: p.tipo, family_id: g.family_id, itens }) });
     setConfirma(null);
     const okN = (j.resultados || []).filter(x => x.ok).length, errN = (j.resultados || []).length - okN;
-    setAviso(j.bloqueado ? `⛔ ${j.erro}` : j.ok ? `Entrou em ${okN} anúncio(s) ✓` : `${okN} ok · ${errN} recusado(s) pelo ML — veja o log`);
+    setAviso(j.bloqueado ? `⛔ ${j.erro}` : j.expirado ? `⏳ ${j.erro}` : j.ok ? `Entrou em ${okN} anúncio(s) ✓${j.vencidos?.length ? ` · ${j.vencidos.length} convite(s) já tinha(m) expirado` : ''}` : `${okN} ok · ${errN} recusado(s) pelo ML — veja o log`);
     await carregar(true); onMudou && onMudou();
     setEnviando(false);
   };
@@ -274,7 +274,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
                     <span style={{ color: C.suave }}>{new Date(l.criado_em).toLocaleString('pt-BR')} · {l.usuario || '—'}</span>
                   </div>
                   <div style={{ color: C.navy }}>{l.promo_nome || TIPO[l.tipo] || l.promo_key || ''}{l.item_id ? ` · ${l.item_id}` : ''}{l.pct != null ? ` · ${pct(l.pct)}` : ''}{l.preco != null ? ` · ${R$(l.preco)}` : ''}{l.qtd != null ? ` · ${l.qtd} un.` : ''}</div>
-                  {l.acao === 'erro' && <div style={{ color: C.erro, fontSize: 11 }}>{typeof l.detalhe?.resposta === 'string' ? l.detalhe.resposta : JSON.stringify(l.detalhe?.resposta || '').slice(0, 200)}</div>}
+                  {l.acao === 'erro' && <div style={{ color: C.erro, fontSize: 11 }}>{l.detalhe?.motivo || (typeof l.detalhe?.resposta === 'string' ? l.detalhe.resposta : JSON.stringify(l.detalhe?.resposta || '').slice(0, 200))}</div>}
                   {l.acao === 'config' && <div style={{ color: C.suave, fontSize: 11 }}>campanhas {l.detalhe?.campanha_pct ?? '—'}% · relâmpago {l.detalhe?.relampago_pct ?? '—'}%</div>}
                 </div>
               ))}
