@@ -299,13 +299,21 @@ export default async function handler(req, res) {
           const corpo = corpoEntrada(b.tipo, b.promo_id, it);
           const r = await mlPost(token, `/seller-promotions/items/${it.item_id}?app_version=v2`, corpo);
           const okItem = r.ok;
-          resultados.push({ item_id: it.item_id, ok: okItem, http: r.http, resposta: r.body });
+          // 21/09: o endpoint de promocoes do anuncio pode continuar listando um convite que o ML
+          // ja encerrou (aconteceu com a relampago da 2832: GET dizia candidate, POST respondeu
+          // "No candidates found"). Nesse caso marca como expirado no cache e explica, em vez de
+          // deixar como "recusado".
+          const txt = JSON.stringify(r.body || '').toLowerCase();
+          const semConvite = !okItem && r.http === 400 && (txt.includes('no candidates') || txt.includes('candidate not found'));
+          if (semConvite) { try { await supabase.from('ml_sale_promocoes').update({ status: 'expirado', atualizado_em: new Date().toISOString() }).eq('conta', conta).eq('item_id', it.item_id).eq('promo_key', b.promo_key || ''); } catch {} }
+          resultados.push({ item_id: it.item_id, ok: okItem, http: r.http, resposta: r.body, expirado: semConvite });
           if (okItem) await supabase.from('ml_sale_promocoes').update({ entrou_em: new Date().toISOString(), entrou_por: usuario }).eq('conta', conta).eq('item_id', it.item_id).eq('promo_key', b.promo_key || '');
-          await registrarLog({ conta, ref, item_id: it.item_id, family_id: b.family_id || null, promo_key: b.promo_key || null, promo_nome: b.promo_nome || null, tipo: b.tipo, acao: okItem ? 'entrou' : 'erro', usuario, pct: it.pct ?? null, preco: it.deal_price ?? null, qtd: it.stock ?? null, detalhe: { enviado: corpo, http: r.http, resposta: okItem ? r.body : (r.body?.message || r.body?.cause || r.body) } });
+          await registrarLog({ conta, ref, item_id: it.item_id, family_id: b.family_id || null, promo_key: b.promo_key || null, promo_nome: b.promo_nome || null, tipo: b.tipo, acao: okItem ? 'entrou' : 'erro', usuario, pct: it.pct ?? null, preco: it.deal_price ?? null, qtd: it.stock ?? null, detalhe: { enviado: corpo, http: r.http, motivo: semConvite ? 'convite ja encerrado no ML (o ML ainda listava como convidado)' : undefined, resposta: okItem ? r.body : (r.body?.message || r.body?.cause || r.body) } });
           try { await carregarPromocoesDoItem(conta, token, it.item_id, it.original_price); } catch {}
         }
         const okTodos = resultados.every(x => x.ok);
-        return res.status(200).json({ ok: okTodos, resultados, vencidos });
+        const soExpirados = !okTodos && resultados.every(x => x.ok || x.expirado);
+        return res.status(200).json({ ok: okTodos, expirado: soExpirados && !resultados.some(x => x.ok), erro: soExpirados ? 'Esse convite já foi encerrado pelo Mercado Livre (o ML ainda o listava como aberto). A lista foi atualizada.' : undefined, resultados, vencidos });
       }
       return res.status(400).json({ ok: false, erro: 'ação desconhecida' });
     }
