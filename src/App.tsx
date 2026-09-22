@@ -5367,6 +5367,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   // 19/09: Sale — promocoes do ML por REF. saleBadges: {ref:{campanha,relampago}} pinta o botao de verde
   const [saleOpen,setSaleOpen]=useState<any>(null);
   const [saleBadges,setSaleBadges]=useState<any>({});
+  // 22/09: "Vendas esquentando / esfriando" (15d x 15d anteriores, ±20%) — mesma fonte do ranking do OS Amicia
+  const [tendencias,setTendencias]=useState<any>({});
+  useEffect(()=>{fetch('/api/vendas-tendencia').then(r=>r.json()).then(j=>{if(j?.ok)setTendencias(j.refs||{});}).catch(()=>{});},[]);
   const carregarSaleBadges=()=>{fetch('/api/ml-sale?badges=1&conta=exitus')   /* 21/09 (decisao dele): o verde/vermelho do card considera SO a Exitus (unica que submete) */.then(r=>r.json()).then(j=>{if(j?.ok)setSaleBadges(j.badges||{});}).catch(()=>{});};
   useEffect(()=>{carregarSaleBadges();const t=setInterval(carregarSaleBadges,10*60*1000);return()=>clearInterval(t);},[]);
   const [raioxOpen,setRaioxOpen]=useState<any>(null); // Raio-X do produto (15/08)
@@ -6247,6 +6250,10 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <div style={{display:"flex",gap:14,fontSize:11,color:"#8a9aa4",flexWrap:"wrap",alignItems:"baseline"}}>
                 <span>Total: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:mobile?28:40}}>{(selectedRef.qtd_total||0).toLocaleString('pt-BR')}</b></span>
                 <span>· Variações: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:13}}>{vars.length}{ocultas>0&&<span style={{color:"#8a9aa4",fontWeight:400,fontSize:11}}> de {varsGrade.length}</span>}</b></span>
+                {(()=>{const t=tendencias[String(refNorm)]||tendencias[String(modalRef).replace(/^0+(?=\d)/,'')];if(!t)return null;const q=t.tendencia==='quente';return(
+                <div title={`${t.ant} → ${t.ult} peças nos últimos 15 dias (${t.var>0?'+':''}${t.var}% vs 15 dias anteriores)`} style={{display:"flex",alignItems:"center",gap:6,background:q?"#fff3e6":"#eaf3fb",border:`1px solid ${q?"#f3c9a0":"#b9d5ee"}`,borderRadius:999,padding:"4px 10px 4px 6px",fontSize:mobile?11:12,fontWeight:700,color:q?"#b4530a":"#2d6ba3",fontFamily:"Georgia,serif"}}>
+                  <img src={q?"/icons/vendas-esquentando.png":"/icons/vendas-esfriando.png"} alt="" style={{width:22,height:22}}/>{q?"Vendas esquentando":"Vendas esfriando"}<span style={{fontWeight:400,opacity:.8}}>{t.var>0?"+":""}{t.var}%</span>
+                </div>);})()}
                 <button onClick={()=>abrirLogsBling(refNorm)} title={`Ver logs de estoque da REF ${modalRef}`} style={{marginLeft:"auto",background:"#fff",border:"1px solid #c8d8e4",borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:"#5a6470",fontWeight:600,whiteSpace:"nowrap"}}>📜 logs</button>
               </div>
             </div>
