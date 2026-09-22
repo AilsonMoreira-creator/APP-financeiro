@@ -21,7 +21,8 @@ export const OFICINA_A_DEFINIR="A definir";
 import EstoqueTecido from './EstoqueTecido';
 import MapeamentoSkus from './MapeamentoSkus';
 import MLSale from './MLSale'; // 19/09: botao Sale (promocoes ML por REF)
-import { guardarToken, limparToken, iniciarSessaoToken } from './sessaoToken'; // 20/09: token de sessao (passo 4, fase 1)
+import { guardarToken, limparToken, iniciarSessaoToken } from './sessaoToken';
+import { assinarFila as assinarSaleFila, estadoFila as estadoSaleFila } from './saleFila'; // 22/09: fila de envio em massa do Sale // 20/09: token de sessao (passo 4, fase 1)
 iniciarSessaoToken();
 import RaioXProduto from './RaioXProduto';
 import FullEnvio from './FullEnvio';
@@ -5370,6 +5371,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   // 22/09: "Vendas esquentando / esfriando" (15d x 15d anteriores, ±20%) — mesma fonte do ranking do OS Amicia
   const [tendencias,setTendencias]=useState<any>({});
   useEffect(()=>{fetch('/api/vendas-tendencia').then(r=>r.json()).then(j=>{if(j?.ok)setTendencias(j.refs||{});}).catch(()=>{});},[]);
+  const [,setSaleFilaTick]=useState(0);
+  useEffect(()=>assinarSaleFila(()=>{setSaleFilaTick(x=>x+1);if(!Object.keys(estadoSaleFila().pendentes).length)carregarSaleBadges();}),[]);
   const carregarSaleBadges=()=>{fetch('/api/ml-sale?badges=1&conta=exitus')   /* 21/09 (decisao dele): o verde/vermelho do card considera SO a Exitus (unica que submete) */.then(r=>r.json()).then(j=>{if(j?.ok)setSaleBadges(j.badges||{});}).catch(()=>{});};
   useEffect(()=>{carregarSaleBadges();const t=setInterval(carregarSaleBadges,10*60*1000);return()=>clearInterval(t);},[]);
   const [raioxOpen,setRaioxOpen]=useState<any>(null); // Raio-X do produto (15/08)
@@ -6267,9 +6270,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <button onClick={()=>setRaioxOpen({ref:modalRef,desc,foto:null})} title="Vendas, cores, canais, Full e devoluções desta referência" style={{flex:mobile?"1 1 calc(50% - 4px)":"1 1 30%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 10px",fontSize:mobile?11.5:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
                 🔎 raio-x
               </button>
-              {(()=>{const b=saleBadges[String(refNorm)]||saleBadges[String(modalRef)]||saleBadges[String(modalRef).replace(/^0+(?=\d)/,'')];const vermelho=!!(b&&b.vermelho);const verde=!vermelho&&!!(b&&(b.campanha||b.relampago));return(
+              {(()=>{const b=saleBadges[String(refNorm)]||saleBadges[String(modalRef)]||saleBadges[String(modalRef).replace(/^0+(?=\d)/,'')];const vermelho=!!(b&&b.vermelho);const verde=!vermelho&&!!(b&&(b.campanha||b.relampago));const _fs=estadoSaleFila();const _r=String(modalRef);const errFila=(_fs.erros[_r]||[]).length>0;const pendFila=(_fs.pendentes[_r]||0)>0;return(
               <button onClick={()=>setSaleOpen({ref:modalRef,desc,contas:(b&&b.contas)||[]})} title={vermelho?`REF ${modalRef}: promoção ATIVA acima do teto (7% / 12%) — abra e confira`:verde?`Tem promoção do Mercado Livre dentro da faixa da REF ${modalRef}`:`Promoções do Mercado Livre pra REF ${modalRef}`} style={{flex:mobile?"1 1 calc(50% - 4px)":"1 1 22%",minWidth:0,whiteSpace:"nowrap",background:vermelho?"#fdecea":verde?"#e9f5ee":"#fff",color:vermelho?"#a33":verde?"#1f7a48":"#2c3e50",border:`1px solid ${vermelho?"#e3a3a3":verde?"#7fc79b":"#c8d8e4"}`,borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,boxShadow:vermelho?"0 0 0 2px rgba(170,51,51,.18)":verde?"0 0 0 2px rgba(31,122,72,.15)":"none"}}>
-                <span style={{fontSize:12,lineHeight:1,color:vermelho?"#a33":verde?"#1f7a48":"#4a7fa5"}}>{vermelho?"⛔":verde?"●":"%"}</span> sale
+                <span style={{fontSize:12,lineHeight:1,color:vermelho?"#a33":verde?"#1f7a48":"#4a7fa5"}}>{vermelho?"⛔":verde?"●":"%"}</span> sale{pendFila&&<span title="enviando em segundo plano" style={{fontSize:11}}>⏳</span>}{errFila&&<span title="algum envio falhou — abra pra ver" style={{fontSize:12,color:"#c98a00"}}>⚠</span>}
               </button>);})()}
             </div>
             <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>

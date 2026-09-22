@@ -13,6 +13,7 @@
  * Entrar: sempre o menor desconto; relâmpago pede a quantidade (faixa do ML).
  */
 import { useState, useEffect, useMemo } from 'react';
+import { enfileirar, assinarFila, estadoFila, limparErros, jobNaFila } from './saleFila';
 
 const F = 'Georgia,serif';
 const C = { navy: '#2c3e50', azul: '#4a7fa5', suave: '#6b7c8c', borda: '#e8e2da', ok: '#1f7a48', okBg: '#e9f5ee', alerta: '#8a6500', alertaBg: '#fff8e8', erro: '#a33', erroBg: '#fdecea', cinza: '#9aa5ad', cinzaBg: '#f4f2ee' };
@@ -90,6 +91,34 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
     setEnviando(false);
   };
 
+  // ── envio em massa (22/09): seleciona, envia em segundo plano, fecha e segue ──
+  const [sel, setSel] = useState({});   // `${g.chave}|${p.promo_key}` -> true
+  const [, forcar] = useState(0);
+  useEffect(() => assinarFila(() => { forcar(x => x + 1); }), []);
+  const fila = estadoFila();
+  const errosRef = fila.erros[String(refProd)] || [];
+  const pendRef = fila.pendentes[String(refProd)] || 0;
+  // quando a fila desta REF termina, relê a tela
+  const [pendAnt, setPendAnt] = useState(0);
+  useEffect(() => { if (pendAnt > 0 && pendRef === 0) { carregar(true); onMudou && onMudou(); } setPendAnt(pendRef); /* eslint-disable-next-line */ }, [pendRef]);
+  const selecionavel = (p) => dados?.submete && !p.acima_teto && !p.sem_campanha && p.filhos.some(f => f.status === 'candidate') && !jobNaFila(String(refProd), p.promo_key);
+  const itensDe = (p) => p.filhos.filter(f => f.status === 'candidate').map(f => {
+    const it = { item_id: f.item_id, deal_price: f.max_price ?? f.price, original_price: f.original_price, pct: f.seller_pct };
+    if (p.relampago) it.stock = Math.max(f.stock_min || 1, Math.min(f.stock_min || 5, f.stock_max || 5));   // em massa: quantidade mínima do ML
+    return it;
+  });
+  const nSel = Object.values(sel).filter(Boolean).length;
+  const enviarSelecionados = () => {
+    const jobs = [];
+    for (const g of grupos) for (const p of g.promocoes) if (sel[`${g.chave}|${p.promo_key}`] && selecionavel(p))
+      jobs.push({ ref: String(refProd), conta, promo_key: p.promo_key, promo_id: p.promo_id, promo_nome: p.nome, tipo: p.tipo, family_id: g.family_id, itens: itensDe(p) });
+    if (!jobs.length) return;
+    limparErros(String(refProd));
+    enfileirar(jobs);
+    setSel({});
+    setAviso(`⏳ ${jobs.length} promoção(ões) enviando em segundo plano — pode fechar e seguir.`);
+  };
+
   const abrirLog = async () => { setLogOpen(true); const j = await api(`?log=1&ref=${encodeURIComponent(refProd)}`); setLog(j.log || []); };
 
   const grupos = dados?.grupos || [];
@@ -130,6 +159,14 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
             {!dados?.submete && dados && <span style={{ fontSize: 10.5, color: C.alerta }}>só consulta nesta conta (submeter: Exitus)</span>}
             {temVerde && <span style={{ fontSize: 11, color: C.ok, background: C.okBg, padding: '3px 8px', borderRadius: 999, fontWeight: 700 }}>● tem promoção dentro da faixa</span>}
           </div>
+          {(nSel > 0 || pendRef > 0 || errosRef.length > 0) && (
+            <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {nSel > 0 && <button onClick={enviarSelecionados} style={btn(true)}>Enviar selecionados ({nSel})</button>}
+              {nSel > 0 && <button onClick={() => setSel({})} style={btn()}>limpar</button>}
+              {pendRef > 0 && <span style={{ fontSize: 11.5, color: C.azul }}>⏳ {pendRef} enviando…</span>}
+              {errosRef.length > 0 && <span style={{ fontSize: 11.5, color: C.alerta }}>⚠ {errosRef.map(e => `${e.promo}: ${e.erro}`).join(' · ')} <button onClick={() => limparErros(String(refProd))} style={{ ...btn(), padding: '1px 6px', marginLeft: 4 }}>ok</button></span>}
+            </div>
+          )}
           {aviso && <div style={{ marginTop: 8, fontSize: 12, color: C.navy, background: C.alertaBg, border: `1px solid #efd9a0`, borderRadius: 8, padding: '6px 10px', display: 'flex', justifyContent: 'space-between' }}><span>{aviso}</span><button onClick={() => setAviso('')} style={{ ...btn(), padding: '0 6px' }}>✕</button></div>}
         </div>
 
@@ -177,7 +214,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 720 }}>
                           <thead>
                             <tr style={{ color: C.suave, fontSize: 11, textAlign: 'left' }}>
-                              <th style={th()}>Promoção</th><th style={th()}>Período</th><th style={th()}>Desconto</th><th style={th()}>Preço</th><th style={th()}>Meli</th><th style={th()}>Meu %</th><th style={th()}>Anúncios</th><th style={th()}>Ação</th>
+                              <th style={{ ...th(), width: 26 }}></th><th style={th()}>Promoção</th><th style={th()}>Período</th><th style={th()}>Desconto</th><th style={th()}>Preço</th><th style={th()}>Meli</th><th style={th()}>Meu %</th><th style={th()}>Anúncios</th><th style={th()}>Ação</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -189,6 +226,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
                               const linhaVerde = p.verde;
                               return (
                                 <tr key={p.promo_key} style={{ borderTop: `1px solid ${C.borda}`, background: p.vermelho ? '#fbeaea' : linhaVerde ? '#eef8f1' : p.ativa ? '#fbfaf7' : 'transparent' }}>
+                                  <td style={{ ...td(), paddingRight: 0 }}>{selecionavel(p) ? <input type="checkbox" checked={!!sel[`${g.chave}|${p.promo_key}`]} onChange={e => setSel(x => ({ ...x, [`${g.chave}|${p.promo_key}`]: e.target.checked }))} style={{ width: 16, height: 16, cursor: 'pointer' }} /> : jobNaFila(String(refProd), p.promo_key) ? <span title="enviando">⏳</span> : null}</td>
                                   <td style={td()}>
                                     <div style={{ fontWeight: 700, color: C.navy }}>{p.nome || TIPO[p.tipo] || p.tipo}</div>
                                     <div style={{ fontSize: 10.5, color: C.suave }}>{TIPO[p.tipo] || p.tipo}{ativos ? <span style={{ color: C.ok, fontWeight: 700 }}> · ATIVA</span> : ''}{enviados && !ativos ? <span style={{ color: C.azul, fontWeight: 700 }}> · ENVIADO ✓ (aguardando o ML)</span> : ''}{p.visto && !p.ativa ? <span style={{ color: C.cinza }}> · visto</span> : ''}{p.sem_campanha ? <span style={{ color: C.alerta }}> · sem campanha</span> : ''}</div>

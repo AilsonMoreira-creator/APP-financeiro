@@ -289,7 +289,11 @@ export default async function handler(req, res) {
           const { data: agora } = await supabase.from('ml_sale_promocoes').select('status').eq('conta', conta).eq('item_id', it.item_id).eq('promo_key', b.promo_key || '').maybeSingle();
           if (!agora || agora.status !== 'candidate') vencidos.push(it.item_id);
         }
-        const validos = itens.filter(it => !vencidos.includes(it.item_id));
+        // 22/09: nunca reenvia o mesmo anuncio+promocao dentro de 30 min (relampago cria oferta nova a cada POST)
+        const { data: recentes } = await supabase.from('ml_sale_promocoes').select('item_id, entrou_em').eq('conta', conta).eq('promo_key', b.promo_key || '').in('item_id', itens.map(i => i.item_id)).gte('entrou_em', new Date(Date.now() - 30 * 60000).toISOString());
+        const jaEnviados = new Set((recentes || []).map(x => x.item_id));
+        const validos = itens.filter(it => !vencidos.includes(it.item_id) && !jaEnviados.has(it.item_id));
+        if (!validos.length && jaEnviados.size) return res.status(200).json({ ok: true, ja_enviado: true, resultados: [] });
         if (!validos.length) {
           await registrarLog({ conta, ref, family_id: b.family_id || null, promo_key: b.promo_key || null, promo_nome: b.promo_nome || null, tipo: b.tipo, acao: 'erro', usuario, detalhe: { motivo: 'convite nao esta mais disponivel no ML (expirou ou foi retirado)', itens: vencidos } });
           return res.status(200).json({ ok: false, expirado: true, erro: 'Esse convite não está mais disponível no Mercado Livre (expirou ou foi retirado). A lista foi atualizada.' });
