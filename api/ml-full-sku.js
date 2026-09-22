@@ -20,6 +20,14 @@ const normTam = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  if (req.query?.todos) {   // SO LEITURA: resumo de todos os anuncios do Full da Exitus
+    const { data: fc } = await supabase.from('full_estoque_cache').select('anuncio').ilike('conta', 'exitus');
+    const ids = [...new Set((fc || []).map(x => x.anuncio).filter(Boolean))];
+    const base = process.env.APP_BASE_URL || 'https://app-financeiro-brown.vercel.app';
+    const out = [];
+    for (const id of ids) { try { const r = await fetch(`${base}/api/ml-full-sku?anuncio=${id}&resumo=1`); const j = await r.json(); out.push({ anuncio: id, ref: j.ref, variacoes: j.variacoes, ja_igual: j.ja_igual, trocar: j.trocar, sem_casamento: j.sem_casamento, duplicado: j.duplicado, ambiguo: j.ambiguo, pendentes: (j.linhas || []).map(l => `${l.situacao}: ${l.cor}/${l.tam} ${l.sku_atual}→${l.sku_bling || (l.candidatos || []).join('|') || '?'}`) }); } catch (e) { out.push({ anuncio: id, erro: String(e?.message || e) }); } }
+    return res.status(200).json({ ok: true, anuncios: out });
+  }
   const anuncio = String(req.query?.anuncio || '').toUpperCase();
   const aplicar = String(req.query?.aplicar || '') === '1';
   if (!anuncio) return res.status(400).json({ ok: false, erro: 'anuncio' });
@@ -57,11 +65,12 @@ export default async function handler(req, res) {
     }
     // o mesmo SKU do Bling proposto pra DUAS variacoes do ML (ex.: "Marrom" e "Marrom-escuro" caindo
     // na mesma cor do Bling) -> ambiguo: nao aplica em nenhuma das duas, pra nao gerar SKU repetido
-    const contagem = {}; for (const l of linhas) if (l.situacao === 'trocar') contagem[l.sku_bling] = (contagem[l.sku_bling] || 0) + 1;
+    const contagem = {};
+    for (const l of linhas) { if (l.situacao === 'trocar') contagem[l.sku_bling] = (contagem[l.sku_bling] || 0) + 1; if (l.sku_atual) contagem[l.sku_atual] = (contagem[l.sku_atual] || 0) + 1; }
     for (const l of linhas) if (l.situacao === 'trocar' && contagem[l.sku_bling] > 1) l.situacao = 'duplicado';
     const mudarOk = mudar.filter(m => contagem[m.seller_custom_field] === 1); mudar.length = 0; mudar.push(...mudarOk);
     const resumo = { anuncio, ref, titulo: it.body?.title, status: it.body?.status, variacoes: vars.length, duplicado: linhas.filter(l => l.situacao === 'duplicado').length, ja_igual: linhas.filter(l => l.situacao === 'ja igual').length, trocar: mudar.length, sem_casamento: linhas.filter(l => l.situacao === 'sem casamento').length, ambiguo: linhas.filter(l => l.situacao === 'ambiguo').length };
-    if (!aplicar) return res.status(200).json({ ok: true, ...resumo, linhas });
+    if (!aplicar) return res.status(200).json({ ok: true, ...resumo, linhas: req.query?.resumo ? linhas.filter(l => l.situacao !== 'ja igual') : linhas });
     if (!mudar.length) return res.status(200).json({ ok: true, ...resumo, aplicado: 0 });
     // aplica em lotes de 20 variacoes (PUT parcial so com as que mudam)
     const resultados = [];
