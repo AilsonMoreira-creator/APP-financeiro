@@ -474,11 +474,12 @@ export default async function handler(req, res) {
 
         // snapshot do marco (uma vez por dia)
         try {
-          await supabase.from('wms_snapshots').insert({
+          // 22/09: upsert ignorando duplicado (antes: insert que estourava a unique a cada 2 min no log do Postgres)
+          await supabase.from('wms_snapshots').upsert({
             data: hoje, dia_semana: diaSemana, marco: marcoAtivo.nome,
             finalizados: finalHoje, abertos, em_separacao: emSep,
             entrados_dia: lista.length, ritmo_hora: ritmo, projecao_fim: projecaoFim, situacao,
-          });
+          }, { onConflict: 'data,marco', ignoreDuplicates: true });
         } catch { /* ja existe */ }
 
         return res.status(200).json({

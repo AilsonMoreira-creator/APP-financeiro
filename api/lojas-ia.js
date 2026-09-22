@@ -47,6 +47,18 @@ import {
   EXEMPLOS_FEW_SHOT,
 } from './lojas-ia-prompts.js';
 
+// 22/09: lojas_vendas_itens NAO tem coluna categoria. Todas as consultas que pediam
+// 'categoria' ali falhavam caladas (erro 42703 no log do Postgres, lista vazia na IA).
+// A categoria vem de lojas_produtos pela REF.
+async function comCategoria(itens) {
+  const lista = itens || [];
+  const refs = [...new Set(lista.map(i => i.ref).filter(Boolean))];
+  if (!refs.length) return lista;
+  const { data } = await supabase.from('lojas_produtos').select('ref, categoria').in('ref', refs);
+  const m = Object.fromEntries((data || []).map(x => [x.ref, x.categoria]));
+  return lista.map(i => ({ ...i, categoria: m[i.ref] ?? null }));
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HANDLER PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2308,11 +2320,12 @@ async function montarContextoMensagem(sug, contextoExtra) {
         .limit(1)
         .maybeSingle();
       if (ultima) {
-        const { data: itensUlt } = await supabase
+        const { data: itensUlt0 } = await supabase
           .from('lojas_vendas_itens')
-          .select('ref, descricao, categoria')
+          .select('ref, descricao')
           .eq('venda_id', ultima.id)
           .limit(5);
+        const itensUlt = await comCategoria(itensUlt0);
         const diasAtras = Math.round((Date.now() - new Date(ultima.data_venda).getTime()) / 86400000);
         ultimaCompra = {
           data: ultima.data_venda,
@@ -2656,10 +2669,11 @@ async function montarContextoMensagem(sug, contextoExtra) {
         .limit(10);
       if (vendasRecentes?.length) {
         const idsVendas = vendasRecentes.map(v => v.id);
-        const { data: itens } = await supabase
+        const { data: itens0 } = await supabase
           .from('lojas_vendas_itens')
-          .select('ref, descricao, categoria, venda_id')
+          .select('ref, descricao, venda_id')
           .in('venda_id', idsVendas);
+        const itens = await comCategoria(itens0);
         // Mapa data_venda por venda_id (pra ordenar itens pela data)
         const dataPorVenda = new Map(vendasRecentes.map(v => [v.id, v.data_venda]));
         const ordenados = (itens || [])
@@ -3823,10 +3837,11 @@ async function handleGerarMensagemAvulsa(req, res, auth) {
   // Top categorias da cliente (mesmo calculo do montarContextoMensagem)
   let topCategoria = null;
   try {
-    const { data: itens } = await supabase
+    const { data: itens0 } = await supabase
       .from('lojas_vendas_itens')
-      .select('categoria, qtd, lojas_vendas!inner(cliente_id)')
+      .select('ref, qtd, lojas_vendas!inner(cliente_id)')
       .eq('lojas_vendas.cliente_id', clienteId);
+    const itens = await comCategoria(itens0);
     if (itens?.length) {
       const counts = {};
       itens.forEach(i => {
@@ -4747,10 +4762,11 @@ async function handleEnriquecerObservacao(req, res, auth) {
   // 3) Top categorias (resumido)
   let topCategorias = [];
   try {
-    const { data: itens } = await supabase
+    const { data: itens0 } = await supabase
       .from('lojas_vendas_itens')
-      .select('categoria, qtd, lojas_vendas!inner(cliente_id)')
+      .select('ref, qtd, lojas_vendas!inner(cliente_id)')
       .eq('lojas_vendas.cliente_id', cliente_id);
+    const itens = await comCategoria(itens0);
     if (itens?.length) {
       const counts = {};
       itens.forEach(i => {

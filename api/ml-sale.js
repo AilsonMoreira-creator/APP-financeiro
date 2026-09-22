@@ -157,6 +157,7 @@ async function syncPromocoes(conta, orcamentoMs = 45000) {
       if (!conhecidos.hasOwnProperty(it.id)) continue;  // só anúncios que a gente conhece (com REF)
       linhas.push(normalizarPromo(c, it.id, { ...it, id: p.id, type: p.type, name: p.name, deadline_date: p.deadline_date, start_date: it.start_date || p.start_date, finish_date: it.finish_date || it.end_date || p.finish_date }, conhecidos[it.id]));
     }
+    { const vistos = new Set(); for (let k = linhas.length - 1; k >= 0; k--) { const kk = linhas[k].item_id; if (vistos.has(kk)) linhas.splice(k, 1); else vistos.add(kk); } }   // 22/09: sem item repetido no lote
     if (linhas.length) {
       // preserva visto
       const { data: exist } = await supabase.from('ml_sale_promocoes').select('item_id, visto_em, visto_por').eq('conta', c).eq('promo_key', p.id).in('item_id', linhas.map(l => l.item_id));

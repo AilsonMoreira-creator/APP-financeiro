@@ -280,7 +280,7 @@ export default async function handler(req, res) {
       text: textoLimpo,
       date_created: new Date().toISOString(),
       sent_via,
-    }, { onConflict: 'message_id' });
+    }, { onConflict: 'message_id,brand' });   // 22/09: a unique e (message_id, brand) — com so message_id o Postgres recusava (42P10) e a resposta nao ficava no historico
 
     // Atualiza conversa
     await supabase.from('ml_conversations').update({

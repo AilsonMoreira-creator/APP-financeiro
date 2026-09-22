@@ -186,7 +186,16 @@ export async function carregarPromocoesDoItem(conta, token, itemId, origFallback
   const c = String(conta).toLowerCase();
   const r = await mlGet(token, `/seller-promotions/items/${itemId}?app_version=v2`);
   if (!r.ok || !Array.isArray(r.body)) return { ok: false, http: r.http, n: 0 };
-  const linhas = r.body.map(p => normalizarPromo(c, itemId, p, origFallback));
+  // 22/09: o ML pode devolver a MESMA promocao 2x pro anuncio (ex.: duas ofertas relampago) ->
+  // upsert com chave repetida estoura "ON CONFLICT DO UPDATE cannot affect row a second time".
+  // Fica uma por promo_key, preferindo a ativa/programada.
+  const PRIO = { started: 0, active: 0, pending: 1, programmed: 1, candidate: 2 };
+  const porChave = {};
+  for (const l of r.body.map(p => normalizarPromo(c, itemId, p, origFallback))) {
+    const a = porChave[l.promo_key];
+    if (!a || (PRIO[l.status] ?? 9) < (PRIO[a.status] ?? 9)) porChave[l.promo_key] = l;
+  }
+  const linhas = Object.values(porChave);
   // preserva visto: upsert não pode sobrescrever visto_em -> lê os existentes
   const { data: exist } = await supabase.from('ml_sale_promocoes').select('promo_key, visto_em, visto_por, start_date, finish_date, entrou_em, entrou_por').eq('conta', c).eq('item_id', itemId);
   const vistos = Object.fromEntries((exist || []).map(x => [x.promo_key, x]));

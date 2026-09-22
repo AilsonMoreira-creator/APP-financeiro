@@ -472,10 +472,10 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
       const { data: ultimoSucesso } = await supabase
         .from('lojas_importacoes')
         .select('registros_total')
-        .eq('tipo', tipoInfo.tipo)
+        .eq('tipo_arquivo', tipoInfo.tipo)   // 22/09: a coluna e tipo_arquivo (tipo nao existe -> erro 42703 toda rodada)
         .eq('status', 'sucesso')
         .gt('registros_total', 0)
-        .order('iniciado_em', { ascending: false })
+        .order('iniciada_em', { ascending: false })
         .limit(1)
         .maybeSingle();
       if (ultimoSucesso?.registros_total
