@@ -56,7 +56,11 @@ export default async function handler(req, res) {
   // ── renovar token (app faz em silencio depois de 6h) ──
   if (body.renovar === true) {
     const s = await sessaoDe(req);
-    if (!s.ok) return res.status(200).json({ ok: false, motivo: s.motivo });
+    // 22/09: token VENCIDO (app ficou fechado > 12h) pode ser renovado ate 7 dias depois do
+    // vencimento, desde que a assinatura seja valida e a versao do usuario nao tenha mudado.
+    // Sem isso, quem fechava o app a noite ficava com token invalido ate fazer login de novo.
+    const graca = s.motivo === 'vencido' && s.claims?.exp && (Date.now() / 1000 - s.claims.exp) < 7 * 86400;
+    if (!s.ok && !graca) return res.status(200).json({ ok: false, motivo: s.motivo });
     const { data: u } = await supabase.from('app_usuarios').select('usuario, ativo, versao, modulos, admin').eq('usuario', s.claims.sub).maybeSingle();
     if (!u || !u.ativo || Number(u.versao || 1) !== Number(s.claims.ver || 1)) return res.status(200).json({ ok: false, motivo: 'sessao encerrada' });
     const token = await emitirToken({ usuario: u.usuario, modulos: u.modulos || s.claims.mod, admin: u.admin ?? s.claims.adm, versao: u.versao });

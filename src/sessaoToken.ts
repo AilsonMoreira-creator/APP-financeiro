@@ -30,7 +30,8 @@ export function instalarInterceptador() {
     try {
       const url = typeof input === 'string' ? input : (input?.url || '');
       const mesmaOrigem = url.startsWith('/api/') || url.startsWith(`${location.origin}/api/`);
-      const t = mesmaOrigem ? lerToken() : null;
+      let t = mesmaOrigem ? lerToken() : null;
+      if (t && url.indexOf('/api/app-login') < 0) { const c = claims(t); if (c?.exp && c.exp * 1000 < Date.now()) t = null; }   // vencido: nao manda (a renovacao ja troca)
       if (t) {
         init = init ? { ...init } : {};
         const h = new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined) || {});
@@ -47,6 +48,7 @@ export async function renovarSePreciso() {
   const t = lerToken(); const c = claims(t);
   if (!t || !c?.iat || _renovando) return;
   const idade = Date.now() - c.iat * 1000;
+  // vencido ha mais de 7 dias: nem tenta (o servidor recusaria) — fica pro proximo login
   const vencido = c.exp && c.exp * 1000 < Date.now();
   if (idade < RENOVAR_APOS_MS && !vencido) return;
   _renovando = true;
@@ -61,6 +63,6 @@ export async function renovarSePreciso() {
 /** chamado no boot: instala o interceptador e agenda a renovacao */
 export function iniciarSessaoToken() {
   instalarInterceptador();
-  setTimeout(renovarSePreciso, 3000);
+  setTimeout(renovarSePreciso, 0);   // 22/09: renova ja na abertura (antes era 3 s)
   setInterval(renovarSePreciso, 15 * 60 * 1000);
 }

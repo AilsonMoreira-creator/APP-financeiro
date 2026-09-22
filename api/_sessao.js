@@ -74,7 +74,7 @@ export function sombraSessao(req, caminho) {
     try {
       const s = await sessaoDe(req);
       const tipo = !s.tinhaToken ? 'sem' : (s.ok ? 'com' : 'invalido');
-      await supabase.rpc('app_sessao_contar', { p_caminho: caminho, p_tipo: tipo });
+      await supabase.rpc('app_sessao_contar', { p_caminho: s.ok || !s.tinhaToken ? caminho : `${caminho} [${s.motivo}]`, p_tipo: tipo });
     } catch { /* silencio */ }
   })();
 }
