@@ -31,7 +31,7 @@ async function api(path, opts) {
 
 const CONTAS = [['exitus', 'Exitus'], ['lumia', 'Lumia'], ['muniam', 'Muniam']];
 
-export default function MLSale({ refProduto: refProd, desc, conta: contaInicial = 'exitus', onClose, onMudou }) {
+export default function MLSale({ refProduto: refProd, desc, conta: contaInicial = 'exitus', contasVerdes = [], onClose, onMudou }) {
   const [conta, setConta] = useState(contaInicial);
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
@@ -107,7 +107,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
               <div style={{ fontSize: 16, fontWeight: 700, color: C.navy, marginTop: 2 }}>Sale · promoções do Mercado Livre</div>
               <div style={{ fontSize: 11.5, color: C.suave, marginTop: 3 }}>{desc}</div>
               <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                {CONTAS.map(([k, n]) => <button key={k} onClick={() => { setConta(k); setAberto({}); }} style={{ ...btn(conta === k), padding: '4px 10px' }}>{n}</button>)}
+                {CONTAS.map(([k, n]) => { const v = contasVerdes.includes(k); return <button key={k} onClick={() => { setConta(k); setAberto({}); }} title={v ? 'tem promoção dentro da faixa nesta conta' : ''} style={{ ...btn(conta === k), padding: '4px 10px', ...(v && conta !== k ? { borderColor: '#7fc79b', color: C.ok } : {}) }}>{v ? '● ' : ''}{n}</button>; })}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
