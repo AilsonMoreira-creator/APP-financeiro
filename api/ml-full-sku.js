@@ -26,9 +26,10 @@ export default async function handler(req, res) {
   if (aplicar && String(req.headers['x-user'] || '') !== 'ailson') return res.status(403).json({ ok: false, erro: 'so ailson aplica' });
   try {
     const token = await tokenDe('exitus');
-    const it = await mlGet(token, `/items/${anuncio}?attributes=id,title,status,variations,seller_custom_field`);
+    const it = await mlGet(token, `/items/${anuncio}?include_attributes=all`);
     if (!it.ok) return res.status(200).json({ ok: false, erro: `ML ${it.http}`, corpo: it.body });
     const vars = it.body?.variations || [];
+    if (req.query?.bruto) return res.status(200).json({ ok: true, chaves_item: Object.keys(it.body || {}), variacao0: vars[0] || null });
     const { data: fc } = await supabase.from('full_estoque_cache').select('variation_id, ref, cor, tam, cor_original').eq('anuncio', anuncio);
     const porVar = Object.fromEntries((fc || []).map(x => [String(x.variation_id), x]));
     const ref = (fc || []).map(x => x.ref).find(r => /^\d+$/.test(String(r || '')));
@@ -54,7 +55,12 @@ export default async function handler(req, res) {
       linhas.push(linha);
       if (situacao === 'trocar') mudar.push({ id: v.id, seller_custom_field: candidatos[0], attributes: [{ id: 'SELLER_SKU', value_name: candidatos[0] }] });
     }
-    const resumo = { anuncio, ref, titulo: it.body?.title, status: it.body?.status, variacoes: vars.length, ja_igual: linhas.filter(l => l.situacao === 'ja igual').length, trocar: mudar.length, sem_casamento: linhas.filter(l => l.situacao === 'sem casamento').length, ambiguo: linhas.filter(l => l.situacao === 'ambiguo').length };
+    // o mesmo SKU do Bling proposto pra DUAS variacoes do ML (ex.: "Marrom" e "Marrom-escuro" caindo
+    // na mesma cor do Bling) -> ambiguo: nao aplica em nenhuma das duas, pra nao gerar SKU repetido
+    const contagem = {}; for (const l of linhas) if (l.situacao === 'trocar') contagem[l.sku_bling] = (contagem[l.sku_bling] || 0) + 1;
+    for (const l of linhas) if (l.situacao === 'trocar' && contagem[l.sku_bling] > 1) l.situacao = 'duplicado';
+    const mudarOk = mudar.filter(m => contagem[m.seller_custom_field] === 1); mudar.length = 0; mudar.push(...mudarOk);
+    const resumo = { anuncio, ref, titulo: it.body?.title, status: it.body?.status, variacoes: vars.length, duplicado: linhas.filter(l => l.situacao === 'duplicado').length, ja_igual: linhas.filter(l => l.situacao === 'ja igual').length, trocar: mudar.length, sem_casamento: linhas.filter(l => l.situacao === 'sem casamento').length, ambiguo: linhas.filter(l => l.situacao === 'ambiguo').length };
     if (!aplicar) return res.status(200).json({ ok: true, ...resumo, linhas });
     if (!mudar.length) return res.status(200).json({ ok: true, ...resumo, aplicado: 0 });
     // aplica em lotes de 20 variacoes (PUT parcial so com as que mudam)
