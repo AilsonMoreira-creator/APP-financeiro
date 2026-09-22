@@ -8,7 +8,11 @@
  */
 import { supabase } from './_ml-helpers.js';
 export const config = { maxDuration: 15 };
-const MIN_PECAS = 10, LIMIAR = 20;
+// Regua variavel dele (22/09): quanto menor o volume, maior a variacao exigida.
+//  SUBIDA  (base = pecas dos ULTIMOS 15 dias): <30 nao considera; 30-39 => +40%; 40-49 => +30%; 50-60 => +25%; >60 => +20%
+//  QUEDA   (base = pecas dos 15 dias ANTERIORES): <20 nao considera; 20-39 => -30%; 40-60 => -25%; >60 => -20%
+function limiarSubida(ult) { if (ult < 30) return null; if (ult < 40) return 40; if (ult < 50) return 30; if (ult <= 60) return 25; return 20; }
+function limiarQueda(ant)  { if (ant < 20) return null; if (ant < 40) return 30; if (ant <= 60) return 25; return 20; }
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'public, max-age=600');
@@ -18,10 +22,10 @@ export default async function handler(req, res) {
     const out = {};
     for (const r of data || []) {
       const ult = Number(r.u_ult15) || 0, ant = Number(r.u_ant15) || 0, v = Number(r.var_pct);
-      if (Math.max(ult, ant) < MIN_PECAS || !Number.isFinite(v)) continue;
-      if (v >= LIMIAR) out[String(r.ref_norm)] = { tendencia: 'quente', ult, ant, var: Math.round(v) };
-      else if (v <= -LIMIAR) out[String(r.ref_norm)] = { tendencia: 'fria', ult, ant, var: Math.round(v) };
+      if (!Number.isFinite(v)) continue;
+      if (v > 0) { const lim = limiarSubida(ult); if (lim != null && v >= lim) out[String(r.ref_norm)] = { tendencia: 'quente', ult, ant, var: Math.round(v), limiar: lim }; }
+      else if (v < 0) { const lim = limiarQueda(ant); if (lim != null && -v >= lim) out[String(r.ref_norm)] = { tendencia: 'fria', ult, ant, var: Math.round(v), limiar: lim }; }
     }
-    return res.status(200).json({ ok: true, regra: `15d x 15d anteriores, ±${LIMIAR}%, min ${MIN_PECAS} peças`, refs: out });
+    return res.status(200).json({ ok: true, regra: 'régua variável por volume (ver comentário no código)', refs: out });
   } catch (e) { return res.status(500).json({ ok: false, erro: String(e?.message || e) }); }
 }
