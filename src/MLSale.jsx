@@ -72,24 +72,17 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
     if (j.ok) { await carregar(false); onMudou && onMudou(); } else setAviso(j.erro || 'não marcou');
   };
 
-  const entrar = async () => {
-    if (!confirma) return;
-    const { grupo: g, promo: p, qtd } = confirma;
-    setEnviando(true);
-    // só os filhos convidados (candidate); preço = menor desconto possível
-    const itens = p.filhos.filter(f => f.status === 'candidate').map(f => {
-      const deal = f.max_price ?? f.price;
-      const it = { item_id: f.item_id, deal_price: deal, original_price: f.original_price, pct: f.seller_pct };
+  // 22/09: o envio individual segue a mesma regra do em massa — vai pra fila em segundo plano
+  const jobDe = (g, p, qtd) => ({ ref: String(refProd), conta, promo_key: p.promo_key, promo_id: p.promo_id, promo_nome: p.nome, tipo: p.tipo, family_id: g.family_id,
+    itens: p.filhos.filter(f => f.status === 'candidate').map(f => {
+      const it = { item_id: f.item_id, deal_price: f.max_price ?? f.price, original_price: f.original_price, pct: f.seller_pct };
       if (p.relampago) it.stock = Math.max(f.stock_min || 1, Math.min(Number(qtd) || f.stock_min || 1, f.stock_max || Number(qtd) || 1));
       return it;
-    });
-    const j = await api('', { method: 'POST', body: JSON.stringify({ acao: 'entrar', conta, ref: refProd, promo_key: p.promo_key, promo_id: p.promo_id, promo_nome: p.nome, tipo: p.tipo, family_id: g.family_id, itens }) });
-    setConfirma(null);
-    const okN = (j.resultados || []).filter(x => x.ok).length, errN = (j.resultados || []).length - okN;
-    setAviso(j.bloqueado ? `⛔ ${j.erro}` : j.expirado ? `⏳ ${j.erro}` : j.ok ? `Entrou em ${okN} anúncio(s) ✓${j.vencidos?.length ? ` · ${j.vencidos.length} convite(s) já tinha(m) expirado` : ''}` : `${okN} ok · ${errN} recusado(s) pelo ML — veja o log`);
-    await carregar(true); onMudou && onMudou();
-    setEnviando(false);
-  };
+    }) });
+  const mandarPraFila = (g, p, qtd) => { limparErros(String(refProd)); enfileirar([jobDe(g, p, qtd)]); setAviso(`⏳ ${p.nome || TIPO[p.tipo] || p.tipo} enviando em segundo plano — pode fechar e seguir.`); };
+  const entrar = () => { if (!confirma) return; const { grupo: g, promo: p, qtd } = confirma; setConfirma(null); mandarPraFila(g, p, qtd); };
+  // campanha comum: vai direto; relampago (quantidade) e desconto por preco (aviso) passam pela caixinha, que tambem so enfileira
+  const participar = (g, p) => { if (p.relampago || p.sem_campanha) setConfirma({ grupo: g, promo: p, qtd: p.filhos.find(f => f.status === 'candidate')?.stock_min || 5 }); else mandarPraFila(g, p); };
 
   // ── envio em massa (22/09): seleciona, envia em segundo plano, fecha e segue ──
   const [sel, setSel] = useState({});   // `${g.chave}|${p.promo_key}` -> true
@@ -239,8 +232,8 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
                                   <td style={td()}>{ativos ? <span style={{ color: C.ok }}>{ativos} ativo{ativos > 1 ? 's' : ''}</span> : null}{enviados ? <span style={{ color: C.azul }}>{ativos ? ' · ' : ''}{enviados} enviado{enviados > 1 ? 's' : ''}</span> : null}{(ativos || enviados) && cand ? ' · ' : ''}{cand ? <span>{cand} convidado{cand > 1 ? 's' : ''}</span> : null}{!ativos && !cand && !enviados ? '—' : ''}</td>
                                   <td style={td()}>
                                     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                                      {cand > 0 && dados?.submete && !p.acima_teto && (
-                                        <button disabled={enviando} onClick={() => setConfirma({ grupo: g, promo: p, qtd: p.filhos.find(f => f.status === 'candidate')?.stock_min || 5 })} style={{ ...btn(true), opacity: enviando ? .5 : 1 }}>{p.relampago ? '⚡ ' : ''}Participar</button>
+                                      {cand > 0 && dados?.submete && !p.acima_teto && !jobNaFila(String(refProd), p.promo_key) && (
+                                        <button disabled={jobNaFila(String(refProd), p.promo_key)} onClick={() => participar(g, p)} style={{ ...btn(true), opacity: jobNaFila(String(refProd), p.promo_key) ? .5 : 1 }}>{p.relampago ? '⚡ ' : ''}Participar</button>
                                       )}
                                       {cand > 0 && p.acima_teto && <span style={{ fontSize: 10.5, color: C.erro, alignSelf: 'center' }}>⛔ acima do teto</span>}
                                       {((cand > 0 && !p.visto && !p.ativa) || p.vermelho) && <button onClick={() => marcarVisto(g, p)} title={p.vermelho ? 'Já vi que está ativa acima do teto — apaga o vermelho' : 'Já vi, não quero entrar — apaga o verde desta promoção'} style={btn()}>Visto</button>}
@@ -292,7 +285,7 @@ export default function MLSale({ refProduto: refProd, desc, conta: contaInicial 
               )}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
                 <button onClick={() => setConfirma(null)} disabled={enviando} style={btn()}>cancelar</button>
-                <button onClick={entrar} disabled={enviando} style={btn(true)}>{enviando ? 'enviando…' : 'confirmar e enviar ao ML'}</button>
+                <button onClick={entrar} style={btn(true)}>enviar ao ML</button>
               </div>
             </div>
           </div>
