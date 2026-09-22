@@ -5367,7 +5367,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   // 19/09: Sale — promocoes do ML por REF. saleBadges: {ref:{campanha,relampago}} pinta o botao de verde
   const [saleOpen,setSaleOpen]=useState<any>(null);
   const [saleBadges,setSaleBadges]=useState<any>({});
-  const carregarSaleBadges=()=>{fetch('/api/ml-sale?badges=1&conta=todas').then(r=>r.json()).then(j=>{if(j?.ok)setSaleBadges(j.badges||{});}).catch(()=>{});};
+  const carregarSaleBadges=()=>{fetch('/api/ml-sale?badges=1&conta=exitus')   /* 21/09 (decisao dele): o verde/vermelho do card considera SO a Exitus (unica que submete) */.then(r=>r.json()).then(j=>{if(j?.ok)setSaleBadges(j.badges||{});}).catch(()=>{});};
   useEffect(()=>{carregarSaleBadges();const t=setInterval(carregarSaleBadges,10*60*1000);return()=>clearInterval(t);},[]);
   const [raioxOpen,setRaioxOpen]=useState<any>(null); // Raio-X do produto (15/08)
   const [fullOpen,setFullOpen]=useState<any>(null);   // Envio pro Full (17/08)
