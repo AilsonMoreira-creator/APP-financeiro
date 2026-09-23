@@ -4987,11 +4987,17 @@ const AparelhosPorLogin=()=>{
         const lista=dados[nome]||[];
         const ativos=lista.filter(a=>!a.revogado_em).length;
         return(
-          <div key={nome} style={{borderTop:"1px solid #f0ece6",padding:"10px 0"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+          <details key={nome} style={{borderTop:"1px solid #f0ece6",padding:"10px 0"}}>
+            <summary style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",listStyle:"none",flexWrap:"wrap"}}>
+              <span style={{fontSize:11,color:"#8a9aa4",width:12}}>▸</span>
               <span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>{nome}</span>
+              {(()=>{const ult=lista.filter(a=>!a.revogado_em).map(a=>new Date(a.ultimo_em).getTime()).filter(Boolean).sort((x,y)=>y-x)[0];const online=ult&&Date.now()-ult<15*60000;return(<>
+                <span style={{fontSize:11,fontWeight:700,color:online?"#27ae60":"#8a9aa4"}}>{online?"● ativo agora":"○ inativo"}</span>
+                <span style={{fontSize:11,color:"#8a9aa4"}}>último acesso {ult?fmt(new Date(ult).toISOString()):"—"}</span>
+              </>);})()}
               <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:10,background:ativos>1?"#fdeaea":"#eafbf0",color:ativos>1?"#c0392b":"#27ae60",border:`1px solid ${ativos>1?"#f4b8b8":"#c6e9cf"}`}}>{ativos} aparelho{ativos===1?"":"s"}{ativos>1?" ⚠":""}</span>
-            </div>
+            </summary>
+            <div style={{marginTop:6}}>
             {lista.map(a=>(
               <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",fontSize:12,color:a.revogado_em?"#b0b8c0":"#2c3e50",padding:"5px 0 5px 12px",borderLeft:`3px solid ${a.revogado_em?"#e0e0e0":a.device_id===meuDevice?"#4a7fa5":"#c6e9cf"}`,marginBottom:4}}>
                 <span style={{fontWeight:600,minWidth:150}}>{a.aparelho||'?'}{a.device_id===meuDevice?" (este aparelho)":""}</span>
@@ -5003,7 +5009,8 @@ const AparelhosPorLogin=()=>{
                   :<button onClick={()=>{if(window.confirm(`Desconectar este aparelho do login "${nome}"?`))acao('revogar',a.id);}} style={{marginLeft:"auto",background:"#fff",border:"1px solid #f4b8b8",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",color:"#c0392b",fontFamily:"Georgia,serif"}}>Desconectar</button>}
               </div>
             ))}
-          </div>
+            </div>
+          </details>
         );
       })}
     </div>
@@ -8822,20 +8829,7 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
         <button onClick={salvarConfig} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"8px 20px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Salvar Configurações</button>
       </div>
       <PainelBackup/>
-      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-        <div style={{padding:"14px 20px",borderBottom:verCodigo?"1px solid #e8e2da":"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>setVerCodigo(p=>!p)}>
-          <div><div style={{fontSize:14,fontWeight:600,color:"#2c3e50"}}>💻 Código Fonte do App</div><div style={{fontSize:12,color:"#a89f94",marginTop:2}}>Copie para deploy no StackBlitz / Vercel</div></div>
-          <span style={{fontSize:12,color:"#a89f94"}}>{verCodigo?"▲":"▼"}</span>
-        </div>
-        {verCodigo&&(
-          <div style={{padding:16}}>
-            <div style={{display:"flex",gap:8,marginBottom:10}}>
-              {navigator.clipboard&&<button onClick={()=>{navigator.clipboard.writeText(codigoFonte).then(()=>{setCopiado(true);setTimeout(()=>setCopiado(false),3000);});}} style={{background:"#27ae60",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer"}}>{copiado?"✓ Copiado!":" Copiar código"}</button>}
-            </div>
-            <textarea readOnly value={codigoFonte} style={{width:"100%",height:200,fontFamily:"monospace",fontSize:10,border:"1px solid #e8e2da",borderRadius:6,padding:10,resize:"vertical",outline:"none"}}/>
-          </div>
-        )}
-      </div>
+      {/* 22/09: bloco 'Codigo Fonte do App' removido (legado do StackBlitz) */}
     </div>
   );
 };
@@ -12936,7 +12930,7 @@ export default function App(){
           onExcluirProduto={(ref)=>{const ts=Date.now();lastUserEditTs.current=ts;setProdutosExcluidos(prev=>{const n={...prev,[ref]:ts};produtosExcluidosRef.current=n;return n;});setProdutos(prev=>prev.filter(x=>x.ref!==ref));marcarExcluido(supabase,'produtos',String(ref).trim());/* 18/09: lapide no espelho, senao ele restaura de volta */}} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
-          codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
+          /* 22/09: codigoFonte removido — lia o texto da pagina INTEIRA a cada render do App (a cada poucos segundos) e travava a tela Configuracoes */
           isAdmin={usuarioLogado?.admin===true}
           onZerarBoletos={()=>setBoletosShared([])}
           dadosBackup={{receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc}}
