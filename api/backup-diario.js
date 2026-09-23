@@ -76,7 +76,7 @@ async function tokenDrive() {
   const rt = await segredo('drive_backup_refresh');
   if (!rt) throw new Error('Drive do backup não autorizado (falta drive_backup_refresh)');
   const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: rt, client_id: process.env.GOOGLE_OAUTH_CLIENT_ID, client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET }) });
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: rt, client_id: (process.env.GOOGLE_OAUTH_CLIENT_ID || '').trim(), client_secret: (process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim() }) });
   const j = await r.json(); if (!j.access_token) throw new Error(`token Drive: ${j.error_description || j.error || r.status}`);
   return j.access_token;
 }
