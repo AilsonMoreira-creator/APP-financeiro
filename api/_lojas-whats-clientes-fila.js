@@ -19,7 +19,20 @@ function montarVars(declaradas, valorPorChave) {
   return arr;
 }
 
+// 23/09: conserta as mensagens ja gravadas com "{{1}}" no texto (so o que o app mostra; a cliente recebeu certo)
+async function consertarTextosAntigos() {
+  try {
+    const { data } = await supabase.from('lojas_whats_mensagens').select('id, texto, template_vars').eq('tipo_midia', 'template').like('texto', '%{{1}}%').limit(200);
+    for (const m of data || []) {
+      const tv = m.template_vars || {}; let t = String(m.texto || '');
+      for (const [k, v] of Object.entries(tv)) if (v) t = t.replaceAll(`{{${k}}}`, String(v));
+      if (t !== m.texto) await supabase.from('lojas_whats_mensagens').update({ texto: t }).eq('id', m.id);
+    }
+  } catch { /* nao atrapalha a fila */ }
+}
+
 export async function processarFila(limite = 40) {
+  await consertarTextosAntigos();
   // 1. candidatos pendentes
   const { data: cand } = await supabase
     .from('clientes_sofia_fila')
@@ -125,9 +138,9 @@ export async function processarFila(limite = 40) {
       // FIX 11/06/2026 (Ailson): texto era null → bolha VAZIA no chat da Tamara.
       // Agora renderiza o body_text do template com as vars e grava.
       let textoRenderizado = String(tpl.body_text || '');
-      for (const [k, v] of Object.entries(vars)) {
-        textoRenderizado = textoRenderizado.replaceAll(`{{${k}}}`, v);
-      }
+      // 23/09: vars e um ARRAY (posicao 0 = {{1}}). Antes usava a posicao crua (0) e o {{1}} nunca
+      // era trocado — a cliente recebia o nome certo (a Meta usa a ordem), mas o chat do app mostrava "{{1}}".
+      vars.forEach((v, i) => { textoRenderizado = textoRenderizado.replaceAll(`{{${i + 1}}}`, v); });
       const ts = agora();
       await supabase.from('lojas_whats_mensagens').insert({
         conversa_id: conversaId, direcao: 'saida', autor: 'sofia_ia', enviada_modo: 'aprovada', enviada_login: null,

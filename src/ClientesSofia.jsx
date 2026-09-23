@@ -542,7 +542,7 @@ export default function ClientesTab({ userId, refreshTick, reguaInicial = 'novos
       {/* ── CARTEIRA ── novos=feedback / reativar=inativos (exclui quem está em outra fase) */}
       {aba === 'carteira' && regua === 'novos' && (
         <>
-          <LoteFeedbackBanner tick={tick} onAprovado={() => setTickLocal(t => t + 1)} />
+          <LoteFeedbackBanner tick={tick} nSel={selecionados.size} onEnviarMassa={() => setModalMassa(true)} />
           <FeedbackTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendForcado || vendFiltro}
             bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
             onAbrir={abrirChat} abrindoId={abrindoId}
@@ -784,7 +784,7 @@ function ordenarLista(lista, modo) {
 // BANNER "LOTE DO DIA" — clientes que o cron deixou prontos no 15º dia.
 // Aprovação em 1 toque (libera todos de uma vez e dispara).
 // ═══════════════════════════════════════════════════════════════════════════
-function LoteFeedbackBanner({ tick, onAprovado }) {
+function LoteFeedbackBanner({ tick, nSel = 0, onEnviarMassa }) {
   const [n, setN] = useState(0);
   const [enviando, setEnviando] = useState(false);
   const [tickLocal, setTickLocal] = useState(0);
@@ -832,12 +832,13 @@ function LoteFeedbackBanner({ tick, onAprovado }) {
       <div style={{ fontSize: fz(13), color: palette.ink }}>
         <b>Lote do dia:</b> {n} cliente(s) no 15º dia, prontos pra disparar o feedback.
       </div>
-      <button onClick={aprovar} disabled={enviando} style={{
-        background: palette.ok, color: '#fff', border: 'none', borderRadius: 8,
-        padding: '8px 14px', fontSize: fz(13), fontWeight: 600, cursor: enviando ? 'not-allowed' : 'pointer',
-        fontFamily: FONT, opacity: enviando ? 0.6 : 1,
+      {/* 23/09 (pedido dele): nada de "enviar pra todos" — ele sempre escolhe quem faz sentido.
+          O botao aqui e o mesmo "Enviar em massa" da selecao: so liga com cards marcados. */}
+      <button onClick={() => nSel > 0 && onEnviarMassa && onEnviarMassa()} disabled={!nSel} title={nSel ? '' : 'Marque os cards das clientes que fazem sentido'} style={{
+        background: nSel ? palette.accent : 'transparent', color: nSel ? palette.bg : palette.ink, border: nSel ? 'none' : `1px dashed ${palette.warn}`, borderRadius: 8,
+        padding: '8px 14px', fontSize: fz(13), fontWeight: 600, cursor: nSel ? 'pointer' : 'default', fontFamily: FONT,
       }}>
-        {enviando ? 'Enviando...' : 'Aprovar e enviar todos'}
+        {nSel ? `Enviar em massa (${nSel})` : 'Selecione os cards pra enviar'}
       </button>
     </div>
   );
