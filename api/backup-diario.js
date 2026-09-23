@@ -57,11 +57,16 @@ async function exportar() {
   if (error) throw new Error(`amicia_data: ${error.message}`);
   dados.amicia_data = (am || []).filter(r => !AMICIA_FORA.test(r.user_id));
   for (const lista of Object.values(TABELAS)) for (const [t, cols] of lista) dados.tabelas[t] = await lerTabela(t, cols);
+  // 22/09: ESTRUTURA do banco (tabelas, indices, views, funcoes, gatilhos, regras de acesso) + historico de migracoes
+  const est = await supabase.rpc('backup_estrutura'); if (est.error) throw new Error(`estrutura: ${est.error.message}`);
+  const mig = await supabase.rpc('backup_migracoes'); if (mig.error) throw new Error(`migracoes: ${mig.error.message}`);
+  dados.estrutura = est.data; dados.migracoes = mig.data;
   // resumo por modulo (auditoria)
   const modulos = {};
   const add = (m, linhas, txt) => { const x = modulos[m] = modulos[m] || { linhas: 0, bytes: 0, partes: [] }; x.linhas += linhas; x.bytes += Buffer.byteLength(txt); x.partes.push(sha(txt)); };
   for (const r of dados.amicia_data) add(MOD_AMICIA(r.user_id), 1, JSON.stringify(r));
   for (const [m, lista] of Object.entries(TABELAS)) for (const [t] of lista) add(m, dados.tabelas[t].length, JSON.stringify(dados.tabelas[t]));
+  add('estrutura', (est.data.tabelas || []).length, JSON.stringify(est.data)); add('migracoes', (mig.data || []).length, JSON.stringify(mig.data));
   for (const m of Object.values(modulos)) { m.sha256 = sha(m.partes.join('')); delete m.partes; }
   return { dados, modulos };
 }
@@ -145,10 +150,13 @@ export default async function handler(req, res) {
     conf.amicia_data = relido.amicia_data.length === dados.amicia_data.length;
     conf.tabelas = Object.entries(dados.tabelas).every(([t, v]) => (relido.tabelas[t] || []).length === v.length);
     conf.nao_vazio = dados.amicia_data.length > 10 && (dados.tabelas.lojas_clientes || []).length > 100;
+    const ce = relido.estrutura?.contagem || {};
+    conf.estrutura = { tabelas: `${relido.estrutura?.tabelas?.length}/${ce.tabelas}`, views: `${relido.estrutura?.views?.length}/${ce.views}`, gatilhos: `${relido.estrutura?.gatilhos?.length}/${ce.gatilhos}`, policies: `${relido.estrutura?.policies?.length}/${ce.policies}`, funcoes: relido.estrutura?.funcoes?.length, indices: relido.estrutura?.indices?.length, migracoes: relido.migracoes?.length };
+    conf.estrutura_ok = relido.estrutura?.tabelas?.length === ce.tabelas && relido.estrutura?.views?.length === ce.views && relido.estrutura?.gatilhos?.length === ce.gatilhos && relido.estrutura?.policies?.length === ce.policies && ce.tabelas > 100;
     // compara com o backup anterior: queda brusca de linhas = suspeito
     const { data: ant } = await supabase.from('backup_execucoes').select('modulos').eq('ok', true).eq('tipo', 'diario').neq('arquivo', '(seco)').order('id', { ascending: false }).limit(1).maybeSingle();
     conf.quedas = ant?.modulos ? Object.entries(modulos).filter(([m, v]) => ant.modulos[m]?.linhas > 5 && v.linhas < ant.modulos[m].linhas * 0.7).map(([m, v]) => `${m}: ${ant.modulos[m].linhas}→${v.linhas}`) : [];
-    let ok = conf.sha_igual && conf.amicia_data && conf.tabelas && conf.nao_vazio && !conf.quedas.length;
+    let ok = conf.sha_igual && conf.amicia_data && conf.tabelas && conf.nao_vazio && conf.estrutura_ok && !conf.quedas.length;
     // RETENCAO
     const limite = Date.now() - RETENCAO_DIAS * 86400e3;
     const antigos = (await listar(tk, pastaId)).filter(f => /^backup-\d{4}/.test(f.name) && new Date(f.createdTime).getTime() < limite);
@@ -157,7 +165,7 @@ export default async function handler(req, res) {
     // TESTE DE RESTAURACAO (domingo ou ?teste=1)
     if (teste) { try { conf.restauracao = await testarRestauracao(tk, pastaId); if (!conf.restauracao.ok) ok = false; } catch (e) { conf.restauracao = { ok: false, erro: String(e?.message || e) }; ok = false; } }
     const erro = ok ? null : [!conf.sha_igual && 'arquivo no Drive diferente do enviado', !conf.amicia_data && 'contagem amicia_data não bate', !conf.tabelas && 'contagem de tabelas não bate',
-      !conf.nao_vazio && 'backup vazio/pequeno demais', conf.quedas.length && `queda brusca: ${conf.quedas.join(', ')}`, conf.restauracao && !conf.restauracao.ok && `teste de restauração falhou: ${conf.restauracao.erro || conf.restauracao.divergentes?.join(',')}`].filter(Boolean).join(' · ');
+      !conf.nao_vazio && 'backup vazio/pequeno demais', !conf.estrutura_ok && 'estrutura do banco incompleta', conf.quedas.length && `queda brusca: ${conf.quedas.join(', ')}`, conf.restauracao && !conf.restauracao.ok && `teste de restauração falhou: ${conf.restauracao.erro || conf.restauracao.divergentes?.join(',')}`].filter(Boolean).join(' · ');
     await fim({ ok, tipo: teste ? 'teste_restauracao' : 'diario', arquivo: nome, drive_file_id: up.id, bytes: gz.length, sha256: sha(gz), modulos, conferencia: conf, erro });
     return res.status(200).json({ ok, arquivo: nome, bytes: gz.length, modulos, conferencia: conf, erro });
   } catch (e) {
