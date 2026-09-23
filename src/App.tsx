@@ -1,7 +1,7 @@
 // @ts-nocheck  
 import { useState, useEffect, useRef, useCallback, useMemo, Component } from "react";
 import { supabase, USER_ID } from "./supabase.js";
-import { fotoUrlConhecida, fotoSemFoto, marcarFotoOk, marcarSemFoto, candidatosFoto } from "./fotoProdutosCache.js";
+import { fotoUrlConhecida, fotoSemFoto, marcarFotoOk, marcarSemFoto, candidatosFoto, fotoInvalidar } from "./fotoProdutosCache.js";
 import CalcMetaAdsMeluni from "./CalcMetaAdsMeluni.jsx";
 import CalcDivergencia from "./CalcDivergencia.jsx";
 import { CalcAnaliseMeluni } from "./CalcAnaliseMeluni";
@@ -5210,6 +5210,8 @@ const FotoProd=({sbUrl,refProd,onZoom})=>{
   // placeholder IRMAO (do pai) na mao; no re-render seguinte o componente voltava com o placeholder
   // proprio e o irmao continuava ligado — duas caixas vazias na lista de cortes.
   const [semFoto,setSemFoto]=useState(()=>fotoSemFoto(norm));
+  const [,setTickLista]=useState(0);
+  useEffect(()=>{const f=()=>{setSemFoto(fotoSemFoto(norm));setTickLista(x=>x+1);};window.addEventListener('fotos-produtos-lista',f);return()=>window.removeEventListener('fotos-produtos-lista',f);},[norm]);   // 23/09: foto nova aparece sem recarregar
   const storageBase=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/`:'';
   const cb='?v='+(()=>{const d=new Date();d.setDate(d.getDate()-d.getDay());return d.toISOString().slice(0,10);})();
   if(!storageBase)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
@@ -9344,7 +9346,7 @@ const CalcFormProd=({onSalvar,onVoltar,inicial,onRegras})=>{
       const resp=await fetch("/api/produto-foto",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({ref:f.ref.trim(),image_base64:resized,content_type:"image/jpeg"})});
       const data=await resp.json();
-      if(data.ok&&data.url){const cacheBust=data.url+'?t='+Date.now();s("foto",cacheBust);setFotoPreview(cacheBust);}
+      if(data.ok&&data.url){const cacheBust=data.url+'?t='+Date.now();s("foto",cacheBust);setFotoPreview(cacheBust);fotoInvalidar(f.ref);/* 23/09: as outras telas passam a ver a foto nova na hora */}
       else{alert("Erro no upload: "+(data.error||""));}
     }catch(err){alert("Erro: "+err.message);}
     setFotoUploading(false);
@@ -9352,7 +9354,7 @@ const CalcFormProd=({onSalvar,onVoltar,inicial,onRegras})=>{
 
   const handleFotoRemove=async()=>{
     if(!f.ref.trim())return;
-    try{await fetch("/api/produto-foto",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:f.ref.trim()})});}catch{}
+    try{await fetch("/api/produto-foto",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:f.ref.trim()})});}catch{}fotoInvalidar(f.ref);
     s("foto","");setFotoPreview("");
   };
 
@@ -9895,14 +9897,14 @@ function FichaFormProd(props){
       return fetch("/api/produto-foto",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({ref:f.ref.trim(),image_base64:resized,content_type:"image/jpeg"})});
     }).then(function(resp){return resp.json();}).then(function(data){
-      if(data.ok&&data.url){var cacheBust=data.url+'?t='+Date.now();s("foto",cacheBust);setFotoPreview(cacheBust);}
+      if(data.ok&&data.url){var cacheBust=data.url+'?t='+Date.now();s("foto",cacheBust);setFotoPreview(cacheBust);fotoInvalidar(f.ref);}
       else{alert("Erro no upload: "+(data.error||""));}
     }).catch(function(err){alert("Erro: "+err.message);}).finally(function(){setFotoUploading(false);});
   };
 
   var handleFotoRemove=function(){
     if(!f.ref.trim())return;
-    fetch("/api/produto-foto",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:f.ref.trim()})}).catch(function(){});
+    fetch("/api/produto-foto",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:f.ref.trim()})}).catch(function(){}).finally(function(){fotoInvalidar(f.ref);});
     s("foto","");setFotoPreview("");
   };
   var custo=ftCalcCusto(f);

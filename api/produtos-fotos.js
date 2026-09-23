@@ -7,7 +7,7 @@
 import { supabase } from './_bling-helpers.js';
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=3600');
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
   const nomes = []; let de = 0;
   for (;;) {
     const { data, error } = await supabase.storage.from('produtos').list('', { limit: 1000, offset: de, sortBy: { column: 'name', order: 'asc' } });

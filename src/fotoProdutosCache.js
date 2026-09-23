@@ -23,23 +23,45 @@ function salvar() { clearTimeout(salvarT); salvarT = setTimeout(() => { try { lo
 // ── 23/09: LISTA do bucket (o que existe de verdade). Com ela, a cadeia de tentativas vira
 // uma escolha certa: so entra na lista de candidatos o arquivo que existe, e REF sem nenhum
 // arquivo ja nasce "sem foto" — zero requisicoes erradas ao Storage (eram 2.269 400s/dia).
-const KEY_LISTA = 'foto_produtos_lista_v1';
-let lista = null;
-try { const j = JSON.parse(localStorage.getItem(KEY_LISTA) || 'null'); if (j && j.dia === DIA && Array.isArray(j.arquivos)) lista = new Set(j.arquivos); } catch { /* ok */ }
-if (typeof window !== 'undefined' && !lista) {
-  fetch('/api/produtos-fotos').then(r => r.json()).then(j => {
-    if (j?.ok && Array.isArray(j.arquivos) && j.arquivos.length) { lista = new Set(j.arquivos); try { localStorage.setItem(KEY_LISTA, JSON.stringify({ dia: DIA, arquivos: j.arquivos })); } catch { /* ok */ } }
-  }).catch(() => { /* sem lista: segue o modo antigo */ });
+const KEY_LISTA = 'foto_produtos_lista_v2';
+const TTL_LISTA = 10 * 60 * 1000;   // 23/09: 10 min (antes: o dia inteiro — foto nova ficava invisivel ate o dia seguinte)
+let lista = null, listaEm = 0, buscando = null;
+try { const j = JSON.parse(localStorage.getItem(KEY_LISTA) || 'null'); if (j && Array.isArray(j.arquivos) && Date.now() - (j.em || 0) < 6 * 3600e3) { lista = new Set(j.arquivos); listaEm = j.em || 0; } } catch { /* ok */ }
+export function atualizarListaFotos(forcar) {
+  if (typeof window === 'undefined') return Promise.resolve();
+  if (buscando) return buscando;
+  if (!forcar && lista && Date.now() - listaEm < TTL_LISTA) return Promise.resolve();
+  buscando = fetch('/api/produtos-fotos' + (forcar ? '?t=' + Date.now() : '')).then(r => r.json()).then(j => {
+    if (j?.ok && Array.isArray(j.arquivos) && j.arquivos.length) {
+      lista = new Set(j.arquivos); listaEm = Date.now();
+      try { localStorage.setItem(KEY_LISTA, JSON.stringify({ em: listaEm, arquivos: j.arquivos })); } catch { /* ok */ }
+      try { window.dispatchEvent(new Event('fotos-produtos-lista')); } catch { /* ok */ }
+    }
+  }).catch(() => { /* sem lista: segue o modo antigo */ }).finally(() => { buscando = null; });
+  return buscando;
+}
+atualizarListaFotos(false);
+if (typeof window !== 'undefined') setInterval(() => atualizarListaFotos(false), TTL_LISTA);
+// chamado depois de subir/apagar foto (Ficha Tecnica/Calculadora): esquece a REF e rele a lista na hora
+export function fotoInvalidar(ref) {
+  const m = carregar(); const norm = String(ref || '').trim().toUpperCase().replace(/^0+/, '');
+  for (const k of [norm, String(ref || '').trim().toUpperCase()]) { delete m.ok[k]; delete m.sem[k]; }
+  salvar(); return atualizarListaFotos(true);
 }
 function filtrarPelaLista(urls) { return lista ? urls.filter(u => lista.has(u)) : urls; }
 export function filtrarFotosExistentes(urls) { return filtrarPelaLista([...new Set(urls)]); }
 export function listaFotosPronta() { return !!lista; }
 
-export function fotoUrlConhecida(ref) { const m = carregar(); return m.ok[ref] || null; }
+export function fotoUrlConhecida(ref) {
+  const m = carregar(); const u = m.ok[ref]; if (!u) return null;
+  if (lista) { const arq = String(u).split('/produtos/')[1]?.split('?')[0]; if (arq && !lista.has(arq)) { delete m.ok[ref]; salvar(); return null; } }   // arquivo trocado/apagado
+  return u;
+}
 export function fotoSemFoto(ref) {
-  const m = carregar(); if (m.sem[ref] === true) return true;
-  if (lista && !m.ok[ref] && !filtrarPelaLista(candidatosFoto(ref, true)).length) return true;   // 23/09: nao existe arquivo nenhum pra essa REF
-  return false;
+  const m = carregar();
+  // 23/09: com a lista, ela manda (vale mais que o "sem foto do dia" antigo — foto nova aparece)
+  if (lista) return !candidatosFoto(ref, true).length;
+  return m.sem[ref] === true;
 }
 export function marcarFotoOk(ref, url) { const m = carregar(); m.ok[ref] = url; delete m.sem[ref]; salvar(); }
 export function marcarSemFoto(ref) { const m = carregar(); m.sem[ref] = true; salvar(); }
