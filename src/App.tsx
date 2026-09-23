@@ -8695,10 +8695,11 @@ const SaudeApp=({isAdmin})=>{
         <div style={{position:"absolute",bottom:p,left:0,right:0,height:2,background:"#2f4a6a"}}/>
       </div>);})}
     </div>
-    <div style={{fontSize:13,fontWeight:700,color:"#2b2b2b",marginBottom:6}}>Erros relatados pelas telas <span style={{fontWeight:400,fontSize:11,color:"#a89f94"}}>(últimos 20)</span></div>
+    <details style={{marginBottom:10}}><summary style={{fontSize:13,fontWeight:700,color:"#2b2b2b",cursor:"pointer",padding:"4px 0"}}>Erros relatados pelas telas <span style={{fontWeight:400,fontSize:11,color:"#a89f94"}}>({(d.erros_app||[]).length})</span></summary>
     {(d.erros_app||[]).length===0&&<div style={{fontSize:12,color:"#a89f94",marginBottom:12}}>nenhum</div>}
     {(d.erros_app||[]).slice(0,8).map((e,i)=>(<div key={i} style={{fontSize:12,color:"#2b2b2b",padding:"5px 0",borderBottom:"1px solid #f0ece6"}}><span style={{color:"#a89f94"}}>{fmt(e.criado_em)}</span> · <b>{e.usuario||"?"}</b>{e.modulo?` · ${e.modulo}`:""} — {String(e.mensagem||"").slice(0,120)}</div>))}
-    <div style={{fontSize:13,fontWeight:700,color:"#2b2b2b",margin:"14px 0 6px"}}>Incidentes</div>
+    </details>
+    <details style={{marginBottom:10}}><summary style={{fontSize:13,fontWeight:700,color:"#2b2b2b",cursor:"pointer",padding:"4px 0"}}>Incidentes <span style={{fontWeight:400,fontSize:11,color:"#a89f94"}}>({(d.incidentes||[]).length})</span></summary>
     {(d.incidentes||[]).length===0&&<div style={{fontSize:12,color:"#a89f94",marginBottom:12}}>nenhum registrado</div>}
     {(d.incidentes||[]).map(inc=>(<div key={inc.codigo} style={{border:`1px solid ${cor[inc.nivel]}`,background:bg[inc.nivel],borderRadius:10,padding:"10px 12px",marginBottom:8}}>
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><b style={{color:cor[inc.nivel]}}>{inc.nivel==="vermelho"?"🔴":"🟡"} {inc.codigo}</b><span style={{fontSize:12,color:"#6b6259"}}>{fmt(inc.aberto_em)}</span><span style={{fontSize:11,marginLeft:"auto",color:inc.enviado_whats?"#1e8e4e":"#a89f94"}}>{inc.enviado_whats?"WhatsApp enviado":(inc.envio_erro?"envio falhou":"não enviado")}</span></div>
@@ -8707,6 +8708,7 @@ const SaudeApp=({isAdmin})=>{
       {Array.isArray(inc.dossie?.ativos)&&inc.dossie.ativos.length>0&&<div style={{fontSize:12,color:"#6b6259",marginTop:2}}>Ativos na hora: {inc.dossie.ativos.map(a=>a.usuario+(a.modulo?" ("+a.modulo+")":"")).join(", ")}</div>}
       <div style={{fontSize:11,color:"#a89f94",marginTop:4}}>Cole o código no Claude pra investigar pelo dossiê.</div>
     </div>))}
+    </details>
     {isAdmin&&(<div style={{marginTop:16,padding:"12px 14px",background:"#faf8f4",borderRadius:10}}>
       <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Alertas no WhatsApp (pela Sofia)</div>
       <div style={{fontSize:12,color:"#6b6259",marginBottom:8}}>Número cadastrado: <b>{d.config?.whats_admin||"(nenhum)"}</b> · envio {enviarOn?"LIGADO":"desligado"} · amarelo até {d.config?.max_amarelo_dia}/dia · vermelho até {d.config?.max_vermelho_dia}/dia · {d.config?.hora_ini}h–{d.config?.hora_fim}h · {d.config?.intervalo_min} min entre envios</div>
@@ -8814,56 +8816,12 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
           </div>
         </div>
       </Section>
-      {isAdmin&&(
-        <div style={{background:"#fdeaea",borderRadius:10,border:"1px solid #f4b8b8",padding:"14px 20px",marginBottom:16}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#c0392b",marginBottom:6}}>⚠ Zerar boletos</div>
-          <div style={{fontSize:12,color:"#8a7070",marginBottom:10}}>Remove todos os boletos salvos no Supabase. Use apenas quando precisar reimportar os dados limpos da planilha. Os boletos de Março voltam automaticamente do código.</div>
-          <button onClick={()=>{
-            if(window.confirm("⚠ Tem certeza? Isso vai apagar TODOS os boletos salvos. Os de Março voltam do código — os demais precisarão ser reimportados.")){
-              if(onZerarBoletos) onZerarBoletos();
-              window.alert("✅ Boletos zerados! O auto-save vai salvar o array vazio no Supabase em 2 segundos. Depois reimporte os boletos de Abr/Mai/Jun/Jul.");
-            }
-          }} style={{background:"#c0392b",color:"#fff",border:"none",borderRadius:6,padding:"8px 20px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>
-            🗑 Zerar todos os boletos
-          </button>
-        </div>
-      )}
+      {/* 22/09: 'Zerar boletos' removido a pedido do Ailson (risco sem uso) */}
       <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:12,marginBottom:16}}>
         {saved&&<span style={{fontSize:12,color:"#27ae60",fontFamily:"Georgia,serif"}}>✓ Configurações salvas</span>}
         <button onClick={salvarConfig} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"8px 20px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Salvar Configurações</button>
       </div>
-      {/* Backup — visível pra todos com acesso a configurações */}
-      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginBottom:16}}>
-          <div style={{padding:"14px 20px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontSize:14,fontWeight:600,color:"#2c3e50"}}>🗄 Backup e Restauração</div>
-              <div style={{fontSize:12,color:"#a89f94",marginTop:3}}>Salva todos os dados e configurações do app</div>
-            </div>
-            {diasDesdeBackup!==null&&(<div style={{fontSize:11,color:diasDesdeBackup>=7?"#c0392b":"#27ae60",fontWeight:600}}>{diasDesdeBackup===0?"Backup hoje":diasDesdeBackup===1?"Último backup: ontem":`Último backup: ${diasDesdeBackup} dias atrás`}{diasDesdeBackup>=7&&" ⚠"}</div>)}
-          </div>
-          <div style={{padding:20}}>
-            <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
-              <button onClick={fazerBackup} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>💾 Fazer Backup Agora</button>
-              <div>
-                <input type="file" accept=".json" id="restore-input" style={{display:"none"}} onChange={restaurarBackup}/>
-                {!confirmRestore?<button onClick={()=>setConfirmRestore(true)} style={{background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:6,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>↩ Restaurar Backup</button>:<div style={{display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:12,color:"#c0392b"}}>⚠ Isso substituirá todos os dados.</span><label htmlFor="restore-input" style={{background:"#c0392b",color:"#fff",border:"none",borderRadius:6,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Escolher arquivo</label><button onClick={()=>setConfirmRestore(false)} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:6,padding:"8px 12px",fontSize:12,cursor:"pointer"}}>Cancelar</button></div>}
-              </div>
-            </div>
-            {backupMsg&&<div style={{fontSize:12,padding:"8px 12px",borderRadius:6,background:backupMsg.startsWith("✓")?"#eafbf0":"#fdeaea",color:backupMsg.startsWith("✓")?"#27ae60":"#c0392b"}}>{backupMsg}</div>}
-            {/* Backup Diário Automático */}
-            <div style={{marginTop:14,paddingTop:14,borderTop:"1px dashed #e8e2da"}}>
-              <div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:6}}>☁ Backup Diário Automático</div>
-              <div style={{fontSize:11,color:"#a89f94",marginBottom:8}}>Salvo automaticamente ao abrir o app · 1x por dia no Supabase</div>
-              {!confirmDiario?
-                <button onClick={()=>setConfirmDiario(true)} style={{background:"#fff",color:"#e67e22",border:"1px solid #e67e22",borderRadius:6,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>↩ Restaurar Backup Diário</button>
-              :<div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <span style={{fontSize:12,color:"#c0392b"}}>⚠ Isso substituirá todos os dados atuais.</span>
-                <button onClick={async()=>{if(onRestaurarDiario){const r=await onRestaurarDiario();setBackupMsg(r.msg);setConfirmDiario(false);setTimeout(()=>setBackupMsg(""),3000);}}} style={{background:"#e67e22",color:"#fff",border:"none",borderRadius:6,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Confirmar</button>
-                <button onClick={()=>setConfirmDiario(false)} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:6,padding:"8px 12px",fontSize:12,cursor:"pointer"}}>Cancelar</button>
-              </div>}
-            </div>
-          </div>
-        </div>
+      <PainelBackup/>
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
         <div style={{padding:"14px 20px",borderBottom:verCodigo?"1px solid #e8e2da":"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>setVerCodigo(p=>!p)}>
           <div><div style={{fontSize:14,fontWeight:600,color:"#2c3e50"}}>💻 Código Fonte do App</div><div style={{fontSize:12,color:"#a89f94",marginTop:2}}>Copie para deploy no StackBlitz / Vercel</div></div>
@@ -10694,6 +10652,45 @@ function LogCortesOficinas({onClose,oficinas}){
   </div>;
 }
 
+// ── 22/09: SAUDE DO BACKUP (tela Configuracoes) ─────────────────────────────
+function PainelBackup(){
+  const [d,setD]=useState<any>(null);const [erro,setErro]=useState("");
+  useEffect(()=>{fetch('/api/backup-status').then(r=>r.json()).then(j=>{if(j.ok)setD(j);else setErro(j.erro||"falha");}).catch(()=>setErro("sem conexão"));},[]);
+  const fmt=(x:string)=>x?new Date(x).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"—";
+  const kb=(b:number)=>b?(b/1048576).toFixed(1).replace(".",",")+" MB":"—";
+  const saudavel=d&&d.ultimo?.ok&&d.horas_desde_ok!=null&&d.horas_desde_ok<=26;
+  const cor=!d?"#a89f94":saudavel?"#1f7a48":"#b4530a";
+  return(<div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginBottom:16}}>
+    <div style={{padding:"14px 20px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da"}}>
+      <div style={{fontSize:14,fontWeight:600,color:"#2c3e50"}}>🗄 Backup automático</div>
+      <div style={{fontSize:12,color:cor,marginTop:4,fontWeight:600}}>{erro?`não consegui ler o status (${erro})`:!d?"carregando…":!d.ultimo?"nenhum backup ainda":saudavel?`✓ Saudável — último backup ${fmt(d.ultimo_ok.em)}`:`⚠ Atenção — ${d.ultimo?.ok===false?"o último backup falhou: "+(d.ultimo.erro||""):`sem backup bom há ${d.horas_desde_ok} h`}`}</div>
+    </div>
+    <div style={{padding:"14px 20px"}}>
+      {d?.ultimo_ok&&<div style={{display:"flex",gap:14,flexWrap:"wrap",fontSize:12,color:"#4a4038",marginBottom:10}}>
+        <span>Arquivo: <b>{d.ultimo_ok.arquivo}</b></span><span>Tamanho: <b>{kb(d.ultimo_ok.bytes)}</b></span><span>Blocos: <b>{d.ultimo_ok.modulos}</b></span><span>Duração: <b>{d.ultimo_ok.segundos}s</b></span>
+        {d.ultimo_ok.estrutura&&<span>Estrutura: <b>{d.ultimo_ok.estrutura.tabelas}</b> tabelas · <b>{d.ultimo_ok.estrutura.views}</b> views · <b>{d.ultimo_ok.estrutura.policies}</b> regras</span>}
+      </div>}
+      {d?.ultimo_teste&&<div style={{fontSize:12,color:d.ultimo_teste.restauracao.ok?"#1f7a48":"#b4530a",marginBottom:10}}>{d.ultimo_teste.restauracao.ok?"✓":"⚠"} Último teste de restauração: {fmt(d.ultimo_teste.em)} — {d.ultimo_teste.restauracao.registros} blocos restaurados, {d.ultimo_teste.restauracao.divergentes} divergência(s)</div>}
+      {d?.execucoes?.length>0&&<details style={{marginBottom:10}}><summary style={{fontSize:12,fontWeight:600,color:"#2c3e50",cursor:"pointer"}}>Histórico ({d.execucoes.length})</summary>
+        {d.execucoes.map((e:any,i:number)=>(<div key={i} style={{fontSize:11.5,padding:"5px 0",borderBottom:"1px solid #f0ece6",color:"#4a4038"}}><span style={{color:e.ok?"#1f7a48":"#b4530a"}}>{e.ok?"✓":"✗"}</span> {fmt(e.em)} · {e.tipo==="teste_restauracao"?"backup + teste de restauração":"backup"} · {kb(e.bytes)} · {e.segundos??"?"}s{e.erro?<span style={{color:"#b4530a"}}> — {e.erro}</span>:null}</div>))}
+      </details>}
+      <details><summary style={{fontSize:12,fontWeight:600,color:"#2c3e50",cursor:"pointer"}}>Como o backup funciona</summary>
+        <div style={{fontSize:12,color:"#4a4038",lineHeight:1.65,marginTop:8}}>
+          <p style={{margin:"0 0 8px"}}><b>O que é.</b> Uma cópia diária de tudo o que é importante do app, guardada <b>fora</b> do sistema: no Google Drive da conta exclusivo@meluniloja.com.br, pasta <i>Backups App Amícia</i>. Se o banco de dados (Supabase) ou a hospedagem (Vercel) tiverem um problema, essa cópia continua intacta e pode ser aberta de qualquer lugar.</p>
+          <p style={{margin:"0 0 8px"}}><b>Quando roda.</b> Sozinho, todo dia às <b>03:30</b> — antes da esteira de notas fiscais, que começa às 04:00. Leva uns 15 segundos. Ninguém precisa clicar em nada.</p>
+          <p style={{margin:"0 0 8px"}}><b>O que entra.</b> Os dados de todos os módulos (financeiro, boletos, oficinas, sala de corte, calculadora, ficha técnica, folha, agenda, usuários, configurações), a base de clientes das lojas, o estoque e os mapas de SKU, e a <b>estrutura do banco</b> — o desenho de todas as tabelas, telas de consulta, regras de acesso e automações —, além do histórico de todas as alterações de estrutura já feitas.</p>
+          <p style={{margin:"0 0 8px"}}><b>O que fica de fora, de propósito.</b> Senhas (mesmo em código), tokens das integrações (Bling, Mercado Livre, Meta, Google) e chaves. Numa reconstrução, essas integrações são autorizadas de novo. Também ficam de fora dados que o sistema recalcula sozinho.</p>
+          <p style={{margin:"0 0 8px"}}><b>Como ele se confere.</b> Depois de gravar, o backup <b>baixa o arquivo de volta do Drive</b> e compara com o que enviou, byte a byte, e confere a quantidade de registros de cada módulo e de cada peça da estrutura. Também compara com o backup do dia anterior: se algum módulo encolheu mais de 30% de um dia pro outro, marca como suspeito — é o sinal típico de um dado que foi sobrescrito por engano.</p>
+          <p style={{margin:"0 0 8px"}}><b>Teste de restauração.</b> Todo <b>domingo</b> ele pega a cópia do Drive, restaura numa área de teste separada e compara registro a registro. É a prova de que o backup volta — não só de que foi gravado.</p>
+          <p style={{margin:"0 0 8px"}}><b>Quanto guarda.</b> Os últimos 30 dias. Os mais antigos são apagados automaticamente. Cada arquivo tem ~1 MB.</p>
+          <p style={{margin:"0 0 8px"}}><b>Quando avisa.</b> Se um backup falhar, não bater na conferência, ou se passar mais de 26 horas sem um backup bom, o monitor de saúde manda um alerta amarelo no WhatsApp. Sem alerta = está funcionando. Este painel mostra a mesma informação.</p>
+          <p style={{margin:0}}><b>Se precisar restaurar.</b> Não é um botão, de propósito: restaurar substitui dados que estão em uso. O caminho é abrir o arquivo do dia desejado no Drive e restaurar o módulo afetado com acompanhamento, conferindo o antes e o depois.</p>
+        </div>
+      </details>
+    </div>
+  </div>);
+}
+
 export default function App(){
   const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");if(!s)return null;const u=JSON.parse(s);const ehAdmin=(u.id===1||u.usuario==='admin');if(ehAdmin){u.admin=true;/* Admin sempre recebe TODOS os modulos atualizados (inclui modulos novos como osamicia) */u.modulos=[...TODOS_MODULOS,"usuarios"];try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}else if(u.admin&&!(u.modulos||[]).includes("usuarios")){u.modulos=[...(u.modulos||[]),"usuarios"];/* 19/09: admin sempre ve Usuarios */}return u;}catch{return null;}});
   const [active,setActive]=useState(()=>{
@@ -11744,7 +11741,8 @@ export default function App(){
   },[dbCarregado]);
 
   // ── BACKUP DIÁRIO AUTOMÁTICO (1x por dia ao abrir) ─────────────────────────
-  useEffect(()=>{
+  useEffect(()=>{ if(true)return; /* 22/09: backup antigo do navegador DESLIGADO — substituido pelo backup diario do servidor no Drive (api/backup-diario) */
+
     if(!dbCarregado||!supabase)return;
     const hoje=new Date().toISOString().slice(0,10);
     const ultimoBackup=localStorage.getItem("amica_backup_diario_data");
