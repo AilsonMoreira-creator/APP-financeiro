@@ -3,6 +3,7 @@
  * Prefixo _ = Vercel não expõe como endpoint
  */
 
+import './_upsert-dedupe.js';
 import { createClient } from '@supabase/supabase-js';
 
 const ML_API = 'https://api.mercadolibre.com';

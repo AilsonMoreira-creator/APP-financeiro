@@ -2,6 +2,7 @@
  * _bling-helpers.js — Funções compartilhadas entre serverless Bling
  * Prefixo _ = Vercel não expõe como endpoint
  */
+import './_upsert-dedupe.js';
 import { createClient } from '@supabase/supabase-js';
 
 export const supabase = createClient(

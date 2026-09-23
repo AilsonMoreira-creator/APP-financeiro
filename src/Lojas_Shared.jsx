@@ -1012,6 +1012,7 @@ async function _buscarFotoSofia(refNorm) {
   }
 }
 
+import { filtrarFotosExistentes, listaFotosPronta } from './fotoProdutosCache.js';
 export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, onZoom = null }) {
   const sbUrl = _getSbUrl();
   const storageBase = sbUrl ? `${sbUrl}/storage/v1/object/public/produtos/` : '';
@@ -1063,6 +1064,9 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
   const pad5 = norm.padStart(5, '0');
   if (pad4 !== norm && pad4 !== orig) urls.push(pad4 + '.jpg', pad4 + '.png', pad4 + '.webp');
   if (pad5 !== norm && pad5 !== orig && pad5 !== pad4) urls.push(pad5 + '.jpg', pad5 + '.png', pad5 + '.webp');
+  // 23/09: so tenta o que EXISTE no bucket (lista em fotoProdutosCache) — cada tentativa errada era um 400 no Storage
+  { const f = filtrarFotosExistentes(urls); urls.length = 0; urls.push(...f); }
+  const semArquivo = listaFotosPronta() && urls.length === 0;
 
   const onError = (e) => {
     const cur = e.target.src;
@@ -1085,6 +1089,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
     if (cur.includes('/sofia-midias/')) {
       if (e.target.dataset.sofiaFalhou === '1') { desistir(); return; }
       e.target.dataset.sofiaFalhou = '1';
+      if (!urls.length) { desistir(); return; }   // 23/09: nao existe arquivo no bucket
       e.target.src = storageBase + urls[0] + cb;
       return;
     }
@@ -1119,7 +1124,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
 
   // Se já resolvemos a foto da Sofia, começa direto por ela (evita piscar).
   // REF marcada como 'sem foto' e sem mídia da Sofia: nem chama o storage.
-  const semFoto = _fotoSemFotoHoje(lembrado) && !sofiaUrl;
+  const semFoto = (_fotoSemFotoHoje(lembrado) || semArquivo) && !sofiaUrl;
   const primeiraUrl = sofiaUrl || (semFoto ? null : storageBase + urls[0] + cb);
 
   if (aspectRatio) {

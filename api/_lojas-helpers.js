@@ -15,6 +15,7 @@
  *   - CORS padrão
  */
 
+import './_upsert-dedupe.js';
 import { createClient } from '@supabase/supabase-js';
 
 // ═══════════════════════════════════════════════════════════════════════════

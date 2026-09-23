@@ -9,6 +9,7 @@
  * Padrão seguido: igual ao _bling-helpers.js e _ordens-corte-helpers.js
  * que já existem no projeto.
  */
+import './_upsert-dedupe.js';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;

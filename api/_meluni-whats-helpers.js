@@ -3,6 +3,7 @@
 // meluni_config é chave/valor (jsonb), igual o usado pelo webhook do Insta.
 // Ailson 16/06/2026.
 // ============================================================================
+import './_upsert-dedupe.js';
 import { supabase } from './_bling-helpers.js';
 export { supabase };
 

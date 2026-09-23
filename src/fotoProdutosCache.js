@@ -20,8 +20,27 @@ function carregar() {
 let salvarT = null;
 function salvar() { clearTimeout(salvarT); salvarT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(mem)); } catch { /* ok */ } }, 400); }
 
+// ── 23/09: LISTA do bucket (o que existe de verdade). Com ela, a cadeia de tentativas vira
+// uma escolha certa: so entra na lista de candidatos o arquivo que existe, e REF sem nenhum
+// arquivo ja nasce "sem foto" — zero requisicoes erradas ao Storage (eram 2.269 400s/dia).
+const KEY_LISTA = 'foto_produtos_lista_v1';
+let lista = null;
+try { const j = JSON.parse(localStorage.getItem(KEY_LISTA) || 'null'); if (j && j.dia === DIA && Array.isArray(j.arquivos)) lista = new Set(j.arquivos); } catch { /* ok */ }
+if (typeof window !== 'undefined' && !lista) {
+  fetch('/api/produtos-fotos').then(r => r.json()).then(j => {
+    if (j?.ok && Array.isArray(j.arquivos) && j.arquivos.length) { lista = new Set(j.arquivos); try { localStorage.setItem(KEY_LISTA, JSON.stringify({ dia: DIA, arquivos: j.arquivos })); } catch { /* ok */ } }
+  }).catch(() => { /* sem lista: segue o modo antigo */ });
+}
+function filtrarPelaLista(urls) { return lista ? urls.filter(u => lista.has(u)) : urls; }
+export function filtrarFotosExistentes(urls) { return filtrarPelaLista([...new Set(urls)]); }
+export function listaFotosPronta() { return !!lista; }
+
 export function fotoUrlConhecida(ref) { const m = carregar(); return m.ok[ref] || null; }
-export function fotoSemFoto(ref) { const m = carregar(); return m.sem[ref] === true; }
+export function fotoSemFoto(ref) {
+  const m = carregar(); if (m.sem[ref] === true) return true;
+  if (lista && !m.ok[ref] && !filtrarPelaLista(candidatosFoto(ref, true)).length) return true;   // 23/09: nao existe arquivo nenhum pra essa REF
+  return false;
+}
 export function marcarFotoOk(ref, url) { const m = carregar(); m.ok[ref] = url; delete m.sem[ref]; salvar(); }
 export function marcarSemFoto(ref) { const m = carregar(); m.sem[ref] = true; salvar(); }
 
@@ -31,12 +50,12 @@ export function candidatosFoto(refProd, completa = true) {
   const norm = orig.replace(/^0+/, '');
   if (!norm) return [];
   const urls = [norm + '.jpg', norm + '.png', norm + '.webp'];
-  if (!completa) { if (orig !== norm) urls.push(orig + '.jpg'); const p4 = norm.padStart(4, '0'); if (p4 !== norm && p4 !== orig) urls.push(p4 + '.jpg'); return urls; }
+  if (!completa) { if (orig !== norm) urls.push(orig + '.jpg'); const p4 = norm.padStart(4, '0'); if (p4 !== norm && p4 !== orig) urls.push(p4 + '.jpg'); return filtrarPelaLista(urls); }
   if (orig !== norm) urls.push(orig + '.jpg', orig + '.png', orig + '.webp');
   const pad4 = norm.padStart(4, '0'); const pad5 = norm.padStart(5, '0');
   if (pad4 !== norm && pad4 !== orig) urls.push(pad4 + '.jpg', pad4 + '.png', pad4 + '.webp');
   if (pad5 !== norm && pad5 !== orig && pad5 !== pad4) urls.push(pad5 + '.jpg', pad5 + '.png', pad5 + '.webp');
-  return urls;
+  return filtrarPelaLista(urls);
 }
 
 // handler de onError compartilhado: avanca na cadeia; no fim marca sem foto e
