@@ -55,6 +55,28 @@ export default async function handler(req, res) {
 
   const { code, state, error } = req.query || {};
 
+  // ── 22/09: modo BACKUP — mesma rota (redirect ja registrado no Google), outra permissao ──
+  // drive.file = o app so enxerga e mexe nos arquivos que ELE criou (a pasta de backups).
+  // Chave de uso unico em app_segredos.drive_backup_setup; token salvo em app_segredos (fechada).
+  const segredo = async (ch) => (await supabase.from('app_segredos').select('valor').eq('chave', ch).maybeSingle()).data?.valor || '';
+  if (req.query?.backup && !code) {
+    if (String(req.query.backup) !== await segredo('drive_backup_setup')) return html(res, 403, '<h3>Link inválido ou já usado</h3>');
+    const url = `${AUTH_URI}?${new URLSearchParams({ client_id: CLIENT_ID, redirect_uri: redirectUri, response_type: 'code',
+      scope: 'https://www.googleapis.com/auth/drive.file', access_type: 'offline', prompt: 'consent', state: 'bkp:' + req.query.backup })}`;
+    res.status(302).setHeader('Location', url); return res.end();
+  }
+  if (code && String(state || '').startsWith('bkp:')) {
+    if (String(state).slice(4) !== await segredo('drive_backup_setup')) return html(res, 403, '<h3>State inválido</h3>');
+    const r = await fetch(TOKEN_URI, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'authorization_code', code: String(code), client_id: CLIENT_ID, client_secret: CLIENT_SECRET, redirect_uri: redirectUri }) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.refresh_token) return html(res, 400, `<h3>Não recebi o token</h3><pre>${j?.error_description || j?.error || r.status}</pre>`);
+    const about = await (await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', { headers: { Authorization: `Bearer ${j.access_token}` } })).json().catch(() => ({}));
+    await supabase.from('app_segredos').upsert({ chave: 'drive_backup_refresh', valor: j.refresh_token }, { onConflict: 'chave' });
+    await supabase.from('app_segredos').upsert({ chave: 'drive_backup_setup', valor: 'usado-' + new Date().toISOString() }, { onConflict: 'chave' });
+    return html(res, 200, `<h3>Backup conectado ✅</h3><p>Conta: <b>${about?.user?.emailAddress || '?'}</b></p><p>Permissão: só os arquivos que o app criar (pasta de backups). Pode fechar esta aba.</p>`);
+  }
+
   // callback do Google
   if (code) {
     if (state !== SETUP_KEY) return html(res, 403, '<h3>State inválido</h3><p>Recomece pelo link com <code>?k=</code>.</p>');

@@ -124,6 +124,14 @@ async function classificar(m) {
   if (m.latencia_ms >= 8000) motivos.vermelho.push(`banco respondendo em ${(m.latencia_ms / 1000).toFixed(1)}s`);
   if (baseStorage && m.storage_calls_5min > 10 * baseStorage && m.storage_calls_5min > 2000) motivos.vermelho.push(`Storage ${Math.round(m.storage_calls_5min / baseStorage)}× o normal (${m.storage_calls_5min} em 5 min) — padrão de loop de fotos`);
   if (m.esteira_erros_1h >= 100) motivos.vermelho.push(`${m.esteira_erros_1h} erros na esteira na última hora`);
+  // 22/09: BACKUP — falhou, ou nenhum backup ok nas ultimas 26 h -> amarelo (vai pro WhatsApp)
+  try {
+    const { data: b } = await supabase.from('backup_execucoes').select('ok, erro, terminado_em, iniciado_em').neq('arquivo', '(seco)').order('id', { ascending: false }).limit(1).maybeSingle();
+    const { data: bOk } = await supabase.from('backup_execucoes').select('terminado_em').eq('ok', true).neq('arquivo', '(seco)').order('id', { ascending: false }).limit(1).maybeSingle();
+    const hSemOk = bOk?.terminado_em ? (Date.now() - new Date(bOk.terminado_em).getTime()) / 3600e3 : null;
+    if (b && b.ok === false) motivos.amarelo.push(`backup falhou: ${String(b.erro || '?').slice(0, 120)}`);
+    else if (hSemOk != null && hSemOk > 26) motivos.amarelo.push(`backup sem rodar há ${Math.round(hSemOk)} h`);
+  } catch { /* nao derruba o monitor */ }
   // AMARELO (iminente)
   // 17/09 (Ailson): o amarelo de conexões era 75%, calibrado no Micro (60 conexões).
   // No Small (90) a tarde cheia chega a 77% e volta sozinha — virou alerta diário sem

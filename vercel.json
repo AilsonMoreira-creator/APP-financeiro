@@ -545,6 +545,10 @@
     {
       "path": "/api/saude-monitor",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/backup-diario",
+      "schedule": "30 6 * * *"
     }
   ]
 }
