@@ -8,6 +8,7 @@
  *  - resolve o id do produto via bling_estoque (bling_produto_id) ou /produtos?codigo=sku
  *  - depósito: usa amicia_data 'bling-estoque-config'.deposito_geral (ou detecta)
  */
+import { travaAcao } from './_trava.js';   // 23/09 Fase 1: trava do estoque
 import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
 
 export const config = { maxDuration: 60 };
@@ -15,6 +16,7 @@ const API = 'https://api.bling.com.br/Api/v3';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'use POST' });
+  if (!(await travaAcao(req, res, { modulo: 'bling', chave: 'trava_estoque', contexto: 'bling-estoque-set' }))) return;
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
   const conta = (body.conta || 'exitus').toLowerCase();

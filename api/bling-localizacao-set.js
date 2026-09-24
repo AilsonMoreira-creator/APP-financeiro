@@ -15,6 +15,7 @@
  *
  * Ailson 19/07/2026.
  */
+import { travaAcao } from './_trava.js';   // 23/09 Fase 1: trava do estoque
 import { supabase } from './_bling-helpers.js';
 
 export const config = { maxDuration: 30 };
@@ -61,6 +62,8 @@ export default async function handler(req, res) {
     });
   }
 
+  // 23/09 Fase 1: gravar localizacao (escreve nas 3 contas Bling) exige token com o modulo
+  if (!(await travaAcao(req, res, { modulo: 'bling', chave: 'trava_estoque', contexto: 'bling-localizacao-set' }))) return;
   const loc = normLoc(req.query.loc);
   if (!loc) return res.status(400).json({ error: 'loc_vazia' });
   if (!/^[A-Z0-9-]{1,6}$/.test(loc)) return res.status(400).json({ error: 'loc_invalida', dica: 'use letras/números, ex: A, B2, J' });

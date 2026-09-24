@@ -20,6 +20,7 @@
  * Chamar de novo até "restantes" chegar a 0 (cada chamada tem teto de tempo).
  * No PUT, omite camposCustomizados (sem permissão; preserva os existentes).
  */
+import { travaAcao } from './_trava.js';   // 23/09 Fase 1: trava do estoque
 import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
 
 export const config = { maxDuration: 60 };
@@ -144,7 +145,8 @@ async function popularConta(conta, { refFilter, limite, dry, budgetMs }) {
 }
 
 export default async function handler(req, res) {
-  if (!autorizado(req)) return res.status(403).json({ error: 'nao autorizado' });
+  // 23/09 Fase 1: a chave ?key= estava no codigo da tela (qualquer um via). Agora = token com o modulo Bling (ou CRON_SECRET).
+  if (!(await travaAcao(req, res, { modulo: 'bling', chave: 'trava_estoque', contexto: 'bling-localizacao-popular' }))) return;
 
   const contaParam = req.query.conta;
   const contas = contaParam ? [contaParam] : CONTAS;

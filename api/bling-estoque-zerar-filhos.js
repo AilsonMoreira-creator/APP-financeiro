@@ -25,6 +25,7 @@
  * liberado ainda — nesse caso o Bling devolve 401/403 e o resultado da conta
  * vem com erro legível, sem travar a outra.
  */
+import { travaAcao } from './_trava.js';   // 23/09 Fase 1: trava do estoque
 import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
 
 export const config = { maxDuration: 60 };
@@ -46,6 +47,7 @@ export default async function handler(req, res) {
   // roda o mesmo caminho (token, produto, depósito, saldo) sem gravar balanço.
   const dryRun = req.method === 'GET';
   if (req.method !== 'POST' && !dryRun) return res.status(405).json({ error: 'use POST (ou GET pra dry-run)' });
+  if (!dryRun && !(await travaAcao(req, res, { modulo: 'bling', chave: 'trava_estoque', contexto: 'bling-estoque-zerar-filhos' }))) return;
   let body = dryRun ? (req.query || {}) : req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
   const ref = String(body.ref || '').replace(/\D/g, '').replace(/^0+/, '');

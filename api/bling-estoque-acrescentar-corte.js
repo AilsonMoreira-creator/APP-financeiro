@@ -21,6 +21,7 @@
  *     com aviso, não entra no estoque.
  *   - corte já adicionado antes → 409 (trava reinserção / não dobra estoque).
  */
+import { travaAcao } from './_trava.js';   // 23/09 Fase 1: trava do estoque
 import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
 import { zerarFilhosSku } from './_bling-filhos-helpers.js';
 
@@ -32,6 +33,7 @@ const normCor = (s) =>
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'use POST' });
+  if (!(await travaAcao(req, res, { modulo: 'bling', chave: 'trava_estoque', contexto: 'bling-estoque-acrescentar-corte' }))) return;
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
 
