@@ -1,8 +1,11 @@
+import { travaAcao } from './_trava.js';   // 24/09 Fase 2 SAC
 import { supabase, setCors } from './_ml-helpers.js';
 
 const LOCK_EXPIRY_MS = 5 * 60 * 1000;
 
 export default async function handler(req, res) {
+  // 24/09 Fase 2 SAC: responder/travar/etiquetar exige token com o modulo sac (ou CRON_SECRET). Modo: saude_config.trava_sac (aviso|ativo)
+  if (req.method !== 'OPTIONS' && !(await travaAcao(req, res, { modulo: 'sac', chave: 'trava_sac', contexto: 'ml-lock', trocarUsuario: false }))) return;
   try {
     setCors(res);
     if (req.method === 'OPTIONS') return res.status(200).end();
