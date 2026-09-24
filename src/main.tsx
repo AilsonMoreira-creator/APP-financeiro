@@ -1,3 +1,4 @@
+import { sincronizarAparelhoId } from './aparelhoId'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
@@ -5,6 +6,8 @@ import App from './App.tsx'
 import { iniciarChecagemVersao } from './version-check.ts'
 import { estaOcupado, registrarEvento } from './ocupado.ts'
 
+// 24/09: recupera o id do aparelho do IndexedDB se o localStorage perdeu (antes do login)
+sincronizarAparelhoId();
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

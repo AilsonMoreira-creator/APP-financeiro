@@ -126,8 +126,24 @@ export default async function handler(req, res) {
     }
 
     const usuario = String(b.usuario || '').trim().toLowerCase();
-    const device_id = String(b.device_id || '').trim();
+    let device_id = String(b.device_id || '').trim();
     if (!usuario || !device_id) return res.status(400).json({ ok: false, erro: 'usuario e device_id obrigatorios' });
+    // 24/09: 2a copia do id do aparelho num cookie HttpOnly do servidor (sobrevive ao localStorage
+    // limpo). Se o navegador chegou com um id NOVO mas o cookie traz um id JA CONHECIDO, adota o do
+    // cookie e devolve pra tela (a tela grava de volta). Nunca derruba a chamada.
+    try {
+      const ck = String(req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith('amica_dev='));
+      const doCookie = ck ? decodeURIComponent(ck.slice('amica_dev='.length)) : '';
+      if (doCookie && doCookie !== device_id && doCookie !== 'sem-storage') {
+        const { data: ids } = await supabase.from('app_aparelhos').select('device_id').in('device_id', [doCookie, device_id]);
+        const conhecidos = new Set((ids || []).map(r => r.device_id));
+        if (conhecidos.has(doCookie) && !conhecidos.has(device_id)) device_id = doCookie;
+      }
+      if (device_id !== 'sem-storage') {
+        res.setHeader('Set-Cookie', `amica_dev=${encodeURIComponent(device_id)}; Path=/; Max-Age=34560000; HttpOnly; Secure; SameSite=Lax`);
+      }
+    } catch { /* segue com o id do navegador */ }
+    { const _json = res.json.bind(res); res.json = (o) => _json(o && typeof o === 'object' && !Array.isArray(o) ? { ...o, device_id } : o); }
 
     const ip = String(req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || '').split(',')[0].trim() || null;
     const ua = String(b.ua || req.headers['user-agent'] || '').slice(0, 400);

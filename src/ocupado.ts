@@ -1,3 +1,4 @@
+import { aparelhoId } from './aparelhoId';
 // ocupado.ts — "trabalho em andamento" (Ailson 15/09/2026)
 // Uma tela que esta no meio de algo que nao pode ser interrompido (lote de
 // etiquetas do WMS) liga este sinal. Enquanto ligado, NENHUM reload automatico
@@ -20,7 +21,7 @@ export function registrarEvento(mensagem: string, detalhe = ''): void {
       body: JSON.stringify({
         mensagem: 'reload: ' + String(mensagem).slice(0, 280), stack: String(detalhe).slice(0, 1500),
         usuario: sess?.usuario || null, modulo: window.__amiciaModuloAtivo || null,
-        device_id: (() => { try { return localStorage.getItem('amica_device_id') || null; } catch { return null; } })(),
+        device_id: (() => { try { return aparelhoId(); } catch { return null; } })(),   // 24/09: nome certo do id
         aparelho: navigator.userAgent, url: location.pathname + location.search, versao_sw: sw,
       }),
     }).catch(() => {});

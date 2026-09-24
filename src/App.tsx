@@ -1,4 +1,5 @@
 // @ts-nocheck  
+import { aparelhoId, adotarAparelhoId, sincronizarAparelhoId } from "./aparelhoId";
 import { useState, useEffect, useRef, useCallback, useMemo, Component } from "react";
 import { supabase, USER_ID } from "./supabase.js";
 import { fotoUrlConhecida, fotoSemFoto, marcarFotoOk, marcarSemFoto, candidatosFoto, fotoInvalidar } from "./fotoProdutosCache.js";
@@ -55,7 +56,7 @@ function amicaRelatarErro(mensagem,stack,origem){
     fetch("/api/app-erro",{method:"POST",headers:{"Content-Type":"application/json"},keepalive:true,
       body:JSON.stringify({mensagem:(origem?origem+": ":"")+msg,stack:String(stack||"").slice(0,1500),
         usuario:sess?.usuario||null,modulo:window.__amicaModuloAtivo||null,
-        device_id:(()=>{try{return localStorage.getItem("amica_device_id")||null;}catch{return null;}})(),
+        device_id:(()=>{try{return aparelhoId();}catch{return null;}})(),
         aparelho:navigator.userAgent,url:location.pathname+location.search,versao_sw:sw})}).catch(()=>{});
   }catch{}
 }
@@ -3768,12 +3769,9 @@ const aplicarRegrasDivergencia=(c)=>{
 // cada navegador ganha um device_id proprio; no login e a cada ~30 min o app
 // registra usuario+aparelho+ip em app_sessoes (tela Usuarios lista e
 // desconecta). Silencioso: nunca trava nada.
+// 24/09: o id agora fica em localStorage + IndexedDB + cookie do servidor (src/aparelhoId.ts)
 function amicaDeviceId(){
-  try{
-    let d=localStorage.getItem("amica_device");
-    if(!d){d=(crypto?.randomUUID?crypto.randomUUID():String(Date.now())+"-"+Math.random().toString(36).slice(2));localStorage.setItem("amica_device",d);}
-    return d;
-  }catch{return "sem-storage";}
+  try{return aparelhoId();}catch{return "sem-storage";}
 }
 // 13/09: atividade real do usuario (clique/tecla/aba) -> servidor, no maximo a
 // cada 2 min (troca de modulo: a cada 30 s). E o que define "ativo" na Saude.
@@ -3793,6 +3791,8 @@ async function amicaRegistrarSessao(usuario,evento,extras){
     const r=await fetch('/api/app-sessao',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({usuario,device_id:amicaDeviceId(),ua:navigator.userAgent,tela:`${window.screen?.width||0}x${window.screen?.height||0}`,evento,...(extras||{})})});
     const d=await r.json().catch(()=>({}));
+    // 24/09: o servidor devolve o id que ele reconhece (cookie) -> a tela adota
+    if(d&&d.device_id&&d.device_id!==amicaDeviceId())adotarAparelhoId(d.device_id);
     return d;
   }catch{return {};}
 }
@@ -4892,7 +4892,7 @@ const LoginScreen=({usuarios,onLogin})=>{
       const ctrl=new AbortController();
       const t=setTimeout(()=>ctrl.abort(),5000);
       const r=await fetch("/api/app-login",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({usuario:u,senha:s,local_ok:!!found,device_id:localStorage.getItem("amica_device_id")||null,modulos:foundUser?.modulos||null,admin:!!(foundUser&&(foundUser.admin||foundUser.id===1||foundUser.usuario==='admin'))}),
+        body:JSON.stringify({usuario:u,senha:s,local_ok:!!found,device_id:amicaDeviceId(),modulos:foundUser?.modulos||null,admin:!!(foundUser&&(foundUser.admin||foundUser.id===1||foundUser.usuario==='admin'))}),
         signal:ctrl.signal});
       clearTimeout(t);
       respServidor=await r.json();
