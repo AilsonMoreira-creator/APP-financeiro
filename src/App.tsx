@@ -5425,6 +5425,30 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [logsBlingPeriodo,setLogsBlingPeriodo]=useState('tudo'); // 'tudo' | '7d'
   const [logsBlingData,setLogsBlingData]=useState(''); // 'YYYY-MM-DD' → dia específico
   const [logsBlingModoCard,setLogsBlingModoCard]=useState(false); // aberto pelo card = só manual, esconde outras origens
+  // 24/09 (pedido dele): no card abre leve (30), mas da pra escolher uma data e trazer TODOS desde ela
+  const [logsBlingRefCard,setLogsBlingRefCard]=useState('');
+  const [logsBlingDesde,setLogsBlingDesde]=useState('');
+  const [logsBlingDesdeAtivo,setLogsBlingDesdeAtivo]=useState(''); // data efetivamente carregada ('' = 30 ultimos)
+  const carregarLogsCardDesde=async()=>{
+    if(!logsBlingRefCard||!logsBlingDesde)return;
+    setLogsBlingLoading(true);
+    try{
+      const tudo=[];
+      for(let de=0;de<20000;de+=1000){
+        const {data,error}=await supabase.from('bling_estoque_logs')
+          .select('id,ref,cor_norm,tam,cor_label,qtd_anterior,qtd_nova,delta,motivo,usuario,origem,criado_em')
+          .eq('ref',logsBlingRefCard).in('origem',['manual','acrescentar_corte'])
+          .gte('criado_em',`${logsBlingDesde}T00:00:00-03:00`)
+          .order('criado_em',{ascending:false}).range(de,de+999);
+        if(error)throw error;
+        tudo.push(...(data||[]));
+        if(!data||data.length<1000)break;
+      }
+      setLogsBling(tudo);setLogsBlingDesdeAtivo(logsBlingDesde);
+      setLogsBlingPeriodo('tudo');setLogsBlingData('');
+    }catch(e){console.error('logs bling desde:',e?.message||e);}
+    finally{setLogsBlingLoading(false);}
+  };
   const abrirLogsBling=async(refFiltro)=>{
     setLogsBlingAberto(true);setLogsBlingLoading(true);
     const doCard=refFiltro!=null;
@@ -5432,7 +5456,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     const rn=doCard?String(refFiltro).replace(/\D/g,'').replace(/^0+/,''):'';
     // Botão de log dentro do card: abre já filtrado na REF, só manual e leve (30 linhas) pra carregar rápido.
     // Card mostra TODOS os lancamentos humanos: ajuste manual E acrescimo de corte (Ailson 24/07/2026).
-    if(doCard){setLogsBlingBusca(String(refFiltro));setLogsBlingOrigem('humanos');setLogsBlingUsuario('todos');setLogsBlingPeriodo('tudo');setLogsBlingData('');}
+    if(doCard){setLogsBlingBusca(String(refFiltro));setLogsBlingOrigem('humanos');setLogsBlingUsuario('todos');setLogsBlingPeriodo('tudo');setLogsBlingData('');setLogsBlingRefCard(rn);setLogsBlingDesde('');setLogsBlingDesdeAtivo('');}
     try{
       let query=supabase.from('bling_estoque_logs')
         .select('id,ref,cor_norm,tam,cor_label,qtd_anterior,qtd_nova,delta,motivo,usuario,origem,criado_em')
@@ -6653,6 +6677,11 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               {logsBlingData&&<button onClick={()=>setLogsBlingData('')} title="limpar data" style={{background:"none",border:"none",color:"#8a9aa4",fontSize:15,cursor:"pointer",lineHeight:1,padding:"0 2px"}}>×</button>}
               <span style={{fontSize:11,color:"#8a9aa4",marginLeft:"auto",whiteSpace:"nowrap"}}>{lista.length} registro{lista.length!==1?'s':''}</span>
             </div>
+            {logsBlingModoCard&&<div style={{padding:"6px 12px",borderBottom:"1px solid #e8e2da",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0,background:"#faf8f5"}}>
+              <span style={{fontSize:11.5,color:"#5a6470",fontFamily:"Georgia,serif"}}>{logsBlingDesdeAtivo?`Todos desde ${logsBlingDesdeAtivo.split('-').reverse().join('/')}`:'Mostrando os 30 últimos'} · ver todos desde</span>
+              <input type="date" value={logsBlingDesde} onChange={e=>setLogsBlingDesde(e.target.value)} style={{border:"1px solid "+(logsBlingDesde?"#2c3e50":"#e8e2da"),borderRadius:6,padding:"4px 8px",fontSize:11.5,fontFamily:"Georgia,serif",outline:"none",background:"#fff",color:"#2c3e50"}}/>
+              <button onClick={carregarLogsCardDesde} disabled={!logsBlingDesde||logsBlingLoading} style={{background:logsBlingDesde?"#2c3e50":"#e8e2da",color:logsBlingDesde?"#fff":"#8a9aa4",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11.5,cursor:logsBlingDesde?"pointer":"default",fontFamily:"Georgia,serif",fontWeight:600}}>{logsBlingLoading?'carregando…':'Carregar'}</button>
+            </div>}
             <div style={{overflowY:"auto",flex:1}}>
               {logsBlingLoading&&<div style={{padding:24,textAlign:"center",color:"#8a9aa4",fontSize:13}}>Carregando…</div>}
               {!logsBlingLoading&&lista.length===0&&<div style={{padding:24,textAlign:"center",color:"#8a9aa4",fontSize:13}}>Nenhum log encontrado</div>}
