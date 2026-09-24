@@ -58,7 +58,17 @@ function headerImagemDe(components) {
 // depois, sem erro nenhum na resposta (foi o que segurou o 1o teste). O link
 // bom mora nas specs do meluni_config (header.sample_url), entao procuramos
 // o template por nome em todas as chaves de template.
-async function criativoDaSpec(nomeTpl) {
+async function criativoDaSpec(nomeTpl, marca) {
+  // 24/09: templates da SOFIA guardam o criativo em lojas_whats_templates (criativo_url, trocavel
+  // na tela; ou header.sample_url) — antes so olhava as specs da Lara e o teste dizia "sem criativo".
+  if (marca === 'sofia') {
+    try {
+      const { supabase } = await import('./_lojas-whats-helpers.js');
+      const { data: t } = await supabase.from('lojas_whats_templates').select('criativo_url, header').eq('name', nomeTpl).maybeSingle();
+      const url = t?.criativo_url || t?.header?.sample_url;
+      if (url) return url;
+    } catch { /* segue pro caminho antigo */ }
+  }
   try {
     const { supabase } = await import('./_meluni-whats-helpers.js');
     const { data } = await supabase.from('meluni_config').select('chave, valor');
@@ -160,7 +170,7 @@ export default async function handler(req, res) {
     // link publico de verdade: o informado, ou o da spec. Sem isso, a mensagem
     // e aceita e some — melhor recusar aqui e dizer o motivo.
     const headerImage = temImagem
-      ? (String(body?.imagem_url || '').trim() || await criativoDaSpec(nome))
+      ? (String(body?.imagem_url || '').trim() || await criativoDaSpec(nome, marca))
       : null;
     if (temImagem && !headerImage) {
       return res.status(400).json({

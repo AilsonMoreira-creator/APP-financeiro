@@ -2375,7 +2375,11 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
                   }}>
                   <option value="pesquisa">Pesquisa de motivo</option>
                   {tplsReativacao.map(t => {
-                    const rotulo = { curadoria: 'Curadoria', novidades: 'Novidades', dicas_rapidas: 'Dica lojista', tendencias: 'Tendência Balonê' }[t.pasta] || t.name;
+                    const base = { curadoria: 'Curadoria', novidades: 'Novidades', dicas_rapidas: 'Dica lojista', tendencias: 'Tendência Balonê' }[t.pasta] || t.name;
+                    // 24/09: 2+ templates na mesma pasta ficavam com o mesmo nome ("Dica lojista" 2x) -> soma o tema tirado do nome
+                    const repetido = tplsReativacao.filter(x => x.pasta === t.pasta).length > 1;
+                    const tema = String(t.name || '').replace(/^(dicas?|tendencia|reativacao)_/, '').replace(/_v\d+$/, '').replace(/_/g, ' ');
+                    const rotulo = repetido && tema ? `${base} · ${tema.charAt(0).toUpperCase()}${tema.slice(1)}` : base;
                     const pronto = t.status === 'aprovado';
                     return (
                       <option key={t.name} value={t.name} disabled={!pronto}>
