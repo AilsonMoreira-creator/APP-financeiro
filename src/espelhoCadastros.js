@@ -46,7 +46,18 @@ function linhaDe(tipo, reg) {
 export async function gravarCadastro(supabase, tipo, lista) {
   const cfg = CFG[tipo]; if (!cfg) return false;
   try {
-    const linhas = (lista || []).filter(r => cfg.norm(r) !== '' && cfg.norm(r) != null).map(r => linhaDe(tipo, r));
+    const todas = (lista || []).filter(r => cfg.norm(r) !== '' && cfg.norm(r) != null).map(r => linhaDe(tipo, r));
+    // 24/09: a mesma chave pode vir 2x (ex.: ref "3217" e "3217 " com espaco no fim viram
+    // a mesma depois do trim). O Postgres recusa o lote INTEIRO nesse caso ("ON CONFLICT ...
+    // second time") e nenhum produto era espelhado. Fica 1 por chave: a de _mod mais novo.
+    const porChave = new Map();
+    for (const l of todas) {
+      const k = String(l[cfg.chave]);
+      const atual = porChave.get(k);
+      if (!atual || (Number(l.dados?._mod) || 0) >= (Number(atual.dados?._mod) || 0)) porChave.set(k, l);
+    }
+    const linhas = [...porChave.values()];
+    if (linhas.length < todas.length) console.warn(`espelho ${tipo}: ${todas.length - linhas.length} registro(s) com chave repetida no cadastro (mantido o mais novo)`);
     if (!linhas.length) return false;
     const { error } = await supabase.from(cfg.tabela).upsert(linhas, { onConflict: cfg.chave });
     if (error) throw error;
