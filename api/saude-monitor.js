@@ -15,6 +15,7 @@
 // Cada alerta grava um DOSSIE em saude_incidentes com codigo #INC-MMDD-N — ele
 // cola o codigo no Claude e a investigacao ja comeca pelo dossie.
 
+import { exigirAdmin } from './_admin.js';
 import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 import { enviarTemplate } from './_lojas-whats-meta-client.js';
 import { sincronizarCusto } from './saude-credito.js';
@@ -211,7 +212,9 @@ export default async function handler(req, res) {
   const ehCron = ua.includes('vercel-cron');
   let auth = { ok: false, isAdmin: false };
   if (req.query?.user === 'ailson') req.headers['x-user'] = 'ailson';
-  if (!ehCron) { auth = await validarUsuario(req); if (!auth.ok || !auth.isAdmin) return res.status(403).json({ error: 'Apenas admin' }); }
+  // 23/09 Fase 0: cron (User-Agent) so faz a LEITURA de rotina. Gravar chave (POST), painel e teste = admin pelo token.
+  const soLeituraCron = ehCron && req.method === 'GET' && !req.query?.painel && !req.query?.teste;
+  if (!soLeituraCron) { if (!(await exigirAdmin(req, res, 'saude-monitor'))) return; auth = { ok: true, isAdmin: true }; }
 
   if (req.method === 'POST') {
     const { chave, valor } = req.body || {};

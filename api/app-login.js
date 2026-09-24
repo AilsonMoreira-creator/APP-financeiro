@@ -18,6 +18,7 @@
 import bcrypt from 'bcryptjs';
 import { emitirToken, sessaoDe, sombraSessao } from './_sessao.js';   // 20/09: PASSO 4 fase 1 (token de sessao, ainda sem exigir)
 import { supabase, setCors } from './_lojas-helpers.js';
+import { exigirAdmin } from './_admin.js';   // 23/09: Fase 0 — admin pelo token, nao pelo X-User
 
 export const config = { maxDuration: 15 };
 
@@ -31,7 +32,7 @@ export default async function handler(req, res) {
 
   // ── sincronizar hashes (admin, pelo header X-User = ailson) ──
   if (Array.isArray(body.sincronizar)) {
-    if (String(req.headers['x-user'] || '') !== 'ailson') return res.status(403).json({ error: 'Apenas admin' });
+    if (!(await exigirAdmin(req, res, 'app-login sincronizar'))) return;
     let n = 0;
     for (const u of body.sincronizar) {
       const usuario = String(u.usuario || '').trim().toLowerCase();
@@ -69,7 +70,8 @@ export default async function handler(req, res) {
 
   // ── validar ──
   // 19/09: desbloqueio manual — grava um "ok" sintetico que zera a sequencia de erros
-  if (body.desbloquear && String(req.headers['x-user'] || '').toLowerCase() === 'ailson') {
+  if (body.desbloquear) {
+    if (!(await exigirAdmin(req, res, 'app-login desbloquear'))) return;
     const alvo = String(body.desbloquear).replace(/\s/g, '').toLowerCase();
     await supabase.from('app_login_tentativas').insert({ usuario: alvo, ip: 'desbloqueio-manual', ok: true, modo: 'desbloqueio', concorda_com_local: null });
     return res.status(200).json({ ok: true, desbloqueado: alvo });

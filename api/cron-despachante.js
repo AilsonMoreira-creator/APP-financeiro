@@ -16,6 +16,7 @@
  * GET ?status=1        -> agenda com ultimo estado (pra tela de Saude)
  * GET ?rodar=<nome>    -> dispara um job agora (X-User ailson), ignorando a agenda
  */
+import { exigirAdmin } from './_admin.js';
 import { supabase } from './_ml-helpers.js';
 
 export const config = { maxDuration: 60 };
@@ -81,7 +82,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, agenda: data || [], log: log || [] });
     }
     if (q.rodar) {
-      if (String(req.headers['x-user'] || '') !== 'ailson') return res.status(403).json({ ok: false, erro: 'so ailson' });
+      if (!(await exigirAdmin(req, res, 'cron-despachante rodar'))) return;   // 23/09 Fase 0
       const { data: job } = await supabase.from('cron_agenda').select('*').eq('nome', q.rodar).maybeSingle();
       if (!job) return res.status(404).json({ ok: false, erro: 'job nao encontrado' });
       return res.status(200).json(await disparar(job, 'ativo', `manual ${new Date().toISOString()}`));

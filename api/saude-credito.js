@@ -12,6 +12,7 @@
 //   POST { data_recarga, valor_usd, saldo_console_usd? }  (admin) -> registra recarga
 
 import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
+import { exigirAdmin } from './_admin.js';
 
 export const config = { maxDuration: 30 };
 
@@ -91,7 +92,9 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   const ehCron = (req.headers['user-agent'] || '').includes('vercel-cron');
   if (req.query?.user === 'ailson') req.headers['x-user'] = 'ailson';
-  if (!ehCron) { const a = await validarUsuario(req); if (!a.ok || !a.isAdmin) return res.status(403).json({ error: 'Apenas admin' }); }
+  // 23/09 Fase 0: cron so sincroniza o custo (GET simples); o resto = admin pelo token
+  const soSyncCron = ehCron && req.method === 'GET' && !req.query?.painel && !req.query?.quem;
+  if (!soSyncCron) { if (!(await exigirAdmin(req, res, 'saude-credito'))) return; }
 
   if (req.method === 'POST') {
     const b = req.body || {};

@@ -15,6 +15,7 @@
 // RLS ligado em app_sessoes: so a service key (esta API) le/escreve.
 
 import { createClient } from '@supabase/supabase-js';
+import { exigirAdmin } from './_admin.js';
 
 export const config = { maxDuration: 20 };   // 11/09: rota de tela — nao segura conexao por 5 min
 
@@ -39,6 +40,49 @@ function resumoAparelho(ua) {
   return `${so} · ${nav}${pwa}`;
 }
 
+
+// ── 23/09/2026 APARELHOS CONHECIDOS — fase SOMBRA (aprovado por Ailson) ──────────
+// Regra: aparelho conhecido entra de qualquer IP; novo DENTRO da empresa (IP onde 3+ usuarios
+// usam na semana) entra e vira aprovado; novo FORA da empresa ficaria PENDENTE (liberacao so por
+// ailson/admin). Em 'sombra' (saude_config.aparelhos_modo) NADA e bloqueado: so registra em
+// app_aparelhos_sombra o que aconteceria. Nunca derruba a chamada (tudo em try/catch).
+let _ipsEmp = null, _ipsEmpEm = 0;
+async function ipsEmpresa() {
+  if (_ipsEmp && Date.now() - _ipsEmpEm < 10 * 60000) return _ipsEmp;
+  const { data } = await supabase.rpc('app_ips_empresa', { p_dias: 7, p_min: 3 });
+  _ipsEmp = new Set((data || []).map(r => r.ip)); _ipsEmpEm = Date.now();
+  return _ipsEmp;
+}
+const _vistoAparelho = new Map();   // device|usuario -> ms (processa no maximo a cada 20 min por instancia)
+async function avaliarAparelho({ usuario, device_id, ip, evento, aparelho }) {
+  try {
+    const k = device_id + '|' + usuario;
+    if (evento !== 'login' && Date.now() - (_vistoAparelho.get(k) || 0) < 20 * 60000) return null;
+    _vistoAparelho.set(k, Date.now());
+    let decisao;
+    if (!device_id || device_id === 'sem-storage') decisao = 'sem_device';
+    else {
+      const { data: ap } = await supabase.from('app_aparelhos').select('status, usuarios').eq('device_id', device_id).maybeSingle();
+      const agora = new Date().toISOString();
+      if (ap) {
+        decisao = ap.status === 'aprovado' ? 'conhecido' : ap.status;   // pendente | recusado
+        const us = Array.from(new Set([...(ap.usuarios || []), usuario]));
+        await supabase.from('app_aparelhos').update({ ultimo_usuario: usuario, usuarios: us, ultimo_ip: ip, ultimo_em: agora, aparelho }).eq('device_id', device_id);
+      } else {
+        const naEmpresa = ip && (await ipsEmpresa()).has(ip);
+        decisao = naEmpresa ? 'novo_empresa' : 'pendente';
+        await supabase.from('app_aparelhos').insert({
+          device_id, status: naEmpresa ? 'aprovado' : 'pendente', origem: naEmpresa ? 'ip_empresa' : 'fora_empresa',
+          aparelho, primeiro_usuario: usuario, ultimo_usuario: usuario, usuarios: [usuario],
+          primeiro_ip: ip, ultimo_ip: ip, ultimo_em: agora, decidido_em: naEmpresa ? agora : null, decidido_por: naEmpresa ? 'auto:ip_empresa' : null,
+        });
+      }
+    }
+    await supabase.rpc('app_aparelho_sombra_registrar', { p_device: device_id || '', p_usuario: usuario, p_decisao: decisao, p_ip: ip, p_evento: evento || null, p_aparelho: aparelho });
+    return decisao;
+  } catch (e) { console.error('[app-sessao] aparelho (sombra):', e?.message || e); return null; }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -47,6 +91,7 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET' && req.query?.listar) {
+      if (!(await exigirAdmin(req, res, 'app-sessao listar'))) return;   // 23/09 Fase 0 (lista IPs/aparelhos de todos)
       const { data, error } = await supabase.from('app_sessoes')
         .select('id, usuario, device_id, aparelho, tela, ip, primeiro_em, ultimo_em, pings, revogado_em, encerrado_em, encerrado_motivo')
         .order('ultimo_em', { ascending: false }).limit(500);
@@ -72,6 +117,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, ativos, desde });
     }
     if (b.revogar || b.liberar) {
+      if (!(await exigirAdmin(req, res, 'app-sessao revogar/liberar'))) return;   // 23/09 Fase 0
       const id = Number(b.revogar || b.liberar);
       const { error } = await supabase.from('app_sessoes')
         .update({ revogado_em: b.revogar ? new Date().toISOString() : null }).eq('id', id);
@@ -85,6 +131,8 @@ export default async function handler(req, res) {
 
     const ip = String(req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || '').split(',')[0].trim() || null;
     const ua = String(b.ua || req.headers['user-agent'] || '').slice(0, 400);
+    // 23/09: aparelhos conhecidos (SOMBRA — so registra; nao muda a resposta)
+    if (b.evento !== 'logout') await avaliarAparelho({ usuario, device_id, ip, evento: b.evento || 'ping', aparelho: resumoAparelho(ua) });
 
     // 01/09 (pedido dele): SESSAO UNICA — pedro (fixo) ou usuario com
     // sessaoUnica marcado na tela Usuarios. "Ativo" = deu sinal nos ultimos
