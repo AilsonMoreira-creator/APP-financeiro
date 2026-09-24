@@ -7,7 +7,7 @@ import CalcMetaAdsMeluni from "./CalcMetaAdsMeluni.jsx";
 import CalcDivergencia from "./CalcDivergencia.jsx";
 import { CalcAnaliseMeluni } from "./CalcAnaliseMeluni";
 import MLPerguntas from './MLPerguntas';
-import OrdemDeCorte, { ModalGerarOficina } from './OrdemDeCorte';
+import OrdemDeCorte, { ModalGerarOficina, ModalNovaOrdemDoCard } from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
 import { corTecido } from './corTecido.js';   // 17/09: realce por tecido
 import { lerEspelhoMes, gravarEspelho, compararComEspelho } from './espelhoDespesas.js';   // 17/09: espelho das celulas de Despesas
@@ -5361,6 +5361,10 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [soBlingRefs,setSoBlingRefs]=useState([]); // refs na calculadora c/ Bling mas sem espelho ML (produto novo)
   const [blingAjuste,setBlingAjuste]=useState(null); // {refNorm,cor,tam,cor_norm,atual,desc} — modal de ajuste
   const usuarioSessao=(()=>{try{return JSON.parse(localStorage.getItem('amica_session')||'{}').usuario||'';}catch{return '';}})();
+  // 24/09: "+ ordem" no card do produto — so pra quem tem o modulo Salas de Corte (ou admin)
+  const podeNovaOrdem=(()=>{try{const u=JSON.parse(localStorage.getItem('amica_session')||'{}');return !!(u.admin||(u.modulos||[]).includes('salascorte'));}catch{return false;}})();
+  const [novaOrdemRef,setNovaOrdemRef]=useState(null);
+  const [novaOrdemOk,setNovaOrdemOk]=useState('');
   const [ajusteValor,setAjusteValor]=useState('');
   const [ajusteMotivo,setAjusteMotivo]=useState('');
   const [zerarFilhos,setZerarFilhos]=useState(null); // null | 'rodando' | {resultados,novo_saldo_exitus,erro?}
@@ -6291,6 +6295,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                   <img src={q?"/icons/vendas-esquentando.png":"/icons/vendas-esfriando.png"} alt="" style={{width:16,height:16,opacity:.8,filter:q?"saturate(.7) brightness(.92)":"saturate(.8)"}}/>{q?"Vendas esquentando":"Vendas esfriando"} <span style={{color:"#a3adb5"}}>{t.var>0?"+":""}{t.var}%</span>
                 </span>);})()}
                 <button onClick={()=>abrirLogsBling(refNorm)} title={`Ver logs de estoque da REF ${modalRef}`} style={{marginLeft:(tendencias[String(refNorm)]||tendencias[String(modalRef).replace(/^0+(?=\d)/,'')])?8:"auto",background:"#fff",border:"1px solid #c8d8e4",borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:"#5a6470",fontWeight:600,whiteSpace:"nowrap"}}>📜 logs</button>
+                {podeNovaOrdem&&<button onClick={()=>{setNovaOrdemOk('');setNovaOrdemRef(refNorm);}} title={`Nova ordem de corte da REF ${modalRef} (mesma da Sala de Corte)`} style={{marginLeft:6,background:"#fff",border:"1px solid #c8d8e4",borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:"#5a6470",fontWeight:600,whiteSpace:"nowrap"}}>+ ordem</button>}
+                {novaOrdemOk&&<span style={{marginLeft:6,fontSize:11,color:"#2e7d32",fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>{novaOrdemOk}</span>}
               </div>
             </div>
             <button onClick={()=>setModalRef(null)} style={{background:"none",border:"none",fontSize:22,color:"#8a9aa4",cursor:"pointer",padding:"0 4px",lineHeight:1}}>×</button>
@@ -6630,6 +6636,10 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         </div>;
       })()}
       {/* ── Modal: ajuste de estoque Bling (sobrescreve + log de auditoria) ── */}
+      {/* 24/09: "+ ordem" do card — o MESMO modal da Nova ordem da Sala de Corte */}
+      {novaOrdemRef&&<ModalNovaOrdemDoCard supabase={supabase} refInicial={novaOrdemRef} usuario={usuarioSessao}
+        onClose={()=>setNovaOrdemRef(null)}
+        onSalvo={()=>{setNovaOrdemRef(null);setNovaOrdemOk('✓ ordem criada');setTimeout(()=>setNovaOrdemOk(''),6000);}}/>}
       {logsBlingAberto&&(()=>{
         const CAL="Calibri,Segoe UI,Arial,sans-serif";
         const norm=s=>String(s||'').replace(/\D/g,'').replace(/^0+/,'');

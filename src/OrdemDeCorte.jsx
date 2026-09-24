@@ -977,7 +977,7 @@ export function ModalGerarOficina({ previa, ids, usuario, onClose, onGerado }) {
   );
 }
 
-function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, ordensExistentes = [], onClose, onSalvo }) {
+function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, ordensExistentes = [], onClose, onSalvo, refInicial = '' }) {
   const isEdit = !!ordemEditando;
 
   // Etapa: 'ref' (escolhendo ref) ou 'completa' (ref escolhida, preenchendo grade/cores)
@@ -1042,6 +1042,22 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, ordensExistentes = 
     setEtapa('completa');
     setErro(null);
   };
+
+  // 24/09: aberto pelo card do Bling Estoque ("+ ordem") ja vem com a REF — escolhe sozinho
+  // se achar a REF exata; senao deixa a busca preenchida pra pessoa escolher.
+  useEffect(() => {
+    if (isEdit || !refInicial) return;
+    const norm = (x) => String(x || '').replace(/\D/g, '').replace(/^0+/, '');
+    (async () => {
+      try {
+        const r = await fetch(`/api/ordens-corte-buscar-ref?q=${encodeURIComponent(String(refInicial))}`);
+        const d = await r.json();
+        const exato = (d.produtos || []).find(p => norm(p.ref) === norm(refInicial));
+        if (exato) escolherProduto(exato); else setRefBusca(String(refInicial));
+      } catch { setRefBusca(String(refInicial)); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const trocarRef = () => {
     setProduto(null);
@@ -1401,5 +1417,57 @@ function ModalExcluir({ ordem, usuario, onClose, onExcluido }) {
         </div>
       </div>
     </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 24/09 (pedido dele): "+ ordem" no card de produto do Bling Estoque. Abre o
+// MESMO modal da Nova ordem (mesmo salvar: /api/ordens-corte-criar), com a REF
+// ja escolhida. Carrega antes as ordens (pro grupo sugerido do dia) e a media
+// de pecas/rolo da REF (salas-corte, cortes concluidos) pra estimativa igual.
+// ════════════════════════════════════════════════════════════════════════════
+export function ModalNovaOrdemDoCard({ supabase, refInicial, usuario, onClose, onSalvo }) {
+  const [pronto, setPronto] = useState(false);
+  const [ordens, setOrdens] = useState([]);
+  const [mediaRef, setMediaRef] = useState({});
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const r = await fetch('/api/ordens-corte-listar?perfil=admin');
+        const d = await r.json();
+        if (vivo) setOrdens(d.ordens || d.data || (Array.isArray(d) ? d : []));
+      } catch { /* sem ordens: grupo comeca do 1 */ }
+      try {
+        if (supabase) {
+          const { data } = await supabase.from('amicia_data').select('payload').eq('user_id', 'salas-corte').maybeSingle();
+          const norm = (x) => String(x || '').replace(/\D/g, '').replace(/^0+/, '');
+          const alvo = norm(refInicial);
+          let pecas = 0, rolos = 0, chave = null;
+          for (const c of (data?.payload?.cortes || [])) {
+            if (c?.status !== 'concluido' || norm(c.ref) !== alvo) continue;
+            pecas += Number(c.qtdPecas) || 0; rolos += Number(c.qtdRolos) || 0; chave = c.ref;
+          }
+          if (vivo && rolos > 0) {
+            const media = Math.round((pecas / rolos) * 100) / 100;
+            setMediaRef({ [chave]: { media }, [alvo]: { media }, [String(refInicial)]: { media } });
+          }
+        }
+      } catch { /* sem media: modal funciona sem a estimativa */ }
+      if (vivo) setPronto(true);
+    })();
+    return () => { vivo = false; };
+  }, [supabase, refInicial]);
+  if (!pronto) return null;
+  return (
+    <ModalOrdem
+      usuario={usuario}
+      mediaRef={mediaRef}
+      ordensExistentes={ordens}
+      refInicial={refInicial}
+      onClose={onClose}
+      onSalvo={onSalvo}
+    />
   );
 }
