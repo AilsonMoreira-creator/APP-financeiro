@@ -19,6 +19,7 @@
  *   GET /api/bling-gtin-gerar?ref=2655&confirmar=1          -> escreve todas
  *   &conta=exitus|lumia|muniam (default exitus)
  */
+import { travaAcao } from './_trava.js';   // 23/09 Fase 1
 import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
 
 export const config = { maxDuration: 120 };
@@ -37,6 +38,8 @@ export default async function handler(req, res) {
   const limite = req.query.limite ? Math.max(1, parseInt(req.query.limite, 10)) : null;
   const usuario = req.query.usuario || 'gtin-gerar';
   if (!refDig) return res.status(400).json({ error: 'informe ?ref=2655' });
+  // 23/09 Fase 1: confirmar=1 edita produtos no Bling -> token com o modulo Bling
+  if (confirmar && !(await travaAcao(req, res, { modulo: 'bling', chave: 'trava_estoque', contexto: 'bling-gtin-gerar' }))) return;
   if (refDig.length > 5) return res.status(400).json({ error: 'ref com mais de 5 dígitos não cabe no esquema' });
 
   try {

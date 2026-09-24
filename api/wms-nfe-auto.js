@@ -18,6 +18,7 @@
  *
  * GET ?contas=lumia,muniam&limite=40[&dry=1][&sefaz=0]
  */
+import { travaAcao } from './_trava.js';   // 23/09 Fase 1: trava da NF
 import { supabase, blingFetch, refreshBlingToken } from './_bling-helpers.js';
 import { encadearProximo } from './_wms-esteira.js';   // 21/09: esteira encadeada da madrugada
 
@@ -70,6 +71,8 @@ export default async function handler(req, res) {
   const limite = Math.min(parseInt(req.query?.limite) || 40, 120);
   const dry = req.query?.dry === '1';
   const transmitir = req.query?.sefaz !== '0';
+  // 23/09 Fase 1: gerar/transmitir NF = so cron (CRON_SECRET) ou admin. Modo em saude_config.trava_nf (aviso|ativo).
+  if (!dry && !(await travaAcao(req, res, { modulo: 'wms', chave: 'trava_nf', contexto: 'wms-nfe-auto', apenasAdmin: true }))) return;
   const inicio = Date.now();
   const resumo = { contas, dry, gerados: 0, autorizados: 0, ja_tinham: 0, rejeitados: 0, erros: 0, pulados: 0, detalhe: [] };
   // 21/09: duas rodadas ao mesmo tempo so brigam pelo limite do Bling (429). Se uma

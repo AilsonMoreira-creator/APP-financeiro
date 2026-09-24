@@ -44,14 +44,15 @@ const MSG_403 = 'Seu usuário não tem acesso a este módulo. A alteração NÃO
 /**
  * @returns {Promise<{usuario:string|null, cron?:boolean, aviso?:boolean}|null>} null = ja respondeu 401/403
  */
-export async function travaAcao(req, res, { modulo, chave, contexto }) {
+export async function travaAcao(req, res, { modulo, chave, contexto, apenasAdmin = false }) {
   const auth = String(req.headers.authorization || '');
   if (process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`) return { usuario: null, cron: true };
 
   const s = await sessaoDe(req);
   let motivo = null, status = 401, sub = s.claims?.sub || null;
   if (!s.ok) motivo = s.tinhaToken ? `token ${s.motivo}` : 'sem token';
-  else if (!(s.claims.adm || (s.claims.mod || []).includes(modulo))) { motivo = `sem o modulo ${modulo}`; status = 403; }
+  else if (apenasAdmin && !s.claims.adm) { motivo = 'so cron ou admin'; status = 403; }
+  else if (!apenasAdmin && !(s.claims.adm || (s.claims.mod || []).includes(modulo))) { motivo = `sem o modulo ${modulo}`; status = 403; }
   else {
     try {
       const { data: u } = await supabase.from('app_usuarios').select('ativo, versao').eq('usuario', sub).maybeSingle();

@@ -13,6 +13,7 @@
  * por busca de codigo no Bling (e guarda no gtin_map.pid_<conta>).
  * No PUT, omite camposCustomizados (sem permissão; preserva os existentes).
  */
+import { travaAcao } from './_trava.js';   // 23/09 Fase 1
 import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
 
 export const config = { maxDuration: 60 };
@@ -105,7 +106,8 @@ async function drainConta(conta, refFilter, budgetMs) {
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  if (!autorizado(req)) return res.status(401).json({ error: 'nao autorizado' });
+  // 23/09 Fase 1: a ?key= estava escrita na tela (qualquer um via) -> token com o modulo Bling (ou CRON_SECRET)
+  if (!(await travaAcao(req, res, { modulo: 'bling', chave: 'trava_estoque', contexto: 'bling-gtin-drain' }))) return;
 
   const refFilter = req.query.ref ? String(req.query.ref).replace(/\D/g, '').replace(/^0+/, '') : null;
   const contaParam = (req.query.conta || '').toLowerCase();

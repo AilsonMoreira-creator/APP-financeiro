@@ -16,6 +16,8 @@
  * O token NUNCA sai daqui. As credenciais (client id/secret) ficam no servidor
  * pra renovacao; a tela segue podendo cadastra-las.
  */
+import { exigirAdmin } from './_admin.js';   // 23/09 Fase 1
+import { travaAcao } from './_trava.js';
 import { supabase, jwtLigadoPara } from './_bling-helpers.js';
 export const config = { maxDuration: 20 };
 
@@ -65,6 +67,18 @@ export default async function handler(req, res) {
     const body = req.body || {};
     const conta = String(body.conta || '').toLowerCase();
     if (!CONTAS.includes(conta)) return res.status(400).json({ ok: false, erro: 'conta inválida' });
+    // 23/09 Fase 1: cadastrar credencial, iniciar autorizacao e gravar token = so admin (token);
+    // renovar = token com o modulo Bling; trocar_codigo (vem da pagina de retorno do Bling, sem token)
+    // so vale ate 15 min depois de um admin iniciar a autorizacao daquela conta.
+    if (['salvar_credencial', 'url_autorizacao', 'salvar_token'].includes(body.acao)) {
+      if (!(await exigirAdmin(req, res, 'bling-contas ' + body.acao))) return;
+    } else if (body.acao === 'renovar') {
+      if (!(await travaAcao(req, res, { modulo: 'bling', chave: 'trava_estoque', contexto: 'bling-contas renovar' }))) return;
+    } else if (body.acao === 'trocar_codigo') {
+      const { data: pend } = await supabase.from('saude_config').select('valor').eq('chave', 'bling_oauth_pendente_' + conta).maybeSingle();
+      if (!pend?.valor || Date.now() - Number(pend.valor) > 15 * 60000) return res.status(403).json({ ok: false, erro: 'Autorização não iniciada por um admin (ou passou de 15 min). Comece de novo pela tela do Bling.' });
+      await supabase.from('saude_config').delete().eq('chave', 'bling_oauth_pendente_' + conta);
+    }
 
     // ── credenciais (cadastro pela tela; o secret entra e nunca mais sai) ──
     if (body.acao === 'salvar_credencial') {
@@ -85,6 +99,7 @@ export default async function handler(req, res) {
       const origem = String(body.origem || '').replace(/\/$/, '');
       if (!/^https:\/\/[a-z0-9.-]+\.vercel\.app$|^https:\/\/app\.amicia/i.test(origem) && !/^http:\/\/localhost/.test(origem)) return res.status(400).json({ ok: false, erro: 'origem inválida' });
       const redirect = encodeURIComponent(origem + '/bling-callback.html');
+      await supabase.from('saude_config').upsert({ chave: 'bling_oauth_pendente_' + conta, valor: String(Date.now()), atualizado_em: new Date().toISOString() }, { onConflict: 'chave' });
       return res.status(200).json({ ok: true, url: `https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=${encodeURIComponent(c.id)}&redirect_uri=${redirect}&state=${conta}` });
     }
 

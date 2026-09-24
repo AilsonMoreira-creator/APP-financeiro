@@ -22,7 +22,10 @@ export async function encadearProximo(req, caminhoAtual) {
   if (!prox) return null;
   try {
     const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 1500);
-    await fetch(`${BASE}${prox}`, { headers: { 'User-Agent': 'vercel-cron/esteira', 'X-Cron-Despachante': '1' }, signal: ctrl.signal }).catch(() => {});
+    // 23/09 Fase 1: o proximo passo prova que e cron pelo CRON_SECRET (a trava da NF confere)
+    const h = { 'User-Agent': 'vercel-cron/esteira', 'X-Cron-Despachante': '1' };
+    if (process.env.CRON_SECRET) h.Authorization = `Bearer ${process.env.CRON_SECRET}`;
+    await fetch(`${BASE}${prox}`, { headers: h, signal: ctrl.signal }).catch(() => {});
     clearTimeout(t);
   } catch { /* o cron da proxima rodada cobre */ }
   return prox;

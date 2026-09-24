@@ -19,6 +19,7 @@
  * Roda ?limit=45 SKUs por invocação (pacing ~3 chamadas/s do Bling); o que
  * sobrar fica pra próxima madrugada. GET manual: ?limit=&dry=1 pra simular.
  */
+import { travaAcao } from './_trava.js';   // 23/09 Fase 1
 import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
 import { zerarFilhosSku, saldoDeposito } from './_bling-filhos-helpers.js';
 
@@ -29,6 +30,8 @@ const pausa = ms => new Promise(r => setTimeout(r, ms));
 export default async function handler(req, res) {
   const t0 = Date.now();
   const dry = String(req.query?.dry || '') === '1';
+  // 23/09 Fase 1: escreve estoque nas 3 contas -> so cron (CRON_SECRET) ou admin. Modo: saude_config.trava_cron_estoque.
+  if (!dry && !(await travaAcao(req, res, { modulo: 'bling', chave: 'trava_cron_estoque', contexto: 'bling-estoque-consolidar-cron', apenasAdmin: true }))) return;
   const limit = Math.min(Math.max(Number(req.query?.limit) || 45, 1), 120);
 
   const resumo = { dry, processados: 0, ok: 0, falhas: 0, restantes: 0, detalhes: [], erros: [] };

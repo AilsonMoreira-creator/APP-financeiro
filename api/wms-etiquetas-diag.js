@@ -7,6 +7,7 @@
  * wms_pedidos, abre o detalhe no Bling e caça: notaFiscal (id → /nfe/{id},
  * procurando link do DANFE) e transporte/etiqueta. Só leitura.
  */
+import { exigirAdmin } from './_admin.js';   // 23/09 Fase 1
 import https from 'node:https';
 import { supabase, blingFetch, refreshBlingToken } from './_bling-helpers.js';
 
@@ -34,6 +35,8 @@ export const config = { maxDuration: 120 };
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  // 23/09 Fase 1: este diagnostico cria/transmite/edita/apaga NF por parametro na URL -> so admin (token)
+  if (!(await exigirAdmin(req, res, 'wms-etiquetas-diag'))) return;
   const conta = String(req.query?.conta || 'exitus');
   const limite = Math.min(parseInt(req.query?.limite) || 2, 4);
   try {
