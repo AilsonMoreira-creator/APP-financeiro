@@ -1629,13 +1629,19 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   const [pubSilencio, setPubSilencio] = useState('');
   const [listaTemplates, setListaTemplates] = useState([]);
   useEffect(() => {
-    if (filtroEtapa !== 'perdida' || listaTemplates.length) return;
+    if (!['perdida', 'vendeu'].includes(filtroEtapa) || listaTemplates.length) return;
     supabase.from('lojas_whats_templates').select('name').eq('ativo', true).order('name')
       .then(({ data }) => setListaTemplates((data || []).map(t => t.name)));
   }, [filtroEtapa]);
   const [perdidaDe, setPerdidaDe] = useState('');
   const [perdidaAte, setPerdidaAte] = useState('');
   const [templateMassa, setTemplateMassa] = useState('pesquisa');
+  // 24/09 (pedido dele): disparo de template em massa na aba Vendeu — filtro de
+  // data da venda, "não recebeu" o template escolhido, selecionar 50 e enviar.
+  const [vendeuDe, setVendeuDe] = useState('');
+  const [vendeuAte, setVendeuAte] = useState('');
+  const [semTemplateVendeu, setSemTemplateVendeu] = useState('');
+  const [templateVendeu, setTemplateVendeu] = useState('');
   const [tplsReativacao, setTplsReativacao] = useState([]);
   // Aba Follow-up: template escolhido pro disparo manual em massa + lista de
   // templates aprovados disponíveis pra isso. Ailson 15/07/2026.
@@ -1767,6 +1773,11 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         else if (filtroEnviosPerdida === '2') q = q.eq('hsm_envios', 2);
         else if (filtroEnviosPerdida === '3') q = q.gte('hsm_envios', 3);
       }
+      // 24/09: aba Vendeu — data da venda (vendeu_em, horario de Brasilia)
+      if (filtroEtapa === 'vendeu') {
+        if (vendeuDe) q = q.gte('vendeu_em', `${vendeuDe}T00:00:00-03:00`);
+        if (vendeuAte) q = q.lte('vendeu_em', `${vendeuAte}T23:59:59-03:00`);
+      }
       let data;
       if (filtroEtapa === 'perdida' && (pubSemTemplate || pubSilencio)) {
         // 26/08: montagem de publico — a RPC resolve o "nunca recebeu o
@@ -1792,6 +1803,17 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         ({ data } = await q);
       }
       let lista = data || [];
+      // 24/09: aba Vendeu — tira quem JA RECEBEU o template escolhido (nao repete disparo)
+      if (filtroEtapa === 'vendeu' && semTemplateVendeu && lista.length) {
+        const jaReceberam = new Set();
+        const ids = lista.map(c => c.id);
+        for (let i = 0; i < ids.length; i += 200) {
+          const { data: ms } = await supabase.from('lojas_whats_mensagens').select('conversa_id')
+            .eq('template_name', semTemplateVendeu).in('conversa_id', ids.slice(i, i + 200));
+          (ms || []).forEach(m => jaReceberam.add(m.conversa_id));
+        }
+        lista = lista.filter(c => !jaReceberam.has(c.id));
+      }
       // Enriquece conversas VENDIDAS com atendido_por da conversao (lojas_conversoes),
       // pra distinguir no card "carrinho fechado por fora" (venda_loja/vendedora) de
       // "Sofia conduziu" (sofia). Lookup leve por vendeu_venda_id. Ailson 30/06/2026.
@@ -1827,12 +1849,12 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       jaCarregouListaRef.current = true;
       setLoading(false);
     })();
-  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, filtroEnviosPerdida, pubSemTemplate, pubSilencio, perdidaDe, perdidaAte, filtroTag]);
+  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, filtroEnviosPerdida, pubSemTemplate, pubSilencio, perdidaDe, perdidaAte, filtroTag, vendeuDe, vendeuAte, semTemplateVendeu]);
 
   // Catálogo dos templates de reativação (curadoria/novidades/dicas) pro
   // seletor do disparo em massa. Carrega 1x quando abre a aba Perdida.
   useEffect(() => {
-    if (filtroEtapa !== 'perdida' || tplsReativacao.length) return;
+    if (!['perdida', 'vendeu'].includes(filtroEtapa) || tplsReativacao.length) return;
     fetch('/api/lojas-whats-templates-catalogo')
       .then(r => r.json())
       .then(j => {
@@ -2125,6 +2147,14 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   const ehAbaAprovar = filtroEtapa === 'aprovar';
   const ehAbaPerdida = filtroEtapa === 'perdida';
   const ehAbaFollowup = filtroEtapa === 'follow_up';
+  const ehAbaVendeu = filtroEtapa === 'vendeu';
+  // nome do template no seletor (mesmo da Perdida e da Vendeu)
+  const rotuloReativacao = (t) => {
+    const base = { curadoria: 'Curadoria', novidades: 'Novidades', dicas_rapidas: 'Dica lojista', tendencias: 'Tendência Balonê' }[t.pasta] || t.name;
+    const repetido = tplsReativacao.filter(x => x.pasta === t.pasta).length > 1;
+    const tema = String(t.name || '').replace(/^(dicas?|tendencia|reativacao)_/, '').replace(/_v\d+$/, '').replace(/_/g, ' ');
+    return repetido && tema ? `${base} · ${tema.charAt(0).toUpperCase()}${tema.slice(1)}` : base;
+  };
 
   // Disparo manual de HSM em massa (aba Follow-up): manda o template escolhido
   // pros cards selecionados. Usa o corpo real do template (fura as 24h). Ailson
@@ -2158,15 +2188,16 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   // Dispara o template de reativacao escolhido (curadoria/novidades/dicas) pros
   // cards selecionados da Perdida — mesmo endpoint do followup, que preenche
   // {{1}}=nome e {{2}}=saudacao e usa o criativo_url do catalogo. 23/07/2026.
-  const dispararReativacaoSelecionados = async () => {
-    if (selecionados.size === 0) return;
-    if (!confirm(`Disparar "${templateMassa}" pra ${selecionados.size} cliente(s)? Isso envia uma mensagem paga (HSM) pra cada uma, e elas ganham a tag do próximo envio.`)) return;
+  const dispararReativacaoSelecionados = async (tplArg) => {
+    const tplDisparo = typeof tplArg === 'string' ? tplArg : templateMassa;   // 24/09: Vendeu passa o dela
+    if (selecionados.size === 0 || !tplDisparo || tplDisparo === 'pesquisa') return;
+    if (!confirm(`Disparar "${tplDisparo}" pra ${selecionados.size} cliente(s)? Isso envia uma mensagem paga (HSM) pra cada uma, e elas ganham a tag do próximo envio.`)) return;
     setProcessandoFila(true);
     try {
       const r = await fetch('/api/lojas-whats-followup-disparo-massa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversa_ids: Array.from(selecionados), template: templateMassa }),
+        body: JSON.stringify({ conversa_ids: Array.from(selecionados), template: tplDisparo }),
       });
       const j = await r.json();
       if (!r.ok || j.error || j.ok === false) {
@@ -2316,7 +2347,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       </div>
 
       {/* Barra de selecao multipla — abas processando, aprovar, perdida, follow-up */}
-      {(ehAbaProcessando || ehAbaAprovar || ehAbaPerdida || ehAbaFollowup) && conversas.length > 0 && (
+      {(ehAbaProcessando || ehAbaAprovar || ehAbaPerdida || ehAbaFollowup || ehAbaVendeu) && conversas.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
           padding: '8px 12px', borderRadius: 8,
@@ -2335,10 +2366,21 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
             />
             <span style={{ color: palette.inkSoft }}>
               {selecionados.size === 0
-                ? (ehAbaAprovar ? 'Selecionar todos' : (ehAbaPerdida || ehAbaFollowup) ? 'Selecionar clientes' : `${conversas.length} na fila`)
+                ? (ehAbaAprovar ? 'Selecionar todos' : (ehAbaPerdida || ehAbaFollowup || ehAbaVendeu) ? 'Selecionar clientes' : `${conversas.length} na fila`)
                 : `${selecionados.size} de ${conversas.length} selecionados`}
             </span>
           </label>
+          {ehAbaVendeu && (
+            <button onClick={() => setSelecionados(new Set(conversasBuscadas.slice(0, 50).map(c => c.id)))} disabled={processandoFila}
+              style={{
+                marginLeft: 'auto', padding: '6px 12px', borderRadius: 6,
+                background: palette.surface, color: palette.ink,
+                border: `1px solid ${palette.beige}`, fontFamily: FONT,
+                fontSize: fz(12), fontWeight: 600, cursor: 'pointer',
+              }}>
+              Selecionar 50
+            </button>
+          )}
           {ehAbaPerdida && (
             <button onClick={selecionar30Pesquisa} disabled={processandoFila}
               style={{
@@ -2388,7 +2430,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
                     );
                   })}
                 </select>
-                <button onClick={templateMassa === 'pesquisa' ? enviarPesquisaSelecionados : dispararReativacaoSelecionados}
+                <button onClick={templateMassa === 'pesquisa' ? enviarPesquisaSelecionados : () => dispararReativacaoSelecionados(templateMassa)}
                   disabled={processandoFila}
                   style={{
                     padding: '6px 14px', borderRadius: 6,
@@ -2399,6 +2441,37 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
                 }}>
                 {processandoFila ? 'Enviando…' : templateMassa === 'pesquisa' ? `Enviar pesquisa (${selecionados.size})` : `Disparar (${selecionados.size})`}
               </button>
+              </>
+            ) : ehAbaVendeu ? (
+              <>
+                {/* 24/09: disparo em massa na aba Vendeu (mesmos templates da Perdida) */}
+                <select value={templateVendeu} onChange={e => setTemplateVendeu(e.target.value)}
+                  style={{
+                    fontSize: fz(12), padding: '6px 8px', borderRadius: 6,
+                    border: `1px solid ${palette.beige}`, fontFamily: FONT,
+                    background: palette.surface, color: palette.ink, maxWidth: 210,
+                  }}>
+                  <option value="">Escolha o template…</option>
+                  {tplsReativacao.map(t => {
+                    const pronto = t.status === 'aprovado';
+                    return (
+                      <option key={t.name} value={t.name} disabled={!pronto}>
+                        {rotuloReativacao(t)}{pronto ? '' : ' (aguardando Meta)'}
+                      </option>
+                    );
+                  })}
+                </select>
+                <button onClick={() => dispararReativacaoSelecionados(templateVendeu)}
+                  disabled={processandoFila || !templateVendeu}
+                  style={{
+                    padding: '6px 14px', borderRadius: 6,
+                    background: (processandoFila || !templateVendeu) ? '#bdc3c7' : palette.accent,
+                    color: '#fff', border: 'none', fontFamily: FONT,
+                    fontSize: fz(13), fontWeight: 700,
+                    cursor: processandoFila ? 'wait' : (!templateVendeu ? 'default' : 'pointer'),
+                  }}>
+                  {processandoFila ? 'Enviando…' : `Enviar em massa (${selecionados.size})`}
+                </button>
               </>
             ) : ehAbaFollowup ? (
               <>
@@ -2558,6 +2631,30 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         </>
       )}
 
+      {/* 24/09: filtros do disparo na aba Vendeu — data da venda + "não recebeu" o template */}
+      {ehAbaVendeu && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600 }}>📅 Vendeu entre:</span>
+          <input type="date" value={vendeuDe} onChange={e => setVendeuDe(e.target.value)}
+            style={{ fontSize: fz(11), padding: '4px 8px', borderRadius: 6, border: `1px solid ${palette.beige}`, fontFamily: FONT, background: palette.surface, color: palette.ink }} />
+          <span style={{ fontSize: fz(11), color: palette.inkMuted }}>e</span>
+          <input type="date" value={vendeuAte} onChange={e => setVendeuAte(e.target.value)}
+            style={{ fontSize: fz(11), padding: '4px 8px', borderRadius: 6, border: `1px solid ${palette.beige}`, fontFamily: FONT, background: palette.surface, color: palette.ink }} />
+          <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600, marginLeft: 6 }}>🚫 Não recebeu:</span>
+          <select value={semTemplateVendeu} onChange={e => setSemTemplateVendeu(e.target.value)}
+            style={{ fontSize: fz(11), padding: '4px 8px', borderRadius: 6, border: `1px solid ${semTemplateVendeu ? palette.accent : palette.beige}`, fontFamily: FONT, background: palette.surface, color: palette.ink, maxWidth: 220 }}>
+            <option value="">(qualquer template)</option>
+            {listaTemplates.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          {(vendeuDe || vendeuAte || semTemplateVendeu) && (
+            <button onClick={() => { setVendeuDe(''); setVendeuAte(''); setSemTemplateVendeu(''); }}
+              style={{ fontSize: fz(11), padding: '4px 10px', borderRadius: 14, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
+              limpar
+            </button>
+          )}
+        </div>
+      )}
+
       {(filtroEtapa === 'follow_up' || filtroEtapa === 'perdida') && (
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 10,
@@ -2590,7 +2687,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
               <ConversaRow key={c.id} c={c}
                 vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : (c.vendeu_site ? '🌐 Site' : null)}
                 vendedorasMap={vendedorasMap}
-                selecionavel={ehAbaProcessando || ehAbaAprovar || ehAbaPerdida || ehAbaFollowup}
+                selecionavel={ehAbaProcessando || ehAbaAprovar || ehAbaPerdida || ehAbaFollowup || ehAbaVendeu}
                 selecionado={selecionados.has(c.id)}
                 onToggleSelecao={() => toggleSelecao(c.id)}
                 onContinuarSofia={() => onContinuarSofia(c)}
