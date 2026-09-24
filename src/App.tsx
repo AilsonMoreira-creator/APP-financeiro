@@ -6673,8 +6673,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               </select>
               <button onClick={()=>{setLogsBlingPeriodo('tudo');setLogsBlingData('');}} style={chipStl(periodoTudo)}>Tudo</button>
               <button onClick={()=>{setLogsBlingPeriodo('7d');setLogsBlingData('');}} style={chipStl(periodo7d)}>7 dias</button>
-              <input type="date" value={logsBlingData} onChange={e=>setLogsBlingData(e.target.value)} title="dia específico" style={{border:"1px solid "+(logsBlingData?"#2c3e50":"#e8e2da"),borderRadius:6,padding:"4px 8px",fontSize:11.5,fontFamily:"Georgia,serif",outline:"none",background:logsBlingData?"#eef3f7":"#faf8f5",color:"#5a6470",cursor:"pointer"}}/>
-              {logsBlingData&&<button onClick={()=>setLogsBlingData('')} title="limpar data" style={{background:"none",border:"none",color:"#8a9aa4",fontSize:15,cursor:"pointer",lineHeight:1,padding:"0 2px"}}>×</button>}
+              {!logsBlingModoCard&&<input type="date" value={logsBlingData} onChange={e=>setLogsBlingData(e.target.value)} title="dia específico" style={{border:"1px solid "+(logsBlingData?"#2c3e50":"#e8e2da"),borderRadius:6,padding:"4px 8px",fontSize:11.5,fontFamily:"Georgia,serif",outline:"none",background:logsBlingData?"#eef3f7":"#faf8f5",color:"#5a6470",cursor:"pointer"}}/>}
+              {!logsBlingModoCard&&logsBlingData&&<button onClick={()=>setLogsBlingData('')} title="limpar data" style={{background:"none",border:"none",color:"#8a9aa4",fontSize:15,cursor:"pointer",lineHeight:1,padding:"0 2px"}}>×</button>}
               <span style={{fontSize:11,color:"#8a9aa4",marginLeft:"auto",whiteSpace:"nowrap"}}>{lista.length} registro{lista.length!==1?'s':''}</span>
             </div>
             {logsBlingModoCard&&<div style={{padding:"6px 12px",borderBottom:"1px solid #e8e2da",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0,background:"#faf8f5"}}>
