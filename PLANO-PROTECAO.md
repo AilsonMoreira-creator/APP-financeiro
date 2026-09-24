@@ -27,7 +27,7 @@
 | **Fase 1 · estoque Bling** — trava por token, **ATIVA** | ✅ 23/09 (`574c43b`) |
 | **Fase 1 · resto do Bling** (gtin, bling-contas, diag de NF) — **ATIVA** | ✅ 23/09 (`d444649`) |
 | **Fase 1 · NF** (`wms-nfe-auto`) e consolidação das 5h | ✅ 23/09 (`d444649`) · **ATIVAS** desde 24/09 (NF 09:41; consolidação ~10h) — madrugada de 24/09: 130/130 NF ok, zero aviso |
-| **Fase 1 · WhatsApp** (Sofia/Lara/e-mail mkt) — **AVISO** | ✅ 24/09 11:45 (`e47ee36`) → virar ativo depois de 1 dia sem aviso de gente legítima |
+| **Fase 1 · WhatsApp** (Sofia/Lara/e-mail mkt) — **ATIVA** | ✅ 24/09 11:45 em aviso (`e47ee36`) · ativo 24/09 19:05 — no aviso: zero recusa legítima; carrinho da Lara (cron) passou pelo CRON_SECRET |
 | Id do aparelho em 3 lugares (localStorage + IndexedDB + cookie do servidor) e id certo no login | ✅ 24/09 (`0939559`, SW v278) |
 | Template com botões + webhook + tela de pendentes + device_id no login | ⏳ (front, fora das 08:00–09:30) |
 | Ligar aparelhos (`aparelhos_modo = ativo`) | ⏳ depois de 30/09 |
@@ -42,7 +42,7 @@
 | `trava_estoque` | `ativo` | estoque, localização, gtin, renovar conta Bling | `'aviso'` |
 | `trava_nf` | `ativo` | gerar/transmitir NF (`wms-nfe-auto`): só cron ou admin | `'aviso'` |
 | `trava_cron_estoque` | `ativo` | consolidação das 5h: só cron ou admin | `'aviso'` |
-| `trava_whats` | `aviso` | envios do Sofia (módulo sofia ou lojas), Lara e e-mail mkt (meluni), whats-teste (admin) | já em aviso |
+| `trava_whats` | `ativo` | envios do Sofia (módulo sofia ou lojas), Lara e e-mail mkt (meluni), whats-teste (admin) | `'aviso'` |
 | `aparelhos_modo` | `sombra` | aparelhos conhecidos (futuro `ativo`) | `'sombra'` |
 
 Exemplo: `update saude_config set valor='aviso' where chave='trava_estoque';` (vale em até 1 min).
@@ -88,7 +88,7 @@ from app_erros where modulo='seguranca' and criado_em > now() - interval '18 hou
 Esperado: **nenhum** "SERIA recusado" de `wms-nfe-auto` nem de `bling-estoque-consolidar-cron` na madrugada, e as NFs saindo normalmente. Aí: `update saude_config set valor='ativo' where chave in ('trava_nf','trava_cron_estoque');`
 Também conferir: nenhuma recusa de estoque de quem é legítimo (Cris etc.) no primeiro dia com todos logando de novo.
 
-### WhatsApp (em aviso desde 24/09) — endpoints travados
+### WhatsApp (ativo desde 24/09 19:05) — endpoints travados
 Sofia: `lojas-whats-mensagem-enviar`, `template-disparo`, `clientes-massa`, `clientes-aprovar-lote`, `followup-disparo-massa`, `followup-pesquisa-enviar`, `pesquisa-enviar`, `midia-enviar-local`, `aprovar`, `encaminhar`, `ia-disparar-manual`, `template-submeter`. Lara/e-mail: `meluni-whats-enviar`, `midia-enviar`, `carrinho-disparo`, `carrinho-teste`, `aprovar`, `template-criar`, `meluni-email-mkt-disparar`, `mkt-enviar`, `mkt-auto`, `meluni-email-teste`. Admin: `whats-teste-disparo`. Pendente: assinatura da Meta nos webhooks de entrada; retorno OAuth do ML (`ml-auth`) só até 15 min após admin iniciar. Conferir assinatura da Meta nos webhooks de entrada (senão dá pra forjar mensagem recebida e a IA responder). Aviso 1 dia, depois ativo.
 
 ### Depois
