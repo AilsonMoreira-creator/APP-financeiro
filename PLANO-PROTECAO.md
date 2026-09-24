@@ -1,6 +1,6 @@
 # PLANO — App fechado (fase de proteção)
 
-> Registrado em 23/09/2026 (noite). Substitui a ordem do PLANO-MIGRACAO.md para a parte de acesso.
+> Registrado em 23/09/2026 (noite) — atualizado no fim da mesma noite (Fase 1: estoque ativo, NF em aviso). Substitui a ordem do PLANO-MIGRACAO.md para a parte de acesso.
 > O PLANO-MIGRACAO.md continua valendo para a saída do `amicia_data` (sombras, espelhos, virada por módulo).
 
 ## Prioridades do Ailson (nesta ordem)
@@ -23,12 +23,28 @@
 | `shopee_auth`, `tts_auth` fechadas; 9 funções security definer sem acesso anônimo | ✅ 23/09 |
 | Espelho de cadastros: 1 registro por chave (REF com espaço duplicava e travava o lote) | ✅ 23/09 (`1aec87a`, SW v277) |
 | **Fase 0** — admin pelo TOKEN (não pelo `X-User`) | ✅ 23/09 (`a7966ec`) |
-| **Aparelhos em sombra** | ✅ 23/09 (`a7966ec`) — começa a semana |
-| Fase 1 — trava por token nos endpoints de ação | ⏳ |
-| Template com botões + webhook + tela de pendentes + device_id no login | ⏳ (front) |
-| Ligar aparelhos (`aparelhos_modo = ativo`) | ⏳ depois da semana |
+| **Aparelhos em sombra** | ✅ 23/09 (`a7966ec`) — semana até 30/09 |
+| **Fase 1 · estoque Bling** — trava por token, **ATIVA** | ✅ 23/09 (`574c43b`) |
+| **Fase 1 · resto do Bling** (gtin, bling-contas, diag de NF) — **ATIVA** | ✅ 23/09 (`d444649`) |
+| **Fase 1 · NF** (`wms-nfe-auto`) e consolidação das 5h — **AVISO** | ✅ 23/09 (`d444649`) → virar ativo 24/09 depois de conferir a madrugada |
+| Fase 1 · WhatsApp (Sofia/Lara) | ⏳ 25–26/09 |
+| Template com botões + webhook + tela de pendentes + device_id no login | ⏳ (front, fora das 08:00–09:30) |
+| Ligar aparelhos (`aparelhos_modo = ativo`) | ⏳ depois de 30/09 |
 | Fase 2 — SAC e Meta Ads | ⏳ |
 | Fase 3 — dados (token aceito pelo Supabase + RLS por módulo) | ⏳ |
+
+## Chaves (todas em `saude_config`, mudam sem deploy pelo SQL Editor)
+
+| Chave | Valor hoje | O que faz | Voltar atrás |
+|---|---|---|---|
+| `admin_legado` | `off` | `on` volta a aceitar `X-User: ailson` como admin | `'on'` |
+| `trava_estoque` | `ativo` | estoque, localização, gtin, renovar conta Bling | `'aviso'` |
+| `trava_nf` | `aviso` | gerar/transmitir NF (`wms-nfe-auto`): só cron ou admin | já em aviso |
+| `trava_cron_estoque` | `aviso` | consolidação das 5h: só cron ou admin | já em aviso |
+| `aparelhos_modo` | `sombra` | aparelhos conhecidos (futuro `ativo`) | `'sombra'` |
+
+Exemplo: `update saude_config set valor='aviso' where chave='trava_estoque';` (vale em até 1 min).
+Modo **aviso** = registra em `app_erros` (módulo `seguranca`, texto "SERIA recusado") e deixa passar. **Ativo** = recusa com a mensagem "Sua sessão expirou. Saia e entre de novo no app. A alteração NÃO foi feita." (ou "sem acesso a este módulo").
 
 ### Fase 0 (no ar)
 `api/_admin.js` → `exigirAdmin(req,res,contexto)`: token válido com `adm`, usuário ativo e mesma versão. Aplicado em:
@@ -52,13 +68,31 @@ select * from app_aparelhos where status <> 'aprovado' or origem <> 'carga_inici
 select criado_em, usuario, mensagem, assinatura from app_erros where modulo='seguranca' order by id desc limit 50;
 ```
 
-## Fase 1 — trava nos endpoints de ação (próxima)
-Achado de 23/09: **nenhum** endpoint de ação confere quem chama. O porteiro mostra que hoje só são chamados com token válido ou por cron.
-Cada um ganha no topo a conferência de token + módulo (`exigirSessao` do `_sessao.js`) ou o `CRON_SECRET` (já existe no Vercel). O registro de "quem fez" passa a usar o usuário do token. 1 dia em modo aviso antes de ligar; chave de volta sem deploy.
-1. **Estoque Bling:** `bling-estoque-set`, `bling-estoque-acrescentar-corte`, `bling-estoque-zerar-filhos`, `bling-localizacao-set`; apagar `bling-fix-corte-9876`; tirar gravação anônima da tabela `bling_estoque` (a tela só lê; `bling_estoque_locks` fica).
-2. **WhatsApp:** envios do Sofia (`lojas-whats-mensagem-enviar`, `template-disparo`, `clientes-massa`, `followup-disparo-massa`, `pesquisa-enviar`, `midia-enviar-local`, `aprovar`, `encaminhar`, `ia-disparar-manual`) e da Lara (`meluni-whats-enviar`, `midia-enviar`, `carrinho-disparo`, `aprovar`, `template-criar`), e-mail mkt, `whats-teste-disparo`. Conferir assinatura da Meta nos webhooks de entrada.
-3. **NF:** `wms-nfe-auto` e a esteira (`_wms-esteira.js`) provando cron pelo `CRON_SECRET`; `wms-etiquetas` só a trava no topo (sem tocar montagem/ZPL, com autorização dele); fechar `wms_print_jobs`. Nunca em dia de operação; testar com `?dry=1`.
-- Crons em geral: hoje reconhecidos pelo User-Agent (`vercel-cron`), que qualquer um manda — trocar por `CRON_SECRET`.
+## Fase 1 — trava nos endpoints de ação
+Achado de 23/09: **nenhum** endpoint de ação conferia quem chama. Helper `api/_trava.js` → `travaAcao(req,res,{modulo, chave, contexto, apenasAdmin})`: passa quem tem token com o módulo (ou admin) e usuário ativo na mesma versão, ou cron provado pelo `CRON_SECRET` (o Vercel manda sozinho). O "quem fez" (`body.usuario`) vira o usuário do token.
+
+### Feito
+- **Estoque (ativo):** `bling-estoque-set`, `bling-estoque-acrescentar-corte`, `bling-estoque-zerar-filhos` (POST), `bling-localizacao-set` (gravar), `bling-localizacao-popular` (a `?key=` estava escrita na tela). Tabela `bling_estoque` só leitura pro navegador. `bling-fix-corte-9876` apagado. Módulo Bling hoje: cris, ingrid, sthefany, ailson, admin.
+- **Resto do Bling (ativo):** `bling-gtin-gerar` (confirmar=1), `bling-gtin-drain` (a `?key=` estava na tela), `bling-contas` (credencial, iniciar autorização e gravar token = admin; renovar = token com módulo; `trocar_codigo`, que vem da página de retorno sem token, só vale até 15 min depois de um admin iniciar a autorização daquela conta).
+- **`wms-etiquetas-diag` (ativo, só admin):** diagnóstico de agosto que criava, transmitia pra SEFAZ, editava e apagava NF por parâmetro na URL, sem trava. Nada no app chama.
+- **NF (aviso):** `wms-nfe-auto` só cron ou admin (`?dry=1` segue livre, só lê). A esteira (`_wms-esteira.js`) passou a mandar o `CRON_SECRET` ao chamar o próximo passo.
+- **Consolidação das 5h (aviso):** `bling-estoque-consolidar-cron` só cron ou admin.
+
+### Conferir em 24/09 às 10h (antes de virar NF e consolidação pra ativo)
+```sql
+select to_char(criado_em at time zone 'America/Sao_Paulo','dd/MM HH24:MI') em, usuario, mensagem, assinatura
+from app_erros where modulo='seguranca' and criado_em > now() - interval '18 hours' order by id desc;
+```
+Esperado: **nenhum** "SERIA recusado" de `wms-nfe-auto` nem de `bling-estoque-consolidar-cron` na madrugada, e as NFs saindo normalmente. Aí: `update saude_config set valor='ativo' where chave in ('trava_nf','trava_cron_estoque');`
+Também conferir: nenhuma recusa de estoque de quem é legítimo (Cris etc.) no primeiro dia com todos logando de novo.
+
+### Próximo: WhatsApp (25–26/09)
+Envios do Sofia (`lojas-whats-mensagem-enviar`, `template-disparo`, `clientes-massa`, `followup-disparo-massa`, `pesquisa-enviar`, `midia-enviar-local`, `aprovar`, `encaminhar`, `ia-disparar-manual`) e da Lara (`meluni-whats-enviar`, `midia-enviar`, `carrinho-disparo`, `aprovar`, `template-criar`), e-mail mkt, `whats-teste-disparo`. Conferir assinatura da Meta nos webhooks de entrada (senão dá pra forjar mensagem recebida e a IA responder). Aviso 1 dia, depois ativo.
+
+### Depois
+- Crons em geral: hoje reconhecidos pelo User-Agent (`vercel-cron`), que qualquer um manda — trocar por `CRON_SECRET` aos poucos (cada cron que escreve em sistema externo).
+- `wms-etiquetas`: só a trava no topo, sem tocar montagem/ZPL, **com autorização explícita dele**.
+- Fechar `wms_print_jobs` (fila de impressão, sem RLS).
 
 ## Fase 2 — SAC e Meta Ads
 - Trava nos `meta-ads-*` e no `ml-answer`, `ml-messages-reply`, `ml-attachment`, `ml-lock`.
@@ -73,6 +107,9 @@ Cada um ganha no topo a conferência de token + módulo (`exigirSessao` do `_ses
 - As 66 tabelas sem uso do navegador (logs de 5 dias em 17–23/09) fecham em lote depois de 7 dias seguidos de log limpo.
 
 ## Pendências registradas
+- Front: o login manda `amica_device_id` (nunca gravado; o certo é `amica_device`) — corrigir junto com a parte de tela dos aparelhos. Mesmo erro em `app-erro` e `ocupado.ts`.
+- Front: tela de localização mostra "ok, 0 gravados" se o `bling-localizacao-popular` recusar no meio (só acontece se o token vencer entre o preparar e o gravar).
+- `app-sessao ?ativos=1` nunca respondeu (o GET cai no 405 antes) — a tela Saúde usa outro caminho; limpar quando mexer.
 - 4 produtos duplicados por espaço no fim da REF (3164 com descrições diferentes, 3217, 3226, 3237) — decisão dele.
 - `sombra_historico` crescendo ~60 MB/dia (Oficinas) — precisa de retenção.
 - Save da gaveta `ailson_cortes` sem trava de versão (espelho e restauração automática seguram).
