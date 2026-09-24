@@ -6,6 +6,7 @@
 //   Guard simples via ?k= pra nao ficar aberto pra qualquer um.
 //   Ailson 04/07/2026.
 // ============================================================================
+import { travaAcao } from './_trava.js';   // 24/09 Fase 1 WhatsApp
 import { renderEmailHtml, primeiroNome, aplicarTokens } from './_meluni-email-mkt-template.js';
 import { resolverItensDetalhados } from './_meluni-carrinho-resumo.js';
 import { supabase } from './_bling-helpers.js';
@@ -18,6 +19,8 @@ const TO_PADRAO = 'ailson.moreira@icloud.com';
 const CARRINHO_AMOSTRA = { nome: 'Ailson', valor: 289.9, resumo: 'Vestido de Linho e mais 1 peca', itens: [{ qtd: 1 }, { qtd: 1 }] };
 
 export default async function handler(req, res) {
+  // 24/09 Fase 1 WhatsApp: envio exige token com o modulo (ou CRON_SECRET). Modo: saude_config.trava_whats (aviso|ativo)
+  if (req.method !== 'OPTIONS' && !(await travaAcao(req, res, { modulo: 'meluni', chave: 'trava_whats', contexto: 'meluni-email-teste', trocarUsuario: false }))) return;
   try {
     if ((req.query?.k || '') !== GUARD) return res.status(403).json({ ok: false, erro: 'guard' });
     if (!process.env.RESEND_API_KEY) return res.status(400).json({ ok: false, erro: 'Falta RESEND_API_KEY.' });

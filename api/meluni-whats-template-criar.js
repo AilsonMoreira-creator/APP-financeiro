@@ -8,6 +8,7 @@
 // mesmo nome retorna erro (capturado por template, não derruba o outro).
 // Ailson 16/06/2026.
 // ============================================================================
+import { travaAcao } from './_trava.js';   // 24/09 Fase 1 WhatsApp
 import { cfgMeluni } from './_meluni-whats-helpers.js';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
@@ -92,6 +93,8 @@ async function criarUm(t, idiomaPadrao, categoriaPadrao) {
 }
 
 export default async function handler(req, res) {
+  // 24/09 Fase 1 WhatsApp: envio exige token com o modulo (ou CRON_SECRET). Modo: saude_config.trava_whats (aviso|ativo)
+  if (req.method !== 'OPTIONS' && !(await travaAcao(req, res, { modulo: 'meluni', chave: 'trava_whats', contexto: 'meluni-whats-template-criar', trocarUsuario: false }))) return;
   if (req.query?.force !== '1') {
     return res.status(403).json({ erro: 'Use ?force=1 pra criar os templates.' });
   }

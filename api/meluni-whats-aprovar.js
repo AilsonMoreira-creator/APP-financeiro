@@ -6,6 +6,7 @@
 //   - descartar: marca 'descartada' (não envia).
 // Exporta aprovarSugestao() pro auto-envio do cron. Ailson 16/06/2026.
 // ============================================================================
+import { travaAcao } from './_trava.js';   // 24/09 Fase 1 WhatsApp
 import { supabase } from './_meluni-whats-helpers.js';
 import { enviarTextoLara } from './_meluni-whats-meta.js';
 import { enviarTextoIG } from './_meluni-ig-meta.js';
@@ -72,6 +73,8 @@ export async function aprovarSugestao(sugestaoId, operador = 'sistema', textoOve
 }
 
 export default async function handler(req, res) {
+  // 24/09 Fase 1 WhatsApp: envio exige token com o modulo (ou CRON_SECRET). Modo: saude_config.trava_whats (aviso|ativo)
+  if (req.method !== 'OPTIONS' && !(await travaAcao(req, res, { modulo: 'meluni', chave: 'trava_whats', contexto: 'meluni-whats-aprovar', trocarUsuario: false }))) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ ok: false, erro: 'use POST' });

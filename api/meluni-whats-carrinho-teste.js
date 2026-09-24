@@ -3,6 +3,7 @@
 // GET ?force=1&telefone=55..&nome=Ailson&refs=2277&versao=leve
 // Usa a engrenagem real: ref -> acha 1 sku -> resolverResumoItens. Ailson 16/06/2026.
 // ============================================================================
+import { travaAcao } from './_trava.js';   // 24/09 Fase 1 WhatsApp
 import { supabase } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { resolverResumoItens } from './_meluni-carrinho-resumo.js';
@@ -10,6 +11,8 @@ import { resolverResumoItens } from './_meluni-carrinho-resumo.js';
 const refZ = (r) => String(r ?? '').replace(/^0+/, '') || '0';
 
 export default async function handler(req, res) {
+  // 24/09 Fase 1 WhatsApp: envio exige token com o modulo (ou CRON_SECRET). Modo: saude_config.trava_whats (aviso|ativo)
+  if (req.method !== 'OPTIONS' && !(await travaAcao(req, res, { modulo: 'meluni', chave: 'trava_whats', contexto: 'meluni-whats-carrinho-teste', trocarUsuario: false }))) return;
   if (req.query?.force !== '1') return res.status(403).json({ erro: 'Use ?force=1' });
   const telefone = String(req.query?.telefone || '').replace(/\D/g, '');
   if (!telefone) return res.status(400).json({ erro: 'telefone obrigatorio (só dígitos)' });

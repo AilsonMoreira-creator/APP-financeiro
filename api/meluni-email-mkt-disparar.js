@@ -7,6 +7,7 @@
 // grava em meluni_email_envios (só no sucesso, pra falha continuar elegível).
 // Ailson 20/06/2026.
 // ============================================================================
+import { travaAcao } from './_trava.js';   // 24/09 Fase 1 WhatsApp
 import { supabase } from './_bling-helpers.js';
 import { renderEmailHtml, primeiroNome, aplicarTokens, EMAIL_DEFAULTS } from './_meluni-email-mkt-template.js';
 import { resolverItensDetalhados } from './_meluni-carrinho-resumo.js';
@@ -33,6 +34,8 @@ async function enviarResend({ to, subject, html, unsubscribeUrl }) {
 }
 
 export default async function handler(req, res) {
+  // 24/09 Fase 1 WhatsApp: envio exige token com o modulo (ou CRON_SECRET). Modo: saude_config.trava_whats (aviso|ativo)
+  if (req.method !== 'OPTIONS' && !(await travaAcao(req, res, { modulo: 'meluni', chave: 'trava_whats', contexto: 'meluni-email-mkt-disparar', trocarUsuario: false }))) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

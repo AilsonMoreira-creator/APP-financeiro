@@ -5,6 +5,7 @@
 // O disparo em massa virá em endpoint próprio; este é o envio avulso.
 // Ailson 20/06/2026.
 // ============================================================================
+import { travaAcao } from './_trava.js';   // 24/09 Fase 1 WhatsApp
 import { renderEmailHtml, primeiroNome, aplicarTokens } from './_meluni-email-mkt-template.js';
 
 const FROM = 'Meluni <marketing@news.meluniloja.com.br>';
@@ -13,6 +14,8 @@ const REPLY = 'contato@meluniloja.com.br';
 const CARRINHO_AMOSTRA = { nome: 'Maria', valor: 289.9, resumo: 'Vestido de Linho e mais 1 peça', itens: [{ qtd: 1 }, { qtd: 1 }] };
 
 export default async function handler(req, res) {
+  // 24/09 Fase 1 WhatsApp: envio exige token com o modulo (ou CRON_SECRET). Modo: saude_config.trava_whats (aviso|ativo)
+  if (req.method !== 'OPTIONS' && !(await travaAcao(req, res, { modulo: 'meluni', chave: 'trava_whats', contexto: 'meluni-email-mkt-enviar', trocarUsuario: false }))) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

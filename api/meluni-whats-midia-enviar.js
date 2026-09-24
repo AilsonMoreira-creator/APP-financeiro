@@ -4,6 +4,7 @@
 // Sobe pro bucket sofia-midias/meluni-outbound, envia por link e grava a saída.
 // Só funciona dentro da janela de 24h (mídia livre). Ailson 17/06/2026.
 // ============================================================================
+import { travaAcao } from './_trava.js';   // 24/09 Fase 1 WhatsApp
 import { supabase } from './_meluni-whats-helpers.js';
 import { enviarImagemLara } from './_meluni-whats-meta.js';
 
@@ -11,6 +12,8 @@ const normTel = (s) => String(s || '').replace(/\D/g, '');
 const EXT = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
 
 export default async function handler(req, res) {
+  // 24/09 Fase 1 WhatsApp: envio exige token com o modulo (ou CRON_SECRET). Modo: saude_config.trava_whats (aviso|ativo)
+  if (req.method !== 'OPTIONS' && !(await travaAcao(req, res, { modulo: 'meluni', chave: 'trava_whats', contexto: 'meluni-whats-midia-enviar', trocarUsuario: false }))) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ ok: false, erro: 'use POST' });

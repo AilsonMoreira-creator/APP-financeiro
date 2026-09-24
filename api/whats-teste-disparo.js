@@ -12,6 +12,7 @@
 // NAO grava em conversa nem em historico: e teste, nao pode sujar o CRM nem
 // mexer na etapa de ninguem. So envia e devolve o resultado da Meta.
 // ═══════════════════════════════════════════════════════════════════════════
+import { travaAcao } from './_trava.js';   // 24/09 Fase 1 WhatsApp
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { enviarTemplate } from './_lojas-whats-meta-client.js';
 
@@ -78,6 +79,8 @@ async function criativoDaSpec(nomeTpl) {
 }
 
 export default async function handler(req, res) {
+  // 24/09 Fase 1 WhatsApp: envio exige token com o modulo (ou CRON_SECRET). Modo: saude_config.trava_whats (aviso|ativo)
+  if (req.method !== 'OPTIONS' && !(await travaAcao(req, res, { modulo: 'admin', chave: 'trava_whats', contexto: 'whats-teste-disparo', apenasAdmin: true, trocarUsuario: false }))) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

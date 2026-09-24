@@ -18,6 +18,7 @@
 // e ativo com no máx. as variáveis {{1}}=nome e {{2}}=saudação funciona.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { travaAcao } from './_trava.js';   // 24/09 Fase 1 WhatsApp
 import { supabase, setCors, log, logErro, primeiroNome } from './_lojas-whats-helpers.js';
 import { enviarTemplate } from './_lojas-whats-meta-client.js';
 
@@ -60,6 +61,8 @@ async function resolverCriativoHeader(tpl) {
 }
 
 export default async function handler(req, res) {
+  // 24/09 Fase 1 WhatsApp: envio exige token com o modulo (ou CRON_SECRET). Modo: saude_config.trava_whats (aviso|ativo)
+  if (req.method !== 'OPTIONS' && !(await travaAcao(req, res, { modulo: 'sofia', modulos: ['sofia', 'lojas'], chave: 'trava_whats', contexto: 'lojas-whats-followup-disparo-massa', trocarUsuario: false }))) return;
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST esperado' });

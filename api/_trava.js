@@ -44,7 +44,7 @@ const MSG_403 = 'Seu usuário não tem acesso a este módulo. A alteração NÃO
 /**
  * @returns {Promise<{usuario:string|null, cron?:boolean, aviso?:boolean}|null>} null = ja respondeu 401/403
  */
-export async function travaAcao(req, res, { modulo, chave, contexto, apenasAdmin = false }) {
+export async function travaAcao(req, res, { modulo, chave, contexto, apenasAdmin = false, modulos = null, trocarUsuario = true }) {
   const auth = String(req.headers.authorization || '');
   if (process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`) return { usuario: null, cron: true };
 
@@ -52,7 +52,7 @@ export async function travaAcao(req, res, { modulo, chave, contexto, apenasAdmin
   let motivo = null, status = 401, sub = s.claims?.sub || null;
   if (!s.ok) motivo = s.tinhaToken ? `token ${s.motivo}` : 'sem token';
   else if (apenasAdmin && !s.claims.adm) { motivo = 'so cron ou admin'; status = 403; }
-  else if (!apenasAdmin && !(s.claims.adm || (s.claims.mod || []).includes(modulo))) { motivo = `sem o modulo ${modulo}`; status = 403; }
+  else if (!apenasAdmin && !(s.claims.adm || (modulos || [modulo]).some(m => (s.claims.mod || []).includes(m)))) { motivo = `sem o modulo ${(modulos || [modulo]).join('/')}`; status = 403; }
   else {
     try {
       const { data: u } = await supabase.from('app_usuarios').select('ativo, versao').eq('usuario', sub).maybeSingle();
@@ -61,7 +61,7 @@ export async function travaAcao(req, res, { modulo, chave, contexto, apenasAdmin
   }
 
   if (!motivo) {
-    if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) req.body.usuario = sub;   // "quem fez" = token
+    if (trocarUsuario && req.body && typeof req.body === 'object' && !Array.isArray(req.body)) req.body.usuario = sub;   // "quem fez" = token
     return { usuario: sub };
   }
   const modo = await modoDe(chave);
