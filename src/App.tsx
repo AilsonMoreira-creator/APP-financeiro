@@ -22,7 +22,7 @@ export const OFICINA_A_DEFINIR="A definir";
 import EstoqueTecido from './EstoqueTecido';
 import MapeamentoSkus from './MapeamentoSkus';
 import MLSale from './MLSale'; // 19/09: botao Sale (promocoes ML por REF)
-import { guardarToken, limparToken, iniciarSessaoToken } from './sessaoToken';
+import { guardarToken, guardarTokenSupabase, limparToken, iniciarSessaoToken } from './sessaoToken';
 import { assinarFila as assinarSaleFila, estadoFila as estadoSaleFila } from './saleFila'; // 22/09: fila de envio em massa do Sale // 20/09: token de sessao (passo 4, fase 1)
 iniciarSessaoToken();
 import RaioXProduto from './RaioXProduto';
@@ -4898,7 +4898,7 @@ const LoginScreen=({usuarios,onLogin})=>{
       respServidor=await r.json();
     }catch{ respServidor=null; }   // rede fora / demorou: segue no local
     const decideServidor=respServidor&&respServidor.modo==='servidor'&&!respServidor.sem_cadastro;
-    if(respServidor&&respServidor.ok&&respServidor.token)guardarToken(respServidor.token);else limparToken();   // 20/09: token de sessao
+    if(respServidor&&respServidor.ok&&respServidor.token){guardarToken(respServidor.token);guardarTokenSupabase(respServidor.sb_token||null);}else limparToken();   // 20/09: token de sessao · 25/09: + token do Supabase (Fase 3)
     setBloqueio("");
     let sessao=found;
     if(respServidor&&respServidor.bloqueado){ setBloqueio("⏳ "+(respServidor.erro||"Muitas tentativas. Aguarde um pouco e tente de novo.")); return; }

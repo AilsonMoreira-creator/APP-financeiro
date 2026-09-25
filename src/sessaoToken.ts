@@ -15,7 +15,21 @@ export function guardarToken(t: string | null) {
   try { if (t) localStorage.setItem(CHAVE, t); else localStorage.removeItem(CHAVE); } catch {}
 }
 export function lerToken(): string | null { try { return localStorage.getItem(CHAVE); } catch { return null; } }
-export function limparToken() { guardarToken(null); }
+export function limparToken() { guardarToken(null); guardarTokenSupabase(null); }
+
+// 25/09 FASE 3: token que o proprio Supabase aceita (o banco sabe quem e e quais modulos).
+// Vencido ou ausente -> null, e o supabase-js cai na chave anonima (como sempre foi).
+const CHAVE_SB = 'amica_sb_token';
+export function guardarTokenSupabase(t: string | null) {
+  try { if (t) localStorage.setItem(CHAVE_SB, t); else localStorage.removeItem(CHAVE_SB); } catch {}
+}
+export function tokenSupabaseValido(): string | null {
+  try {
+    const t = localStorage.getItem(CHAVE_SB); if (!t) return null;
+    const p = t.split('.')[1]; const c = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/')));
+    return c?.exp && c.exp * 1000 > Date.now() + 60000 ? t : null;
+  } catch { return null; }
+}
 
 function claims(t: string | null): any {
   try { if (!t) return null; const p = t.split('.')[1]; return JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/'))); } catch { return null; }
@@ -50,12 +64,14 @@ export async function renovarSePreciso() {
   const idade = Date.now() - c.iat * 1000;
   // vencido ha mais de 7 dias: nem tenta (o servidor recusaria) — fica pro proximo login
   const vencido = c.exp && c.exp * 1000 < Date.now();
-  if (idade < RENOVAR_APOS_MS && !vencido) return;
+  // 25/09 Fase 3: sem o token do Supabase (sessao antiga) renova ja, pra ninguem precisar logar de novo
+  if (idade < RENOVAR_APOS_MS && !vencido && tokenSupabaseValido()) return;
   _renovando = true;
   try {
     const r = await fetch('/api/app-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ renovar: true }) });
     const j = await r.json();
     if (j?.ok && j.token) guardarToken(j.token);
+    if (j?.ok) guardarTokenSupabase(j.sb_token || null);   // 25/09 Fase 3
     // se nao renovou (sessao encerrada no servidor), o token vencido fica; fase 2 vai pedir login
   } catch {} finally { _renovando = false; }
 }

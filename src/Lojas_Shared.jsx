@@ -27,6 +27,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { tokenSupabaseValido } from './sessaoToken';
 import * as React from 'react';
 // Re-exporta helpers de REF pra outros componentes importarem so do Shared.
 import { refSemZero as _refSemZero, refDisplay as _refDisplay } from './LojasInstrucoes.jsx';
@@ -43,8 +44,10 @@ import {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// 25/09 FASE 3: manda o token do usuario quando tiver (senao, a chave anonima, como antes).
+// (o "auth" do supabase-js nunca foi usado aqui; com accessToken ele fica desligado)
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true },
+  accessToken: async () => tokenSupabaseValido(),
   realtime: { params: { eventsPerSecond: 10 } },
 });
 

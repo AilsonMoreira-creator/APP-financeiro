@@ -37,6 +37,29 @@ export async function emitirToken({ usuario, modulos, admin, versao }) {
   return `${cab}.${corpo}.${assinar(`${cab}.${corpo}`, sessao_atual)}`;
 }
 
+/**
+ * 25/09 FASE 3 — token que o proprio SUPABASE aceita (assinado com SUPABASE_JWT_SECRET).
+ * O navegador manda ele nas chamadas diretas ao banco; o banco passa a saber QUEM e
+ * quais MODULOS a pessoa tem (claims usuario/mod/adm), pra regras (RLS) por modulo.
+ * sub = uuid fixo derivado do usuario (auth.uid() exige uuid; politicas antigas chamam auth.uid()).
+ * Sem a chave no Vercel devolve null e tudo segue com a chave anonima, como antes.
+ */
+export function emitirTokenSupabase({ usuario, modulos, admin, versao }) {
+  const segredo = process.env.SUPABASE_JWT_SECRET || '';
+  if (!segredo) return null;
+  const u = String(usuario || '').toLowerCase();
+  const h = crypto.createHash('md5').update('amicia:' + u).digest('hex');
+  const uuid = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
+  const agora = Math.floor(Date.now() / 1000);
+  const cab = b64u(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const corpo = b64u(JSON.stringify({
+    role: 'authenticated', aud: 'authenticated', sub: uuid,
+    usuario: u, mod: Array.isArray(modulos) ? modulos : [], adm: !!admin, ver: Number(versao) || 1,
+    iat: agora, exp: agora + VALIDADE_S,
+  }));
+  return `${cab}.${corpo}.${assinar(`${cab}.${corpo}`, segredo)}`;
+}
+
 /** Devolve as claims se o token for valido (assinatura + validade); senao null com motivo. */
 export async function verificarToken(token) {
   try {

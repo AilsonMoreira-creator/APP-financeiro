@@ -16,7 +16,7 @@
 // Sem senha em texto no banco: so o hash. Sem senha no log: so usuario/ip/ok.
 
 import bcrypt from 'bcryptjs';
-import { emitirToken, sessaoDe, sombraSessao } from './_sessao.js';   // 20/09: PASSO 4 fase 1 (token de sessao, ainda sem exigir)
+import { emitirToken, emitirTokenSupabase, sessaoDe, sombraSessao } from './_sessao.js';   // 20/09: PASSO 4 fase 1 (token de sessao, ainda sem exigir)
 import { supabase, setCors } from './_lojas-helpers.js';
 import { exigirAdmin } from './_admin.js';   // 23/09: Fase 0 — admin pelo token, nao pelo X-User
 
@@ -64,8 +64,10 @@ export default async function handler(req, res) {
     if (!s.ok && !graca) return res.status(200).json({ ok: false, motivo: s.motivo });
     const { data: u } = await supabase.from('app_usuarios').select('usuario, ativo, versao, modulos, admin').eq('usuario', s.claims.sub).maybeSingle();
     if (!u || !u.ativo || Number(u.versao || 1) !== Number(s.claims.ver || 1)) return res.status(200).json({ ok: false, motivo: 'sessao encerrada' });
-    const token = await emitirToken({ usuario: u.usuario, modulos: u.modulos || s.claims.mod, admin: u.admin ?? s.claims.adm, versao: u.versao });
-    return res.status(200).json({ ok: true, token });
+    const dadosTk = { usuario: u.usuario, modulos: u.modulos || s.claims.mod, admin: u.admin ?? s.claims.adm, versao: u.versao };
+    const token = await emitirToken(dadosTk);
+    let sb_token = null; try { sb_token = emitirTokenSupabase(dadosTk); } catch { sb_token = null; }   // 25/09 Fase 3
+    return res.status(200).json({ ok: true, token, sb_token });
   }
 
   // ── validar ──
@@ -119,11 +121,12 @@ export default async function handler(req, res) {
   // 20/09 — PASSO 4 fase 1: login aprovado devolve o token de sessao (12h). Os modulos/admin
   // vem do que a tela Usuarios sincronizou; se ainda nao tiver, o app manda os dele no login
   // (body.modulos/admin) so pra preencher — o servidor grava e passa a ser a fonte.
-  let token = null;
+  let token = null, sbToken = null;
   if (ok) {
     let modulos = Array.isArray(u.modulos) ? u.modulos : null, admin = u.admin;
     if (!modulos && Array.isArray(body.modulos)) { modulos = body.modulos; admin = !!body.admin; try { await supabase.from('app_usuarios').update({ modulos, admin }).eq('usuario', usuario); } catch {} }
     try { token = await emitirToken({ usuario, modulos: modulos || [], admin: !!admin, versao: u.versao }); } catch (e) { token = null; }
+    try { sbToken = emitirTokenSupabase({ usuario, modulos: modulos || [], admin: !!admin, versao: u.versao }); } catch { sbToken = null; }   // 25/09 Fase 3
   }
   const concorda = typeof body.local_ok === 'boolean' ? (body.local_ok === ok) : null;
   await supabase.from('app_login_tentativas').insert({ usuario, ip, ok, modo, concorda_com_local: concorda });
@@ -132,5 +135,5 @@ export default async function handler(req, res) {
   //   · usuario sem hash em app_usuarios -> o servidor nao nega, devolve
   //     `sem_cadastro` e o app cai no local (e sincroniza o hash depois).
   //   · o app tambem cai no local se a chamada falhar ou demorar (lado do front).
-  return res.status(200).json({ ok, modo, concorda, cadastrado: !!u, sem_cadastro: !u, token });
+  return res.status(200).json({ ok, modo, concorda, cadastrado: !!u, sem_cadastro: !u, token, sb_token: sbToken });
 }
