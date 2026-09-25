@@ -383,14 +383,19 @@ async function loadKpis(clienteIds) {
     chunks.push(clienteIds.slice(i, i + 200));
   }
   
+  // 24/09: os lotes iam UM POR VEZ — admin (6.382 clientes = 32 lotes) esperava ~33 s.
+  // Agora 8 lotes ao mesmo tempo (mesmo resultado, ~4x menos espera).
   const todos = [];
-  for (const chunk of chunks) {
-    const { data, error } = await supabase
-      .from('lojas_clientes_kpis')
-      .select('*')
-      .in('cliente_id', chunk);
-    if (error) throw error;
-    todos.push(...(data || []));
+  for (let i = 0; i < chunks.length; i += 8) {
+    const lote = await Promise.all(chunks.slice(i, i + 8).map(async (chunk) => {
+      const { data, error } = await supabase
+        .from('lojas_clientes_kpis')
+        .select('*')
+        .in('cliente_id', chunk);
+      if (error) throw error;
+      return data || [];
+    }));
+    lote.forEach(d => todos.push(...d));
   }
   
   // Vira dict {cliente_id: kpi}
@@ -1317,6 +1322,14 @@ function useLojasModule() {
     initialized.current = true;
     
     (async () => {
+      // 24/09: medicao da abertura (tempo de cada etapa) -> /api/lojas-perf
+      const t0 = performance.now();
+      const etapas = {};
+      const marca = (nome) => { etapas[nome] = Math.round(performance.now() - t0); };
+      let deCache = false;
+      // quando o cache ja mostrou a tela, as proximas etapas atualizam em segundo plano
+      // (antes a tela voltava pra "Carregando..." e o cache nao servia pra nada)
+      const fase = (phase) => { if (!deCache) dispatch({ type: 'SET_PHASE', phase }); };
       try {
         dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.LOADING_USER });
         
@@ -1333,6 +1346,7 @@ function useLojasModule() {
         dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.LOADING_VENDEDORAS });
         const vendedoras = await loadVendedoras();
         dispatch({ type: 'SET_VENDEDORAS', vendedoras });
+        marca('vendedoras');
         
         // 3. Se não é admin, busca a vendedora correspondente
         let vendedoraLogada = null;
@@ -1371,7 +1385,21 @@ function useLojasModule() {
               dispatch({ type: 'SET_GRUPOS', grupos: cGrp || [] });
               dispatch({ type: 'SET_SACOLA', sacola: cSac || [] });
               if (cKpis) dispatch({ type: 'SET_KPIS', kpis: cKpis });
+              // 24/09: outras partes guardadas no aparelho (produtos, curadoria, promocoes, avisos, sugestoes do dia)
+              try {
+                const extra = JSON.parse(localStorage.getItem(`${cacheKey}_extra`) || 'null');
+                if (extra && (Date.now() - (extra.ts || 0)) < 10080 * 60000) {
+                  if (Array.isArray(extra.produtos)) dispatch({ type: 'SET_PRODUTOS', produtos: extra.produtos });
+                  if (Array.isArray(extra.curadoria)) dispatch({ type: 'SET_CURADORIA', curadoria: extra.curadoria });
+                  if (Array.isArray(extra.promocoes)) dispatch({ type: 'SET_PROMOCOES', promocoes: extra.promocoes });
+                  if (Array.isArray(extra.avisos)) dispatch({ type: 'SET_AVISOS', avisos: extra.avisos });
+                  const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+                  if (extra.sugestoesDia === hojeBRT && Array.isArray(extra.sugestoes)) dispatch({ type: 'SET_SUGESTOES', sugestoes: extra.sugestoes });
+                }
+              } catch { /* cache extra corrompido: segue */ }
               dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.READY });
+              deCache = true;
+              marca('tela_pelo_cache');
             }
           }
         } catch (e) {
@@ -1387,10 +1415,12 @@ function useLojasModule() {
         dispatch({ type: 'SET_CLIENTES', clientes });
         dispatch({ type: 'SET_GRUPOS', grupos });
         dispatch({ type: 'SET_SACOLA', sacola });
+        marca('carteira');
 
         // 5. Carrega KPIs em paralelo
         const kpis = await loadKpis(clientes.map(c => c.id));
         dispatch({ type: 'SET_KPIS', kpis });
+        marca('kpis');
 
         // Atualiza cache pra próxima carga
         try {
@@ -1404,7 +1434,7 @@ function useLojasModule() {
         }
         
         // 6. Carrega produtos + curadoria + promoções
-        dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.LOADING_PRODUTOS });
+        fase(LOAD_PHASES.LOADING_PRODUTOS);
         const [produtos, curadoria, promocoes] = await Promise.all([
           loadProdutos(),
           loadCuradoria(),
@@ -1413,6 +1443,7 @@ function useLojasModule() {
         dispatch({ type: 'SET_PRODUTOS', produtos });
         dispatch({ type: 'SET_CURADORIA', curadoria });
         dispatch({ type: 'SET_PROMOCOES', promocoes });
+        marca('produtos');
 
         // 6b. Ações + Avisos + Cores + ProdutosCadastro (só admin precisa,
         // mas carrega pra todos pra que avisos do dia possam ser exibidos
@@ -1443,13 +1474,23 @@ function useLojasModule() {
           }
         });
         
+        marca('acoes_avisos_cores');
         // 7. Carrega sugestões de hoje (só pra vendedora ativa)
-        dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.LOADING_SUGESTOES });
+        fase(LOAD_PHASES.LOADING_SUGESTOES);
         const vendedoraAtivaId = (vendedoraLogada || vendedoras[0])?.id;
+        let sugestoesHoje = null;
         if (vendedoraAtivaId) {
-          const sugestoes = await loadSugestoesHoje(vendedoraAtivaId);
-          dispatch({ type: 'SET_SUGESTOES', sugestoes });
+          sugestoesHoje = await loadSugestoesHoje(vendedoraAtivaId);
+          dispatch({ type: 'SET_SUGESTOES', sugestoes: sugestoesHoje });
         }
+        marca('sugestoes');
+        // 24/09: guarda as outras partes no aparelho pra proxima abertura ser na hora
+        try {
+          localStorage.setItem(`${cacheKey}_extra`, JSON.stringify({
+            ts: Date.now(), produtos, curadoria, promocoes, avisos: safeVal(rAvisos, []),
+            sugestoes: sugestoesHoje || [], sugestoesDia: new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10),
+          }));
+        } catch { /* localStorage cheio: ignora */ }
         
         // 8. Importações (só admin)
         if (isAdmin) {
@@ -1460,6 +1501,14 @@ function useLojasModule() {
         // ✅ Pronto
         dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.READY });
         dispatch({ type: 'SET_ULTIMA_SINC', timestamp: new Date().toISOString() });
+        marca('pronto');
+        try {
+          fetch('/api/lojas-perf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+            usuario: userId, vendedora_id: vendedoraLogada?.id || null, admin: !!isAdmin,
+            total_ms: etapas.pronto, tela_ms: etapas.tela_pelo_cache ?? etapas.pronto, de_cache: deCache,
+            clientes: clientes.length, etapas,
+          }) }).catch(() => {});
+        } catch { /* medicao nunca atrapalha */ }
       } catch (e) {
         console.error('[Lojas] erro init', e);
         dispatch({
