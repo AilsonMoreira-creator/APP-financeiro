@@ -119,7 +119,7 @@ async function badges(conta) {
   const ids = anuncios.map(a => a.item_id);
   const promos = [];
   for (let i = 0; i < ids.length; i += 300) {
-    const { data } = await supabase.from('ml_sale_promocoes').select('item_id, promo_key, promo_id, tipo, nome, status, price, original_price, seller_pct, meli_pct, min_price, max_price, suggested_price, stock_min, stock_max, stock_remaining, visto_em, start_date, finish_date, deadline_date').eq('conta', c).in('item_id', ids.slice(i, i + 300));
+    const { data } = await supabase.from('ml_sale_promocoes').select('item_id, promo_key, promo_id, tipo, nome, status, price, original_price, seller_pct, meli_pct, min_price, max_price, suggested_price, stock_min, stock_max, stock_remaining, visto_em, entrou_em, start_date, finish_date, deadline_date').eq('conta', c).in('item_id', ids.slice(i, i + 300));   // 25/09: + entrou_em (sem ele, promocao JA ENVIADA contava como 'candidata' e acendia o verde)
     promos.push(...(data || []));
   }
   const porRef = {};
