@@ -17,7 +17,7 @@
  *  - conta sem o escopo liberado devolve status 'sem_permissao' e a tela
  *    mostra o aviso, sem quebrar as outras
  */
-import { blingFetch, refreshBlingToken, chaveCor, canonizarCor } from './_bling-helpers.js';
+import { supabase, blingFetch, refreshBlingToken, chaveCor, canonizarCor } from './_bling-helpers.js';
 
 export const config = { maxDuration: 120 };
 const PAUSA = 340; // 3 req/s do Bling
@@ -85,14 +85,40 @@ async function auditarConta(conta, ref, coresFiltro) {
   // produto pai pela REF no nome
   const alvo = String(ref).replace(/^0+/, '');
   let pai = null;
-  for (let pg = 1; pg <= 10 && !pai; pg++) {
+  // 25/09: 1º caminho = pelo SKU de uma variação da REF (o Bling devolve o produto pai).
+  // Antes só varria as 10 primeiras páginas da lista (1.000 produtos): com o catálogo maior,
+  // ou com o Bling falhando numa página, a REF "sumia" e a tela dizia "não achei".
+  let erroLeitura = null;
+  try {
+    const { data: skus } = await supabase.from('bling_estoque').select('bling_sku')
+      .in('ref', [alvo, alvo.padStart(5, '0'), alvo.padStart(4, '0')]).not('bling_sku', 'is', null).limit(3);
+    for (const s0 of (skus || [])) {
+      const rv = await blingFetch(`https://api.bling.com.br/Api/v3/produtos?codigo=${encodeURIComponent(s0.bling_sku)}`, headers);
+      const jv = typeof rv.json === 'function' ? await rv.json().catch(() => ({})) : {};
+      const vid = jv?.data?.[0]?.id;
+      if (!vid) { await espera(PAUSA); continue; }
+      await espera(PAUSA);
+      const rd = await blingFetch(`https://api.bling.com.br/Api/v3/produtos/${vid}`, headers);
+      const jd = typeof rd.json === 'function' ? await rd.json().catch(() => ({})) : {};
+      const paiId = jd?.data?.variacao?.produtoPai?.id;
+      if (!paiId) { await espera(PAUSA); continue; }
+      await espera(PAUSA);
+      const rp = await blingFetch(`https://api.bling.com.br/Api/v3/produtos/${paiId}`, headers);
+      const jp = typeof rp.json === 'function' ? await rp.json().catch(() => ({})) : {};
+      if (jp?.data?.id) { pai = { id: jp.data.id, nome: jp.data.nome, codigo: jp.data.codigo, formato: jp.data.formato }; break; }
+    }
+  } catch (e) { erroLeitura = e.message || String(e); }
+  // 2º caminho (o de antes): nome com "(ref.XXXX)", agora com mais páginas e distinguindo falha de leitura
+  for (let pg = 1; pg <= 30 && !pai; pg++) {
     const r = await blingFetch(`https://api.bling.com.br/Api/v3/produtos?limite=100&pagina=${pg}&tipo=P`, headers);
+    if (!r.ok) { erroLeitura = `Bling respondeu HTTP ${r.status} na página ${pg}`; break; }
     const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
     const lista = j?.data || [];
     pai = lista.find(p => p.formato === 'V' && new RegExp(`ref[ .]?0*${alvo}\\b`, 'i').test(String(p.nome || '')));
     if (lista.length < 100) break;
     await espera(PAUSA);
   }
+  if (!pai && erroLeitura) return { ...saida, status: 'erro', erro: `Não consegui ler os produtos dessa conta agora (${erroLeitura}). Tente de novo em 1 minuto.` };
   if (!pai) return { ...saida, status: 'sem_produto' };
   saida.produto = { id: pai.id, nome: pai.nome, codigo: pai.codigo };
   await espera(PAUSA);

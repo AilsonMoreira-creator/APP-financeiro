@@ -91,6 +91,9 @@ export default function MapeamentoSkus({ refProduto: refProd, desc, cores, onClo
           <div style={{ fontSize: 16, fontWeight: 700, color: C.navy, marginTop: 2 }}>Verificar mapeamento · SKU × canal</div>
           <div style={{ fontSize: 11.5, color: C.suave, marginTop: 4 }}>
             {carregando ? 'Consultando as 3 empresas no Bling…'
+              // 25/09: sem nenhuma empresa conferida, nao pode dizer "completo"
+              : !empresas.some(e => e.status === 'ok')
+                ? <span style={{ color: C.alerta }}>Não consegui conferir essa REF agora — veja o motivo em cada empresa abaixo</span>
               : buracos || atencao
                 ? <span><b style={{ color: C.erro }}>{buracos} sem vínculo</b>{atencao ? ` · ${atencao} pra verificar` : ''} · conferido agora</span>
                 : 'Mapeamento completo nos canais ativos ✓'}
