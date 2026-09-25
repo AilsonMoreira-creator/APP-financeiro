@@ -125,6 +125,28 @@ export default async function handler(req, res) {
     totais.vendas_periodo += recRows.length;
     totais.valor_vendas_periodo += recRows.reduce((a, r) => a + Number(r.valor || 0), 0);
 
+    // 24/09 (relatorio PDF): compra direta no SITE no PERIODO escolhido (mesma regra do
+    // card de 30 dias: pedido CONVERTR sem conversa Vendeu da mesma cliente no periodo).
+    let siteDiretoPeriodo = null;
+    try {
+      const soDigP = (x) => String(x || '').replace(/\D/g, '');
+      const semDdiP = (t) => { const d = soDigP(t); return d.startsWith('55') && d.length >= 12 ? d.slice(2) : d; };
+      const [spQ, vpQ] = await Promise.all([
+        supabase.from('lojas_vendas')
+          .select('numero_pedido, data_venda, valor_liquido, documento_cliente_raw, cliente_whatsapp_raw')
+          .eq('vendedora_nome_raw', 'CONVERTR').gte('data_venda', dataInicio).lte('data_venda', dataFim),
+        supabase.from('lojas_whats_conversas').select('documento, telefone')
+          .eq('etapa', 'vendeu').gte('vendeu_em', dataInicio + 'T00:00:00Z').lt('vendeu_em', fimExcl),
+      ]);
+      const docsP = new Set((vpQ.data || []).map(c => soDigP(c.documento)).filter(Boolean));
+      const telsP = new Set((vpQ.data || []).map(c => semDdiP(c.telefone)).filter(Boolean));
+      const itensP = (spQ.data || []).filter(v => {
+        const doc = soDigP(v.documento_cliente_raw), tel = semDdiP(v.cliente_whatsapp_raw);
+        return !((doc && docsP.has(doc)) || (tel && telsP.has(tel)));
+      });
+      siteDiretoPeriodo = { qtd: itensP.length, valor: itensP.reduce((a2, v) => a2 + Number(v.valor_liquido || 0), 0) };
+    } catch (e) { console.error('[funil-leads] site periodo:', e?.message || e); }
+
     const nomeV = new Map((vendsQ.data || []).map(v => [v.id, v.nome]));
     const itens30 = (vendas30Q.data || []).map(c => ({
       id: c.id,
@@ -140,6 +162,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       periodo: { inicio: dataInicio, fim: dataFim },
+      site_direto_periodo: siteDiretoPeriodo,
       origens,
       totais,
       vendedoras: vendsQ.data || [],

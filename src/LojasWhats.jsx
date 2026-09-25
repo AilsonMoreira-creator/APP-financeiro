@@ -4592,6 +4592,42 @@ function ConversaoTab({ refreshTick }) {
     minimumFractionDigits: 0, maximumFractionDigits: 0,
   });
 
+  // 24/09 (pedido dele): relatorio de vendas em PDF A4 (igual ao do Dashboard Meluni),
+  // do periodo escolhido na tela + investimento Meta Ads (contas Amicia) e ROAS.
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const gerarPdfSofia = async () => {
+    if (!dadosFunil || loadingFunil) return;
+    setGerandoPdf(true);
+    try {
+      const gastoConta = async (conta) => {
+        try {
+          const r = await fetch(`/api/meta-ads-analise?account=${conta}&since=${dataInicio}&until=${dataFim}`);
+          const j = await r.json();
+          return Array.isArray(j?.data) ? j.data.reduce((a, x) => a + (Number(x.spend) || 0), 0) : null;
+        } catch { return null; }
+      };
+      const [b2b, cartao] = await Promise.all([gastoConta('338013328231048'), gastoConta('626487585630124')]);
+      const br = (iso) => iso.split('-').reverse().join('/');
+      const periodoTxt = `${br(dataInicio)} a ${br(dataFim)}`;
+      const vendedoraTxt = filtroVendedora ? ((dadosFunil.vendedoras || []).find(v => v.id === filtroVendedora)?.nome || '') : '';
+      const r = await fetch('/api/lojas-whats-conversoes-pdf', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ f: dadosFunil, gasto: { b2b, cartao }, periodoTxt, vendedoraTxt }),
+      });
+      if (!r.ok) throw new Error('falha ao gerar (' + r.status + ')');
+      const blob = await r.blob();
+      const nome = `sofia-vendas-${periodoTxt.replace(/[^0-9]+/g, '-').replace(/^-|-$/g, '')}.pdf`;
+      const file = new File([blob], nome, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: 'Sofia · Relatório de vendas' }); return; } catch (e) { if (e?.name === 'AbortError') return; }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = nome; a.target = '_blank'; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { alert('Não consegui gerar o PDF: ' + (e?.message || e)); }
+    finally { setGerandoPdf(false); }
+  };
+
   return (
     <div style={{ padding: '12px 16px', fontFamily: FONT }}>
       {/* Vendas dos últimos 30 dias — bloco fixo, expansível (Ailson 05/07/2026) */}
@@ -4655,6 +4691,16 @@ function ConversaoTab({ refreshTick }) {
             <option key={v.id} value={v.id}>{v.nome}</option>
           ))}
         </select>
+        <button onClick={gerarPdfSofia} disabled={gerandoPdf || loadingFunil || !dadosFunil}
+          title="Relatório de vendas do período em PDF (A4), com investimento Meta Ads e ROAS"
+          style={{
+            border: `1px solid ${palette.beige}`, borderRadius: 6, padding: '4px 10px',
+            fontSize: fz(11.5), fontFamily: FONT, fontWeight: 600,
+            background: palette.surface, color: palette.ink,
+            cursor: (gerandoPdf || loadingFunil) ? 'wait' : 'pointer',
+          }}>
+          📄 {gerandoPdf ? 'Gerando…' : 'Relatório PDF'}
+        </button>
       </div>
 
       {/* Resumo geral do funil de leads (todas as origens) */}
