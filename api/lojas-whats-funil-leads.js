@@ -147,6 +147,29 @@ export default async function handler(req, res) {
       siteDiretoPeriodo = { qtd: itensP.length, valor: itensP.reduce((a2, v) => a2 + Number(v.valor_liquido || 0), 0) };
     } catch (e) { console.error('[funil-leads] site periodo:', e?.message || e); }
 
+    // 24/09 (relatorio PDF): carrinhos que CHEGARAM por dia (mesma regra do card de
+    // carrinho: conversa de carrinho iniciada no periodo). Dias sem carrinho = 0.
+    let carrinhosDia = [];
+    try {
+      const datas = [];
+      for (let de = 0; de < 10000; de += 1000) {
+        let q = supabase.from('lojas_whats_conversas').select('iniciada_em')
+          .eq('origem_lead', 'carrinho_site_amicialoja')
+          .gte('iniciada_em', dataInicio + 'T00:00:00Z').lt('iniciada_em', fimExcl)
+          .order('iniciada_em').range(de, de + 999);
+        if (vendedoraId) q = q.eq('vendedora_atribuida_id', vendedoraId);
+        const { data: lote } = await q;
+        (lote || []).forEach(r => datas.push(String(r.iniciada_em).slice(0, 10)));
+        if (!lote || lote.length < 1000) break;
+      }
+      const cont = {};
+      datas.forEach(d => { cont[d] = (cont[d] || 0) + 1; });
+      for (let t = new Date(dataInicio + 'T00:00:00Z').getTime(); t < new Date(fimExcl).getTime(); t += 86400000) {
+        const d = new Date(t).toISOString().slice(0, 10);
+        carrinhosDia.push({ data: d, qtd: cont[d] || 0 });
+      }
+    } catch (e) { console.error('[funil-leads] carrinhos dia:', e?.message || e); }
+
     const nomeV = new Map((vendsQ.data || []).map(v => [v.id, v.nome]));
     const itens30 = (vendas30Q.data || []).map(c => ({
       id: c.id,
@@ -163,6 +186,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       periodo: { inicio: dataInicio, fim: dataFim },
       site_direto_periodo: siteDiretoPeriodo,
+      carrinhos_dia: carrinhosDia,
       origens,
       totais,
       vendedoras: vendsQ.data || [],

@@ -45,6 +45,8 @@ export default async function handler(req, res) {
 
   const car = origens.find((o) => o.origem === 'carrinho_site_amicialoja') || {};
   const carTotal = n(car.total), carConv = n(car.vendas_periodo), carVal = n(car.valor_vendas_periodo);
+  const carDia = Array.isArray(f.carrinhos_dia) ? f.carrinhos_dia : [];
+  const carMedia = carDia.length ? carTotal / carDia.length : null;
 
   const gB2b = gasto?.b2b == null ? null : n(gasto.b2b);
   const gCartao = gasto?.cartao == null ? null : n(gasto.cartao);
@@ -94,7 +96,7 @@ export default async function handler(req, res) {
   doc.font('Times-Bold').fontSize(14).fillColor(INK).text('De onde vieram as vendas', M, y);
   y += 22;
   const linhas = [
-    ['Vendas pela Sofia', '1ª compra de leads atendidos no WhatsApp', sofiaQtd, sofiaVal],
+    ['Vendas pela Sofia', '1ª compra via WhatsApp, inclui carrinhos do site', sofiaQtd, sofiaVal],
     ['Recompras', 'clientes que já tinham comprado via Sofia', recQtd, recVal],
     ['Vendas diretas no site', 'pedidos no site sem conversa antes', siteQtd, siteVal],
   ];
@@ -114,24 +116,52 @@ export default async function handler(req, res) {
   doc.font('Helvetica-Bold').fontSize(11).fillColor(INK).text('Total', M, y);
   doc.font('Helvetica').fontSize(10).fillColor(MUTED).text(`${totalQtd} pedidos`, M + 225, y + 1, { width: 80, align: 'right' });
   doc.font('Helvetica-Bold').fontSize(11).fillColor(INK).text(brl(totalVal), M + 310, y, { width: 100, align: 'right' });
-  y += 40;
+  y += 22;
+  doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(
+    'Os carrinhos abandonados do site entram em "Vendas pela Sofia": a Sofia chama a cliente, envia catálogo e tira dúvidas, e muitas fecham o pedido por ela.',
+    M, y, { width: CW });
+  y += 30;
 
   // ── carrinhos abandonados ──
   doc.font('Times-Bold').fontSize(14).fillColor(INK).text('Carrinhos abandonados', M, y);
   y += 22;
-  const cbw = (CW - 24) / 3;
+  const cbw = (CW - 30) / 4, cbh = 50;
   [
-    ['Carrinhos abordados', String(carTotal), 'leads de carrinho no período'],
+    ['Carrinhos abordados', String(carTotal), 'leads de carrinho'],
+    ['Média por dia', carMedia == null ? '—' : carMedia.toFixed(1).replace('.', ','), `em ${carDia.length || '—'} dias`],
     ['Convertidos', String(carConv), `${pct(carConv, carTotal)} dos carrinhos`],
     ['Valor recuperado', brl(carVal), 'vendas desses carrinhos'],
-  ].forEach(([t, v, s], i) => {
-    const x = M + i * (cbw + 12);
-    doc.roundedRect(x, y, cbw, 66, 6).lineWidth(0.7).strokeColor(LINHA).fillColor('#ffffff').fillAndStroke();
-    doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(t, x + 14, y + 12, { width: cbw - 28 });
-    doc.font('Times-Bold').fontSize(18).fillColor(INK).text(v, x + 14, y + 26, { width: cbw - 28, lineBreak: false });
-    doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(s, x + 14, y + 48, { width: cbw - 28, lineBreak: false });
+  ].forEach(([t, v, s2], i2) => {
+    const x = M + i2 * (cbw + 10);
+    doc.roundedRect(x, y, cbw, cbh, 6).lineWidth(0.7).strokeColor(LINHA).fillColor('#ffffff').fillAndStroke();
+    doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(t, x + 10, y + 9, { width: cbw - 20, lineBreak: false });
+    doc.font('Times-Bold').fontSize(14.5).fillColor(INK).text(v, x + 10, y + 21, { width: cbw - 20, lineBreak: false });
+    doc.font('Helvetica').fontSize(7.5).fillColor(MUTED).text(s2, x + 10, y + 38, { width: cbw - 20, lineBreak: false });
   });
-  y += 66 + 30;
+  y += cbh + 14;
+
+  // grafico de barras: carrinhos que chegaram por dia
+  if (carDia.length) {
+    doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text('Carrinhos que chegaram por dia', M, y);
+    y += 14;
+    const gh = 70, maxQ = Math.max(1, ...carDia.map((d2) => n(d2.qtd)));
+    const passo = CW / carDia.length, bw = Math.max(2, Math.min(18, passo * 0.7));
+    doc.moveTo(M, y + gh).lineTo(W - M, y + gh).lineWidth(0.5).strokeColor(LINHA).stroke();
+    const rotuloCada = carDia.length > 45 ? 7 : carDia.length > 20 ? 3 : 1;
+    carDia.forEach((d2, k) => {
+      const q = n(d2.qtd), h = (q / maxQ) * (gh - 12);
+      const cx = M + k * passo + (passo - bw) / 2;
+      if (q > 0) doc.rect(cx, y + gh - h, bw, h).fillColor(AZUL).fill();
+      if (q > 0 && passo >= 12) doc.font('Helvetica').fontSize(6.5).fillColor(MUTED).text(String(q), cx - 6, y + gh - h - 9, { width: bw + 12, align: 'center', lineBreak: false });
+      if (k % rotuloCada === 0) {
+        const dt = String(d2.data || '');
+        doc.font('Helvetica').fontSize(6.5).fillColor(MUTED).text(`${dt.slice(8, 10)}/${dt.slice(5, 7)}`, cx - 10, y + gh + 3, { width: bw + 20, align: 'center', lineBreak: false });
+      }
+    });
+    y += gh + 26;
+  } else {
+    y += 16;
+  }
 
   // ── investimento ──
   doc.font('Times-Bold').fontSize(14).fillColor(INK).text('Investimento em anúncios', M, y);
