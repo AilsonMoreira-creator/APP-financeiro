@@ -31,8 +31,13 @@
 | Id do aparelho em 3 lugares (localStorage + IndexedDB + cookie do servidor) e id certo no login | ✅ 24/09 (`0939559`, SW v278) |
 | Template com botões + webhook + tela de pendentes + device_id no login | ⏳ (front, fora das 08:00–09:30) |
 | Ligar aparelhos (`aparelhos_modo = ativo`) | ⏳ depois de 30/09 |
-| Fase 2 — SAC e Meta Ads | ⏳ |
-| Fase 3 — dados (token aceito pelo Supabase + RLS por módulo) | ⏳ |
+| **Fase 2 · SAC** (`ml-answer`, `ml-messages-reply`, `ml-ai-respond`, `ml-lock`, `ml-messages-tag`) — **ATIVA** | ✅ 24/09 19:10 em aviso (`290dccb`) · ativo 25/09 ~12:40 — no aviso: zero "seria recusado" (IA do SAC 925× pelo cron; Ingrid/Cris com token) |
+| **Fase 3.0** — chave `SUPABASE_JWT_SECRET` no Vercel + `api/fase3-check` (só sim/não) | ✅ 25/09 (`1c014e9`) — chave presente, Supabase aceita o token |
+| **Fase 3.1** — login/renovação entregam `sb_token`; os 2 clientes Supabase do front mandam o token (cai na chave anônima se faltar/vencer); **nenhuma tabela fechada** | ✅ 25/09 (`a75b9d9`, SW v288) — 1ªs chamadas: 195 com usuário, 0 erro |
+| **Filas-gatilho** (rotina age sozinha): `ml_response_queue`, `meluni_email_campanhas`, `meluni_email_envios`, `lojas_temas_quinta_fila`, `bling_localizacao_fila` → RLS + só leitura pro navegador | ✅ 25/09 ~13:10 — teste: leitura ok, gravação anônima recusada. **`wms_print_jobs` fica pra depois (decisão dele)** |
+| **Meio-termo em 68 tabelas** que o navegador nunca grava (RLS + só leitura; leitura igual a antes) | ✅ 25/09 ~17:00 — regras antigas em `seg_policies_backup_20260925`; 0 recusa depois |
+| Fase 3 · Bling: `bling_estoque_locks`, `bling_resultados`, gaveta `bling-estoque-arquivadas` → gravar só Bling/admin | ⏳ 26/09, quando o anônimo zerar nos logs |
+| Fase 3 · demais tabelas que a tela grava (~35) — por tabela, com sombra | ⏳ |
 
 ## Chaves (todas em `saude_config`, mudam sem deploy pelo SQL Editor)
 
@@ -43,6 +48,7 @@
 | `trava_nf` | `ativo` | gerar/transmitir NF (`wms-nfe-auto`): só cron ou admin | `'aviso'` |
 | `trava_cron_estoque` | `ativo` | consolidação das 5h: só cron ou admin | `'aviso'` |
 | `trava_whats` | `ativo` | envios do Sofia (módulo sofia ou lojas), Lara e e-mail mkt (meluni), whats-teste (admin) | `'aviso'` |
+| `trava_sac` | `ativo` | responder/IA/travar/etiquetar no SAC ML (módulo sac/meluni ou cron) | `'aviso'` |
 | `aparelhos_modo` | `sombra` | aparelhos conhecidos (futuro `ativo`) | `'sombra'` |
 
 Exemplo: `update saude_config set valor='aviso' where chave='trava_estoque';` (vale em até 1 min).
@@ -102,14 +108,34 @@ Sofia: `lojas-whats-mensagem-enviar`, `template-disparo`, `clientes-massa`, `cli
 - Prova da Fase 3 nas 9 tabelas do SAC (poucas, 2 telas).
 
 ## Fase 3 — dados
-- Verificado 23/09: o projeto ainda aceita tokens HS256 do segredo legado (chave anon legada ativa). Caminho: o `app-login` emite também um token aceito pelo Supabase (usuário + módulos), o front passa esse token no `supabase.js` e cada tabela ganha policy por módulo. Realtime continua funcionando; telas não mudam.
-- Precisa: Ailson copiar o **Legacy JWT secret** (Supabase → Settings → JWT Keys) pra uma variável do Vercel.
-- Ordem: clientes (Lojas/Sofia + views) → histórico de vendas → cortes → boletos/financeiro (`amicia_data` por último — 23 a 34 mil leituras/dia do navegador).
-- Cada módulo leva junto suas **views** (as 94 não são `security_invoker` e furam o RLS) e o bucket `sofia-midias` (anônimo lista/grava/apaga).
-- As 66 tabelas sem uso do navegador (logs de 5 dias em 17–23/09) fecham em lote depois de 7 dias seguidos de log limpo.
+
+### Regra (decidida com ele em 25/09)
+Fecha **por TABELA** (e por LINHA dentro do `amicia_data`), separando LER de GRAVAR:
+1. **Ler:** qualquer pessoa **logada no app** (token válido). Fica de fora só quem não está no app (anônimo/chave de fora). Isso mantém toda a conversa entre módulos (Oficina olha caseado, Bling vê cortes chegando, Sofia/Lara consultam cortes, Despesas buscam valor de oficina, fotos…).
+2. **Gravar:** só os **módulos que gravam naquela tabela** (pode ser mais de um; ex.: cortes = oficinas + salascorte) ou admin.
+3. **Exceção sensível:** folha, boletos, financeiro → leitura só pra quem tem o módulo.
+
+### Como cada tabela fecha
+- **Sombra antes:** logs do Supabase (`edge_logs`) já trazem o papel e o `sub` do token → cruzar **quem gravou × módulos da pessoa**. O `sub` é um uuid fixo por usuário (md5 de `amicia:<usuario>`). Só fecha depois de 1–2 dias sem ninguém que "seria barrado".
+- **Anônimo zerado primeiro:** quem está com versão antiga do app chega sem token. Conferir nos logs antes de cada fechamento.
+- **Tabela que o navegador NÃO grava** → meio-termo (RLS + só leitura), já feito em 73 tabelas.
+- **Tabela que o navegador GRAVA** → policy de escrita por módulo usando as claims do token (`mod`, `adm`).
+- **Antes de fechar escrita:** conferir funções chamadas pelo navegador (security invoker) e gatilhos que gravam na tabela em nome de quem clicou.
+
+### Ordem
+1. **Bling** (26/09): `bling_estoque_locks` (aviso de quem edita o card), `bling_resultados` (histórico 31 dias), gaveta `bling-estoque-arquivadas`. `bling_estoque` já é só leitura desde 23/09.
+2. Lojas → SAC → Meluni → OS Amícia (cada um com sombra).
+3. **Cortes (`ailson_cortes`) por último**, num dia calmo: primeiro criar rota no servidor pra salvar cortes (trava oficinas/salascorte/admin, mesma mistura de edições e proteção anti-sobrescrita, flush na troca de tela) e a função `fn_oficina_aplicar_snapshot_corte` passar pelo servidor; só depois a gaveta vira só leitura pro navegador.
+4. Financeiro/boletos/folha (leitura só por módulo) e o resto do `amicia_data`.
+5. **WMS por último** (`wms_print_jobs`, `wms_listas`, `wms_nfe_log`, `wms_print_log`, `wms_produtividade`, `wms_snapshots`) — fora do horário de etiquetas, decisão dele.
+- Cada módulo leva junto suas **views** (94 não são `security_invoker`) e o bucket `sofia-midias`.
+
+### Volta
+- Meio-termo das 68: restaurar as regras de uma tabela a partir de `seg_policies_backup_20260925` (ou `alter table <t> disable row level security;` nas que estavam sem RLS: coluna `rls_antes = false`).
+- Filas-gatilho: `alter table <t> disable row level security;`.
+- Token (3.1): se precisar, o `app-login` para de emitir `sb_token` → o navegador volta sozinho pra chave anônima.
 
 ## Pendências registradas
-- Front: o login manda `amica_device_id` (nunca gravado; o certo é `amica_device`) — corrigir junto com a parte de tela dos aparelhos. Mesmo erro em `app-erro` e `ocupado.ts`.
 - Front: tela de localização mostra "ok, 0 gravados" se o `bling-localizacao-popular` recusar no meio (só acontece se o token vencer entre o preparar e o gravar).
 - `app-sessao ?ativos=1` nunca respondeu (o GET cai no 405 antes) — a tela Saúde usa outro caminho; limpar quando mexer.
 - 4 produtos duplicados por espaço no fim da REF (3164 com descrições diferentes, 3217, 3226, 3237) — decisão dele.
