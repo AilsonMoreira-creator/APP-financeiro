@@ -163,7 +163,7 @@ export function desenharPdf(plano) {
   doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(
     `Vendas de ${br(pi)} a ${br(pf)}  ·  +${P.crescimento}% de crescimento  ·  cobertura de ${P.cobertura} dias  ·  usar ${P.uso}% do estoque atual (com oficinas)  ·  gerado em ${gerado}`,
     M, y, { width: CW });
-  y += 22;
+  y += 32;
 
   // resumo
   doc.roundedRect(M, y, CW, 50, 7).fillColor(CREME).fill();
@@ -174,7 +174,7 @@ export function desenharPdf(plano) {
   doc.font('Helvetica').fontSize(8).fillColor(MUTED).text('Como ler cada célula: o número grande é o que fabricar; embaixo, estoque + oficinas hoje.', M + 290, y + 12, { width: CW - 300 });
   y += 62;
   doc.font('Helvetica').fontSize(7.5).fillColor(MUTED).text(`Cores do ranking Bling: ${plano.ranking_cores.join(' · ')}`, M, y, { width: CW });
-  y += 22;
+  y = doc.y + 18;
 
   const novaPagina = () => { doc.addPage({ size: 'A4', margin: 0 }); y = 40; };
 
