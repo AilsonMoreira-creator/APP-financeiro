@@ -147,7 +147,8 @@ export default async function handler(req, res) {
     const gh = 70, maxQ = Math.max(1, ...carDia.map((d2) => n(d2.qtd)));
     const passo = CW / carDia.length, bw = Math.max(2, Math.min(18, passo * 0.7));
     doc.moveTo(M, y + gh).lineTo(W - M, y + gh).lineWidth(0.5).strokeColor(LINHA).stroke();
-    const rotuloCada = carDia.length > 45 ? 7 : carDia.length > 20 ? 3 : 1;
+    // 24/09: data de TODOS os dias, na vertical (so pula 1 sim/1 nao se passar de ~2 meses)
+    const rotuloCada = carDia.length > 62 ? 2 : 1;
     carDia.forEach((d2, k) => {
       const q = n(d2.qtd), h = (q / maxQ) * (gh - 12);
       const cx = M + k * passo + (passo - bw) / 2;
@@ -155,10 +156,14 @@ export default async function handler(req, res) {
       if (q > 0 && passo >= 12) doc.font('Helvetica').fontSize(6.5).fillColor(MUTED).text(String(q), cx - 6, y + gh - h - 9, { width: bw + 12, align: 'center', lineBreak: false });
       if (k % rotuloCada === 0) {
         const dt = String(d2.data || '');
-        doc.font('Helvetica').fontSize(6.5).fillColor(MUTED).text(`${dt.slice(8, 10)}/${dt.slice(5, 7)}`, cx - 10, y + gh + 3, { width: bw + 20, align: 'center', lineBreak: false });
+        const lx = cx + bw / 2 - 3, ly = y + gh + 27;
+        doc.save();
+        doc.rotate(-90, { origin: [lx, ly] });
+        doc.font('Helvetica').fontSize(6.5).fillColor(MUTED).text(`${dt.slice(8, 10)}/${dt.slice(5, 7)}`, lx, ly, { width: 26, align: 'left', lineBreak: false });
+        doc.restore();
       }
     });
-    y += gh + 26;
+    y += gh + 40;
   } else {
     y += 16;
   }
