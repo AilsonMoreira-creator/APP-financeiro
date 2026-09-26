@@ -13,6 +13,7 @@
 // GET → { ok, total, pedidos: [...] }
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabase, refreshBlingToken, blingFetch } from './_bling-helpers.js';
+import { filtrarCancelamentos } from './_wms-cancelados-regra.js';
 
 export const config = { maxDuration: 60 };
 
@@ -57,7 +58,7 @@ export default async function handler(req, res) {
   try {
     const desde = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
     let q = supabase.from('wms_pedidos')
-      .select('pedido_id, conta, numero, numero_loja, canal_geral, cliente_nome, itens, data_pedido, nf_id, nf_situacao, ml_ship_status, ml_ship_checado_em, etiqueta_impressa_em, nf_agendada_impressa_em, status_wms')
+      .select('pedido_id, conta, numero, numero_loja, canal_geral, cliente_nome, itens, data_pedido, nf_id, nf_situacao, ml_ship_status, ml_ship_checado_em, etiqueta_impressa_em, nf_agendada_impressa_em, status_wms, ml_ship_substatus')
       .eq('ml_ship_status', 'cancelled')
       .is('cancelado_arquivado_em', null)
       .gte('data_pedido', desde)
@@ -69,10 +70,9 @@ export default async function handler(req, res) {
     const { data, error } = await q;
     if (error) throw error;
 
-    const pedidos = (data || [])
-      // ciclo completo: nota cancelada no Bling → sai da aba.
-      // Pedido sem nota nenhuma tambem nao interessa aqui (nada a cancelar).
-      .filter(p => p.nf_id && p.nf_situacao !== 2)
+    // 25/09: so CANCELAMENTO dentro da janela de 24h da nota; devolucao (pacote ja
+    // despachado) fica de fora. Mesma funcao do contador do chip.
+    const pedidos = (await filtrarCancelamentos(data || []))
       .map(p => {
         const it0 = (p.itens || [])[0] || {};
         return {

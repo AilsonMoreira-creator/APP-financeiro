@@ -16,6 +16,7 @@
  * oficial (shipment_labels em lote). Outros canais: fase 2.
  */
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { filtrarCancelamentos } from './_wms-cancelados-regra.js';   // 25/09 aba Cancelados
 import { supabase, blingFetch, refreshBlingToken } from './_bling-helpers.js';
 import { getValidToken } from './_ml-helpers.js';
 import crypto from 'crypto';
@@ -598,14 +599,15 @@ export default async function handler(req, res) {
       try {
         const desde30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
         let qc = supabase.from('wms_pedidos')
-          .select('pedido_id, nf_id, nf_situacao')
+          .select('pedido_id, nf_id, nf_situacao, data_pedido, ml_ship_substatus')
           .eq('ml_ship_status', 'cancelled')
           .is('cancelado_arquivado_em', null)
           .gte('data_pedido', desde30).limit(300);
         if (contasFiltro !== 'todas') qc = qc.in('conta', contasFiltro.split(','));
         const { data: canc, error: errCanc } = await qc;
         if (errCanc) throw errCanc;
-        c.cancelados = (canc || []).filter(p => p.nf_id && p.nf_situacao !== 2).length;
+        // 25/09: mesma regra da lista (so cancelamento na janela de 24h; devolucao fora)
+        c.cancelados = (await filtrarCancelamentos(canc || [])).length;
       } catch (e) {
         // falha honesta: o chip diz que nao conseguiu contar, em vez de zero
         c.cancelados = null;
