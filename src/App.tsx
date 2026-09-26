@@ -10979,6 +10979,11 @@ export default function App(){
   const [homePassadoriaAbertos,setHomePassadoriaAbertos]=useState(0);
   const [oficinasAbaPedida,setOficinasAbaPedida]=useState(null);
   const [sessaoExpirada,setSessaoExpirada]=useState(false);
+  // 26/09: tela de LOGIN ou de SESSAO EXPIRADA nao grava nada no banco. O App continua
+  // montado nessas telas (carrega e sincroniza os dados), e antes seguia salvando com a
+  // chave anonima: um PC parado no login ficava regravando os cortes a cada 15 s a noite toda.
+  const sessaoAtivaRef=useRef(!!usuarioLogado);
+  useEffect(()=>{sessaoAtivaRef.current=!!usuarioLogado&&!sessaoExpirada;},[usuarioLogado,sessaoExpirada]);
   const ultimaAtividadeRef=useRef(Date.now()); // timestamp da última atividade do usuário (toque/click/scroll/keydown). Reseta o timeout de inatividade.
   const ultimaSyncAtividadeRef=useRef(0); // throttle de localStorage
   const debounceRef=useRef(null);
@@ -11556,6 +11561,7 @@ export default function App(){
 
     const checarOficinas=async()=>{
       if(paradoOf||document.visibilityState!=='visible')return;
+      if(!sessaoAtivaRef.current)return;   // 26/09: fora do login nao sincroniza
       try{
         // carimbo: `rev` nao sobe nessa linha (so o financeiro usa), entao o
         // sinal é o updated_at que os dois saves do modulo agora gravam.
@@ -12124,6 +12130,7 @@ export default function App(){
     const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,produtos,produtosExcluidos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
     dadosRef.current=dados;
     if(!usuarioLogado?.admin){return;}
+    if(!sessaoAtivaRef.current){return;}   // 26/09: login/sessao expirada nao grava
     // Guard: não salva antes do Supabase load ter completado
     if(!dbCarregadoTs.current){console.log("AUTO-SAVE: bloqueado — load não completou");return;}
     // ⚡ GUARD CRÍTICO (Sprint 6.8.3): não salva se o usuário ainda não editou nada
@@ -12176,6 +12183,7 @@ export default function App(){
   // ── SAVE CORTES com merge (múltiplos usuários) ────────────────────────────
   useEffect(()=>{
     if(!dbCarregado||!supabase||realtimeProcessing.current)return;
+    if(!sessaoAtivaRef.current)return;   // 26/09: login/sessao expirada nao grava
     // ⚡ GUARD ANTI-SOBRESCRITA (Ailson 28/04/2026):
     // Se trigger desse useEffect veio de load/Realtime (state mudou pq baixou
     // do remoto), NÃO SALVA. Caso contrário, admin com app aberto recebe edit
@@ -12329,6 +12337,7 @@ export default function App(){
     const flush=async()=>{
       const snap=ultimoCortesRef.current;
       if(!snap)return;
+      if(!sessaoAtivaRef.current)return;   // 26/09: login/sessao expirada nao grava
       try{
         // Lê remoto pra fazer merge (mesma lógica do save normal, mas síncrono)
         const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single();
