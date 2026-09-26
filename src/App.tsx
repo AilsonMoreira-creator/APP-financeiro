@@ -11527,8 +11527,11 @@ export default function App(){
           }
           return mudou?merged:prev;
         });
-        if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
-        if(d.logTroca)setLogTroca(d.logTroca);
+        // 26/09: so troca o estado se MUDOU de verdade. Antes setava sempre (array novo),
+        // o save dos cortes disparava a cada sincronizacao, e com 2 telas abertas uma
+        // regravava a outra a cada 15 s, dia e noite (ping-pong de ~370 KB, 720x em 3 h).
+        if(d.oficinasCAD)setOficinasCAD(prev=>JSON.stringify(prev)===JSON.stringify(d.oficinasCAD)?prev:d.oficinasCAD);
+        if(d.logTroca)setLogTroca(prev=>JSON.stringify(prev)===JSON.stringify(d.logTroca)?prev:d.logTroca);
         // Merge produtos por ref + _mod (outro usuário editou/adicionou produto)
         if(d.produtos&&d.produtos.length>0){
           setProdutos(prev=>{
