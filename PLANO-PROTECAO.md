@@ -36,7 +36,10 @@
 | **Fase 3.1** — login/renovação entregam `sb_token`; os 2 clientes Supabase do front mandam o token (cai na chave anônima se faltar/vencer); **nenhuma tabela fechada** | ✅ 25/09 (`a75b9d9`, SW v288) — 1ªs chamadas: 195 com usuário, 0 erro |
 | **Filas-gatilho** (rotina age sozinha): `ml_response_queue`, `meluni_email_campanhas`, `meluni_email_envios`, `lojas_temas_quinta_fila`, `bling_localizacao_fila` → RLS + só leitura pro navegador | ✅ 25/09 ~13:10 — teste: leitura ok, gravação anônima recusada. **`wms_print_jobs` fica pra depois (decisão dele)** |
 | **Meio-termo em 68 tabelas** que o navegador nunca grava (RLS + só leitura; leitura igual a antes) | ✅ 25/09 ~17:00 — regras antigas em `seg_policies_backup_20260925`; 0 recusa depois |
-| Fase 3 · Bling: `bling_estoque_locks`, `bling_resultados`, gaveta `bling-estoque-arquivadas` → gravar só Bling/admin | ⏳ 26/09, quando o anônimo zerar nos logs |
+| **Fase 3 · 1º degrau: gravar só LOGADO** em 9 tabelas sem gravação anônima em 20h: `financeiro_despesas_espelho`, `lojas_acoes`, `lojas_sugestoes_diarias`, `bling_estoque_locks`, `amicia_data_historico`, `oficinas_cortes_log`, `salas_corte_espelho`, `lojas_clientes`, `ml_stock_alerts` (leitura igual) | ✅ 26/09 ~11:20 — teste: anônimo lê e não grava; logado grava. Backup das regras em `seg_policies_backup_20260926` |
+| Achado 26/09: tela de login/sessão expirada seguia sincronizando e salvando cortes como anônimo (ping-pong de 15 s com outro PC, desde 24/09) | ✅ corrigido `7542018` + `d622840` (SW v290) — vale quando as telas recarregarem (login de segunda) |
+| Fase 3 · `bling_resultados`, gaveta `bling-estoque-arquivadas`, `amicia_data`, espelhos de cadastros/cortes, `lojas_whats_conversas` → gravar só logado | ⏳ 28/09, depois do login da manhã, conferindo anônimo = 0 |
+| Depois: login do Supabase ou chaves novas de assinatura (tirar o legacy JWT secret do servidor); token do banco segue 12h por decisão dele | ⏳ após a Fase 3 |
 | Fase 3 · demais tabelas que a tela grava (~35) — por tabela, com sombra | ⏳ |
 
 ## Chaves (todas em `saude_config`, mudam sem deploy pelo SQL Editor)
